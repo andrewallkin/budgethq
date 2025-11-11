@@ -1,3 +1,8 @@
+# Application data files
+data/
+users.json
+budget_data*.json
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
