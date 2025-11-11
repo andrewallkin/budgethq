@@ -1,27 +1,35 @@
-# 💰 Dynamic Budget Dashboard
+# 💰 Financial Dashboard
 
-A comprehensive budget planning application built with Streamlit that automatically calculates South African tax (PAYE) and UIF contributions based on official SARS rates.
+A comprehensive personal finance management application built with Streamlit, featuring budget planning with automatic South African tax (PAYE) calculations and TFSA portfolio rebalancing tools.
 
 ## Features
 
-### 🔐 User Authentication
-- ✅ **Secure login system** with username/password authentication
-- ✅ **User registration** with password confirmation and automatic login
-- ✅ **Duplicate prevention** - checks for existing usernames and passwords
-- ✅ **User-specific data storage** - each user has their own budget data
-- ✅ **Manual logout** functionality for security
+### 💰 Budget Dashboard
+The Budget Dashboard helps you track and manage your monthly expenses using the **50/30/20 budgeting rule**:
+- **50% Needs**: Essential expenses like rent, utilities, groceries
+- **30% Wants**: Discretionary spending like entertainment, dining out
+- **20% Savings**: Long-term savings and investments
 
-### Automatic Tax Calculations (SARS 2025/2026)
-- ✅ **Accurate PAYE calculations** using official SARS progressive tax brackets
+**Key Features:**
+- ✅ **Accurate PAYE calculations** using official SARS 2025/2026 progressive tax brackets
 - ✅ **Age-based tax rebates** (Under 65, 65-74, 75+)
 - ✅ **Automatic UIF calculation** (1% of salary, capped at R177.12/month)
 - ✅ **Real-time effective tax rate** display
+- 📊 Dynamic expense categories with custom items
+- 📈 Interactive visual breakdown with pie charts
+- 💾 Automatic data persistence (JSON)
 
-### Budget Management
-- 📊 **50/30/20 Budget Rule** framework
-- 💸 Dynamic expense categories (Needs, Wants, Savings)
-- 📈 Visual breakdown with interactive charts
-- 💾 User-specific data persistence (JSON)
+### 📈 TFSA Portfolio Manager
+The TFSA Portfolio page helps you manage and rebalance your Tax-Free Savings Account investments:
+
+**Key Features:**
+- ✅ **Track multiple ETFs** across different regions
+- ✅ **Set target allocation percentages** for each ETF
+- ✅ **Automated rebalancing recommendations** with actionable steps
+- ✅ **Visualize portfolio distribution** with interactive charts
+- ✅ **Monitor regional diversification**
+- ✅ **Configurable rebalancing threshold**
+- 💾 CSV-based data persistence
 
 ## Tax Calculation Details
 
@@ -44,44 +52,84 @@ A comprehensive budget planning application built with Streamlit that automatica
 ### UIF Contribution
 - **Rate**: 1% of monthly salary
 - **Maximum**: R177.12 per month
-- **Optional**: Can be toggled on/off
+- **Automatically calculated** for all salary inputs
 
 ## Installation
 
+This project uses [uv](https://github.com/astral-sh/uv) for dependency management.
+
+### Option 1: Using uv (Recommended)
+
 ```bash
+# Install uv if you don't have it
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
 # Install dependencies
-pip install -r requirements.txt
+uv sync
 
 # Run the application
-streamlit run main.py
+uv run streamlit run Home.py
+```
+
+### Option 2: Using pip
+
+```bash
+# Create a virtual environment
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install dependencies
+pip install streamlit pandas plotly
+
+# Run the application
+streamlit run Home.py
 ```
 
 ## Usage
 
-1. **Login or Register**
-   - Create a new account with username/password (automatically logged in)
-   - Login with existing credentials
-   - Stay logged in until manual logout
+### Budget Dashboard
 
-2. **Enter Your Details**
+1. **Navigate to Budget Dashboard** from the sidebar
+2. **Enter Your Income Details**
    - Monthly gross salary (before deductions)
    - Your age (for accurate tax rebate calculation)
-   - UIF is automatically included
+   - UIF is automatically included (1%, capped at R177.12)
 
 3. **View Automatic Calculations**
-   - Monthly tax (PAYE) with effective rate
-   - UIF contribution (capped at R177.12)
+   - Monthly tax (PAYE) with effective rate based on SARS 2025/2026 rates
+   - UIF contribution
    - Net income after deductions
 
 4. **Manage Budget Categories**
-   - Add/remove expense items
+   - Add/remove expense items in Needs, Wants, and Savings tabs
    - Set amounts for each category
-   - View visual breakdown
+   - View visual breakdown of your spending
 
 5. **Data Management**
-   - Data auto-saves to user-specific files in organized directories
-   - Manual save option available
-   - Logout anytime to secure your session
+   - Data auto-saves to `data/budgets/budget_data_default_user.json`
+   - Manual save option available in sidebar
+
+### TFSA Portfolio Manager
+
+1. **Navigate to TFSA Portfolio** from the sidebar
+2. **Add Your ETFs**
+   - Enter ETF name (e.g., "Satrix S&P 500")
+   - Specify region (e.g., "US", "SA", "Europe")
+   - Set target allocation percentage
+   - Enter current value in Rands
+
+3. **Configure Rebalancing**
+   - Set rebalancing threshold in sidebar (default: 5%)
+   - ETFs that deviate from target by more than the threshold will be flagged
+
+4. **View Recommendations**
+   - See which ETFs are over/under-allocated
+   - Get step-by-step rebalancing instructions
+   - View interactive charts comparing current vs target allocation
+
+5. **Data Management**
+   - Portfolio data auto-saves to `data/tfsa_portfolio.csv`
+   - Edit ETF details directly in the interface
 
 ## Example Calculation
 
@@ -97,17 +145,22 @@ streamlit run main.py
 
 ```
 budget-dashboard/
-├── main.py                 # Main application
-├── requirements.txt        # Python dependencies
-├── README.md              # Documentation
-├── .gitignore             # Git ignore rules
-└── data/                  # Application data (auto-created)
-    ├── users/             # User authentication data
-    │   └── users.json     # User accounts and hashed passwords
-    └── budgets/           # User budget data
-        ├── budget_data_username1.json
-        ├── budget_data_username2.json
-        └── ...
+├── Home.py                           # Landing page / main entry point
+├── pages/                            # Streamlit pages
+│   ├── 1_Budget_Dashboard.py         # Budget management with tax calculations
+│   └── 2_TFSA_Portfolio.py           # TFSA portfolio rebalancing
+├── utils/                            # Utility modules
+│   └── auth.py                       # Authentication utilities (future use)
+├── data/                             # Application data (auto-created)
+│   ├── budgets/                      # Budget data files
+│   │   ├── budget_data_default_user.json
+│   │   └── budget_data_*.json        # User-specific budget data
+│   ├── tfsa_portfolio.csv            # TFSA portfolio data
+│   └── users/                        # User data (future use)
+│       └── users.json
+├── pyproject.toml                    # Project configuration & dependencies
+├── uv.lock                           # Dependency lock file
+└── README.md                         # Documentation
 ```
 
 ## Data Source
@@ -117,10 +170,31 @@ https://www.sars.gov.za/tax-rates/income-tax/rates-of-tax-for-individuals/
 
 ## Requirements
 
-- Python 3.7+
-- streamlit
-- pandas
-- plotly
+### Core Dependencies
+- Python 3.8+
+- streamlit - Web framework for the application
+- pandas - Data manipulation and analysis
+- plotly - Interactive visualizations
+
+### Optional Dependencies
+- **OCR features** (future): pytesseract, pillow, pdf2image, pdfplumber
+- **Development**: pytest, black, flake8, mypy
+
+## Screenshots
+
+### Budget Dashboard
+- View real-time tax calculations based on SARS rates
+- Manage expenses using the 50/30/20 rule
+- Visual breakdown of your budget
+
+### TFSA Portfolio Manager
+- Track multiple ETFs across regions
+- Get actionable rebalancing recommendations
+- Compare current vs target allocation
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
