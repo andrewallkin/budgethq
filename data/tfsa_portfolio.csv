@@ -1,8 +1,12 @@
 ETF,Region,Target_Percentage,Current_Value
-Satrix S&P 500,US,55.00,70000
-Satrix Nasdaq 100,US Tech,10.00,9000
-Satrix MSCI Emerging Markets,Emerging Markets,15.00,15500
-Sygnia MSCI Japan,Other developed countries,7.50,8500
-Sygnia Eurostoxx50,Other developed countries,7.50,4000
-Satrix Top40,South Africa,5.00,8000
-
+Satrix S&P 500,US,55.0,62245.81
+Satrix Nasdaq 100,US Tech,10.0,26215.41
+Satrix MSCI Emerging Markets,Emerging Markets,15.0,0.0
+Sygnia MSCI Japan,Japan,7.5,0.0
+Sygnia Eurostoxx50,Europe,7.5,6647.62
+Satrix Top40,South Africa,5.0,14392.21
+SAGB R186 10.5%,South Africa,0.0,60152.23
+Satrix Global Balanced FoF,Global,0.0,17258.39
+Satrix MSCI China,China,0.0,5426.38
+Sygnia MSCI US,US,0.0,9410.94
+Sygnia MSCI World,Global,0.0,23810.96
