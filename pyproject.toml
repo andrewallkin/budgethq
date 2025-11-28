@@ -1,126 +1,41 @@
 [project]
 name = "budget-dashboard"
-version = "0.1.0"
-description = "A comprehensive budget planning application with automatic tax calculations and transaction management"
-readme = "README.md"
-requires-python = ">=3.8"
-license = {text = "MIT"}
-authors = [
-    {name = "Andrew Allkin", email = "your-email@example.com"},
-]
-keywords = ["budget", "finance", "streamlit", "tax", "south-africa"]
-classifiers = [
-    "Development Status :: 3 - Alpha",
-    "Intended Audience :: End Users/Desktop",
-    "License :: OSI Approved :: MIT License",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Topic :: Office/Business :: Financial",
-]
-
+version = "2.0.0"
+description = "Personal budget and TFSA portfolio management application"
+requires-python = ">=3.11"
 dependencies = [
-    "streamlit",
-    "pandas",
-    "plotly",
-    "pytesseract",
-    "pillow",
-    "pdf2image",
+    "fastapi>=0.104.0",
+    "uvicorn>=0.24.0",
+    "pandas>=2.1.0",
+    "pydantic>=2.4.0",
+    "sqlalchemy>=2.0.0",
+    "psycopg2-binary>=2.9.9",
+    "python-jose[cryptography]>=3.3.0",
+    "bcrypt>=4.0.1",
+    "python-multipart>=0.0.6",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest",
-    "black",
-    "flake8",
-    "mypy",
-]
-ocr = [
-    "pdfplumber",
-    "python-dateutil",
-    "streamlit-aggrid",
-]
-llm = [
-    "openai",
-    "anthropic",
+    "pytest>=7.4.0",
+    "black>=23.10.0",
+    "flake8>=6.1.0",
 ]
 
-[project.urls]
-Homepage = "https://github.com/yourusername/budget-dashboard"
-Repository = "https://github.com/yourusername/budget-dashboard"
-Issues = "https://github.com/yourusername/budget-dashboard/issues"
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
 
-[tool.uv]
-dev-dependencies = [
-    "pytest",
-    "black",
-    "flake8",
-    "mypy",
-]
+[tool.setuptools]
+packages = ["backend.app"]
+
+[tool.setuptools.package-data]
+"*" = ["*.json", "*.csv"]
 
 [tool.black]
-line-length = 88
-target-version = ['py38']
-include = '\.pyi?$'
-extend-exclude = '''
-/(
-  # directories
-  \.eggs
-  | \.git
-  | \.hg
-  | \.mypy_cache
-  | \.tox
-  | \.venv
-  | build
-  | dist
-)/
-'''
-
-[tool.mypy]
-python_version = "3.8"
-warn_return_any = true
-warn_unused_configs = true
-disallow_untyped_defs = true
-disallow_incomplete_defs = true
-check_untyped_defs = true
-disallow_untyped_decorators = true
-no_implicit_optional = true
-warn_redundant_casts = true
-warn_unused_ignores = true
-warn_no_return = true
-warn_unreachable = true
-strict_equality = true
+line-length = 100
+target-version = ["py311"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-python_files = ["test_*.py", "*_test.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
-addopts = "-v --tb=short"
-
-[tool.coverage.run]
-source = ["."]
-omit = [
-    "*/tests/*",
-    "*/test_*",
-    "*/__pycache__/*",
-    "*/venv/*",
-    "*/.venv/*",
-]
-
-[tool.coverage.report]
-exclude_lines = [
-    "pragma: no cover",
-    "def __repr__",
-    "if self.debug:",
-    "if settings.DEBUG",
-    "raise AssertionError",
-    "raise NotImplementedError",
-    "if 0:",
-    "if __name__ == .__main__.:",
-    "class .*\\bProtocol\\):",
-    "@(abc\\.)?abstractmethod",
-]
+python_files = "test_*.py"
