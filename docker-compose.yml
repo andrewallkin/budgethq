@@ -7,6 +7,22 @@ services:
       - "8000:8000"
     volumes:
       - ./data:/app/data
+    depends_on:
+      - postgres
+    environment:
+      - DATABASE_URL=postgresql://user:password@postgres:5432/budget_db
+    restart: always
+
+  postgres:
+    image: postgres:15
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=budget_db
+    ports:
+      - "5432:5432"
     restart: always
 
   frontend:
@@ -16,3 +32,6 @@ services:
     depends_on:
       - backend
     restart: always
+
+volumes:
+  postgres_data:

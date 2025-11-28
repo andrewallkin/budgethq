@@ -1,0 +1,62 @@
+{
+  "salary": 56500.0,
+  "age": 25,
+  "needs": [
+    {
+      "name": "Rent",
+      "amount": 5000.0
+    },
+    {
+      "name": "Genesis Medical Aid",
+      "amount": 2255.0
+    },
+    {
+      "name": "Gap Cover",
+      "amount": 313.0
+    },
+    {
+      "name": "PPS Income Protection",
+      "amount": 287.0
+    },
+    {
+      "name": "Car Insurance",
+      "amount": 455.0
+    },
+    {
+      "name": "Investec Bank Fee",
+      "amount": 340.0
+    },
+    {
+      "name": "Vodacom Contract",
+      "amount": 426.32
+    }
+  ],
+  "wants": [
+    {
+      "name": "Spotify",
+      "amount": 65.0
+    },
+    {
+      "name": "Crossfit",
+      "amount": 1500.0
+    },
+    {
+      "name": "Out and About",
+      "amount": 15000.0
+    }
+  ],
+  "savings": [
+    {
+      "name": "Sygnia RA",
+      "amount": 5000.0
+    },
+    {
+      "name": "EasyEquities TFSA",
+      "amount": 3000.0
+    },
+    {
+      "name": "Emergency Savings",
+      "amount": 5000.0
+    }
+  ]
+}

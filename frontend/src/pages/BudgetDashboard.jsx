@@ -112,12 +112,11 @@ export default function BudgetDashboard() {
         }
     }
 
-    const addCategory = (type, name) => {
-        if (!name) return
-        const newItem = { name, amount: 0 }
+    const addCategory = (type, name, amount = 0) => {
+        const newItem = { name, amount }
         if (type === 'needs') setNeeds([...needs, newItem])
-        if (type === 'wants') setWants([...wants, newItem])
-        if (type === 'savings') setSavings([...savings, newItem])
+        else if (type === 'wants') setWants([...wants, newItem])
+        else setSavings([...savings, newItem])
     }
 
     const updateCategory = (type, index, field, value) => {
@@ -178,6 +177,7 @@ export default function BudgetDashboard() {
                                     type="number"
                                     value={salary}
                                     onChange={(e) => setSalary(parseFloat(e.target.value) || 0)}
+                                    onFocus={(e) => e.target.select()}
                                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors"
                                 />
                             </div>
@@ -187,6 +187,7 @@ export default function BudgetDashboard() {
                                     type="number"
                                     value={age}
                                     onChange={(e) => setAge(parseInt(e.target.value) || 30)}
+                                    onFocus={(e) => e.target.select()}
                                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors"
                                 />
                             </div>
@@ -284,7 +285,7 @@ export default function BudgetDashboard() {
                             <CategoryList
                                 type={activeTab}
                                 items={activeTab === 'needs' ? needs : activeTab === 'wants' ? wants : savings}
-                                onAdd={(name) => addCategory(activeTab, name)}
+                                onAdd={(name, amount) => addCategory(activeTab, name, amount)}
                                 onUpdate={(index, field, val) => updateCategory(activeTab, index, field, val)}
                                 onRemove={(index) => removeCategory(activeTab, index)}
                             />
@@ -338,38 +339,59 @@ function SummaryItem({ label, value, color }) {
     )
 }
 
-function CategoryList({ type, items, onAdd, onUpdate, onRemove }) {
+const CategoryList = ({ type, items, onAdd, onUpdate, onRemove }) => {
     const [newName, setNewName] = useState('')
+    const [newAmount, setNewAmount] = useState('')
 
     const handleAdd = () => {
         if (newName.trim()) {
-            onAdd(newName)
+            onAdd(newName.trim(), parseFloat(newAmount) || 0)
             setNewName('')
+            setNewAmount('')
+        }
+    }
+
+    const handleKeyPress = (e) => {
+        if (e.key === 'Enter') {
+            handleAdd()
         }
     }
 
     return (
-        <div className="space-y-4">
+        <div className="space-y-3">
             <div className="flex gap-2">
                 <input
                     type="text"
+                    placeholder="Category name..."
                     value={newName}
                     onChange={(e) => setNewName(e.target.value)}
-                    placeholder={`Add new ${type} category...`}
-                    className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition-colors"
-                    onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+                    onKeyPress={handleKeyPress}
+                    className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors"
                 />
+                <div className="flex items-center gap-2 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700">
+                    <span className="text-gray-500 dark:text-gray-400 text-sm">R</span>
+                    <input
+                        type="number"
+                        placeholder="0"
+                        value={newAmount}
+                        onChange={(e) => setNewAmount(e.target.value)}
+                        onKeyPress={handleKeyPress}
+                        onFocus={(e) => e.target.select()}
+                        className="w-24 bg-transparent border-none focus:ring-0 p-0 text-right text-gray-900 dark:text-white"
+                    />
+                </div>
                 <button
                     onClick={handleAdd}
-                    className="px-4 py-2 bg-gray-900 dark:bg-gray-700 text-white rounded-lg hover:bg-gray-800 dark:hover:bg-gray-600 transition-colors"
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-1"
                 >
                     <Plus className="w-4 h-4" />
+                    Add
                 </button>
             </div>
 
             <div className="space-y-2">
                 {items.map((item, index) => (
-                    <div key={index} className="flex gap-4 items-center p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg group transition-colors">
+                    <div key={index} className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors group">
                         <input
                             type="text"
                             value={item.name}
@@ -382,6 +404,7 @@ function CategoryList({ type, items, onAdd, onUpdate, onRemove }) {
                                 type="number"
                                 value={item.amount}
                                 onChange={(e) => onUpdate(index, 'amount', e.target.value)}
+                                onFocus={(e) => e.target.select()}
                                 className="w-24 bg-white dark:bg-gray-600 border border-gray-200 dark:border-gray-500 rounded px-2 py-1 text-right text-gray-900 dark:text-white"
                             />
                         </div>
