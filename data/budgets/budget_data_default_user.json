@@ -37,12 +37,8 @@
       "amount": 65.0
     },
     {
-      "name": "Crossfit",
-      "amount": 1500.0
-    },
-    {
-      "name": "Out and About",
-      "amount": 15000.0
+      "name": "Gym",
+      "amount": 200.0
     }
   ],
   "savings": [
