@@ -4,31 +4,37 @@ services:
   backend:
     build: ./backend
     ports:
-      - "8000:8000"
+      - "${BACKEND_PORT:-8000}:8000"
     volumes:
       - ./data:/app/data
     depends_on:
       - postgres
+    env_file:
+      - .env
     environment:
-      - DATABASE_URL=postgresql://user:password@postgres:5432/budget_db
+      # DATABASE_URL should be provided via .env in production, but we keep the
+      # variable name here so the backend container can read it.
+      - DATABASE_URL=${DATABASE_URL}
     restart: always
 
   postgres:
     image: postgres:15
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    env_file:
+      - .env
     environment:
-      - POSTGRES_USER=user
-      - POSTGRES_PASSWORD=password
-      - POSTGRES_DB=budget_db
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     restart: always
 
   frontend:
     build: ./frontend
     ports:
-      - "3000:80"
+      - "${FRONTEND_PORT:-3000}:80"
     depends_on:
       - backend
     restart: always
