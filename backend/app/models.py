@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, Date
 from sqlalchemy.orm import relationship
 from .database import Base
 
@@ -11,6 +11,8 @@ class User(Base):
 
     budget = relationship("Budget", back_populates="owner", uselist=False)
     etfs = relationship("ETF", back_populates="owner")
+    tfsa_historical_contributions = relationship("TFSAHistoricalContribution", back_populates="owner")
+    tfsa_deposits = relationship("TFSADeposit", back_populates="owner")
 
 class Budget(Base):
     __tablename__ = "budgets"
@@ -45,3 +47,25 @@ class ETF(Base):
     current_value = Column(Float)
 
     owner = relationship("User", back_populates="etfs")
+
+
+class TFSAHistoricalContribution(Base):
+    __tablename__ = "tfsa_historical_contributions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    financial_year = Column(String)  # e.g., "2018/19", "2019/20"
+    amount = Column(Float)
+
+    owner = relationship("User", back_populates="tfsa_historical_contributions")
+
+class TFSADeposit(Base):
+    __tablename__ = "tfsa_deposits"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    amount = Column(Float)
+    deposit_date = Column(Date)
+    financial_year_start = Column(Integer)  # e.g., 2024 for FY 2024/2025
+
+    owner = relationship("User", back_populates="tfsa_deposits")

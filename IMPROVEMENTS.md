@@ -171,6 +171,49 @@ A comprehensive list of features and enhancements to expand your budget dashboar
 
 ---
 
+## 🧩 Current Pages – Targeted Enhancements
+
+These ideas focus specifically on the two pages that exist today: **Budget Dashboard** and **TFSA Portfolio**.
+
+### 💰 Budget Dashboard
+- Add **soft budgets** per category with colour‑coded status (under/on/over budget) and simple overspending alerts.
+- Show a **time-based trend** of total Needs/Wants/Savings and Remaining income (e.g. last 6–12 months, per user).
+- Support **preset templates** (e.g. "Starter Budget", "Family Budget") that pre‑populate common categories.
+- Add an optional **"must‑pay first"** flag on categories (rent, debt payments, etc.) and surface them in a "Priority Obligations" summary.
+- Surface a **savings rate metric** on the page (Savings ÷ Net Income) with a simple "good / better / great" band.
+- Offer quick actions to **duplicate / move categories** between Needs, Wants and Savings for easier refactoring of a budget.
+- Enable **subcategory grouping** to organize related expenses under parent categories (e.g. group medical aid, car insurance, home insurance under an "Insurance" subcategory). Allow expand/collapse functionality and show aggregated totals for subcategory groups.
+
+### 📈 TFSA Portfolio
+- Track **annual TFSA contribution limit** (e.g. R36,000/year) and show:
+  - How much has been "contributed" this year vs the limit (user‑entered field for now).
+  - A simple warning when approaching or exceeding the limit.
+- Aggregate and visualise **region exposure** from ETF data (e.g. pie or bar chart of Region weights).
+- Show **before/after allocation** charts for the proposed rebalancing plan so users can see the impact of following the steps.
+- Add a **"cash buffer" / uninvested amount** field and surface it in the allocation view.
+- Capture and display a simple **performance snapshot** per ETF (manual fields for "book cost" and "current value" → % gain/loss).
+- Provide a **one-click "rebalance summary"** text block that users can copy (e.g. for notes or sending to their broker).
+
+### 🤖 AI-Powered Features (Using OpenAI API)
+
+#### 💰 Budget Dashboard - AI Enhancements
+- **Natural Language Budget Queries**: Add a chat interface where users can ask questions like "How much did I spend on groceries last month?" or "What's my biggest expense category?" and get instant answers using OpenAI's API to parse queries and analyze budget data.
+- **Smart Expense Categorization**: When users add expenses with descriptions, use OpenAI to automatically categorize them (e.g. "Woolworths groceries" → "Groceries", "FNB credit card payment" → "Debt Payments"). Allow users to review and correct suggestions.
+- **AI Budget Recommendations**: Analyze spending patterns and provide personalized budget suggestions (e.g. "You're spending 40% on wants - consider reducing to 30% to increase savings"). Use OpenAI to generate contextual, actionable advice based on the user's financial data.
+- **Expense Description Analysis**: For transaction imports or manual entries, use OpenAI to extract key information (merchant, category, type) from free-form descriptions and suggest appropriate categorization.
+- **Anomaly Detection & Alerts**: Use AI to identify unusual spending patterns (e.g. "Your grocery spending increased 50% this month - was this expected?") and generate natural language alerts.
+- **Budget Optimization Suggestions**: Ask OpenAI to analyze the budget structure and suggest improvements (e.g. "Consider consolidating your 3 separate insurance categories into one subcategory for better tracking").
+
+#### 📈 TFSA Portfolio - AI Enhancements
+- **Investment Chat Assistant**: Add a chat interface where users can ask questions about their portfolio like "What's my best performing ETF?" or "How diversified is my portfolio?" Use OpenAI to analyze portfolio data and provide natural language responses.
+- **Portfolio Risk Assessment**: Use OpenAI to analyze the portfolio composition (ETFs, regions, asset classes) and provide a written risk assessment with recommendations (e.g. "Your portfolio is heavily weighted toward US equities - consider adding emerging market exposure for diversification").
+- **Investment Education & Explanations**: When users hover over or click investment terms (e.g. "TER", "dividend yield", "rebalancing"), use OpenAI to generate simple, personalized explanations in plain language.
+- **Smart Rebalancing Recommendations**: Beyond the current rebalancing calculator, use OpenAI to analyze the portfolio and suggest specific rebalancing strategies with explanations (e.g. "Your US allocation is 60% but your target is 40% - consider selling X units of S&P 500 ETF and buying Y units of emerging markets ETF").
+- **Market Context & Insights**: Use OpenAI to provide written summaries about how current market conditions might affect the user's specific portfolio, based on their ETF holdings and allocation.
+- **Portfolio Performance Analysis**: Generate natural language summaries of portfolio performance (e.g. "Your portfolio gained 8% this quarter, outperforming inflation. Your best performer was the S&P 500 ETF with 12% returns.").
+
+---
+
 ## 🎯 Implementation Priority
 
 ### Phase 1 - Core Tracking (High Impact, Easy to Implement)
