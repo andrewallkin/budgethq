@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts'
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus, Trash2, TrendingUp } from 'lucide-react'
+import { Link } from 'react-router-dom'
 
 const COLORS = {
     Needs: '#B91C1C', // red-700
@@ -40,6 +41,10 @@ export default function BudgetDashboard() {
     const [isSaving, setIsSaving] = useState(false)
     const firstRender = useRef(true)
 
+    // TFSA Portfolio data
+    const [portfolioTotal, setPortfolioTotal] = useState(0)
+    const [portfolioEtfCount, setPortfolioEtfCount] = useState(0)
+
     // Load data on mount
     useEffect(() => {
         fetchData()
@@ -71,16 +76,26 @@ export default function BudgetDashboard() {
 
     const fetchData = async () => {
         try {
-            const res = await axios.get('/api/budget/default_user')
-            if (res.data && Object.keys(res.data).length > 0) {
-                setSalary(res.data.salary || 0)
-                setAge(res.data.age || 30)
-                setNeeds(res.data.needs || [])
-                setWants(res.data.wants || [])
-                setSavings(res.data.savings || [])
+            const [budgetRes, portfolioRes] = await Promise.all([
+                axios.get('/api/budget/default_user'),
+                axios.get('/api/portfolio')
+            ])
+
+            if (budgetRes.data && Object.keys(budgetRes.data).length > 0) {
+                setSalary(budgetRes.data.salary || 0)
+                setAge(budgetRes.data.age || 30)
+                setNeeds(budgetRes.data.needs || [])
+                setWants(budgetRes.data.wants || [])
+                setSavings(budgetRes.data.savings || [])
+            }
+
+            if (portfolioRes.data && Array.isArray(portfolioRes.data)) {
+                const total = portfolioRes.data.reduce((sum, etf) => sum + (etf.Current_Value || 0), 0)
+                setPortfolioTotal(total)
+                setPortfolioEtfCount(portfolioRes.data.length)
             }
         } catch (err) {
-            console.error("Failed to fetch budget data", err)
+            console.error("Failed to fetch data", err)
         } finally {
             setLoading(false)
         }

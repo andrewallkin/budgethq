@@ -1,32 +1,46 @@
-# 💰 Financial Dashboard
+## 💰 Financial Dashboard
 
-A comprehensive personal finance management tool, rewritten in React and FastAPI.
+A personal finance dashboard for South African users, built with **React** and **FastAPI**, focused (for now) on two core areas: a monthly **Budget Dashboard** and a **TFSA Portfolio** view.
 
-## Features
+### Core Features
 
-### 💰 Budget Dashboard
-- **50/30/20 Rule**: Track Needs, Wants, and Savings.
-- **Tax Calculations**: Automatic SARS tax (2025/2026) and UIF calculations.
-- **Visualizations**: Interactive charts for budget breakdown.
-- **Persistence**: Data is automatically saved.
+- **Authentication**
+  - Email/username + password with JWT-based auth.
+  - Per-user storage of budget and TFSA portfolio in the database.
 
-### 📈 TFSA Portfolio
-- **Portfolio Management**: Track ETFs and their target allocations.
-- **Rebalancing**: Get actionable recommendations to rebalance your portfolio.
-- **Visualizations**: Allocation charts and region breakdown.
+- **💰 Budget Dashboard**
+  - **Income & Tax**: Capture monthly gross salary and age and get automatic SARS 2025/2026 PAYE and UIF calculations.
+  - **50/30/20 Style Categories**: Organise spending into **Needs**, **Wants**, and **Savings** with fully editable sub‑categories.
+  - **Auto-Save**: All edits to salary, age, and categories are saved automatically to your account.
+  - **Visualisations**:
+    - Overall pie chart showing Needs/Wants/Savings/Unallocated net income.
+    - Per‑tab pie chart showing the breakdown within the currently selected category.
+  - **Summary Stats**: Net income, total Needs/Wants/Savings, and remaining amount.
 
-## Architecture
+- **📈 TFSA Portfolio**
+  - **ETF Management**: Maintain a list of ETFs with ticker, region, target allocation %, and current value.
+  - **Automatic Rebalancing Plan**:
+    - Set a deviation **threshold** (e.g. 5%).
+    - Backend calculates a step‑by‑step plan of “sell X / buy Y” actions to move back toward targets.
+  - **Validation**: Warning if target percentages do not sum to 100%.
+  - **Visualisations**:
+    - Pie chart of current ETF allocation by value.
+  - **Auto-Save**: Portfolio changes are automatically persisted per user.
 
-- **Frontend**: React + Vite + TailwindCSS
-- **Backend**: FastAPI + Pandas
-- **Containerization**: Docker + Docker Compose
+### Architecture
 
-## Getting Started
+- **Frontend**: React + Vite + TailwindCSS + Recharts
+- **Backend**: FastAPI + SQLAlchemy + Pandas
+- **Auth**: JWT bearer tokens with secure password hashing
+- **Persistence**: Relational database (via SQLAlchemy models) behind the API
+- **Containerisation**: Docker + Docker Compose
+
+## Running with Docker
 
 ### Prerequisites
 - Docker and Docker Compose
 
-### Running the App
+### Start the stack
 
 1. Build and start the containers:
    ```bash
@@ -34,27 +48,37 @@ A comprehensive personal finance management tool, rewritten in React and FastAPI
    ```
 
 2. Open your browser and navigate to:
-   http://localhost:3000
+   `http://localhost:3000`
 
-3. The data will be persisted in the `data/` directory.
+3. Application data is persisted in the `data/` directory.
 
-## Development
+## Local Development
 
 ### Backend
-The backend code is in `backend/`.
-To run locally:
+Backend code lives in `backend/`.
+
+To run it locally:
 ```bash
 cd backend
 pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
+The FastAPI app exposes:
+- `/api/budget/default_user` – read/write the authenticated user’s budget
+- `/api/portfolio` – read/write the authenticated user’s TFSA ETF portfolio
+- `/api/calculate/tax` – SARS PAYE + UIF calculation endpoint
+- `/api/calculate/rebalance` – TFSA rebalancing engine
+- `/api/auth/*` – auth endpoints (register, login, change password)
+
 ### Frontend
-The frontend code is in `frontend/`.
-To run locally:
+Frontend code lives in `frontend/`.
+
+To run it locally:
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
-Note: You'll need to ensure the backend is running and accessible.
+
+By default the Vite dev server runs on `http://localhost:3000` and expects the FastAPI backend to be accessible (usually on `http://localhost:8000`, proxied in Docker).
