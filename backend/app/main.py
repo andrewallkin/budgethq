@@ -609,7 +609,11 @@ async def bulk_import_holdings(
     db: Session = Depends(database.get_db)
 ):
     """
-    Bulk import ETF holdings from a CSV file.
+    Bulk import ETF holdings from a CSV file (UPSERT mode).
+    
+    - If holding exists: Updates shares, target_percentage, and region
+    - If holding doesn't exist: Creates new holding
+    - Google Sheets: Adds ticker if not present, skips if exists
     
     Required columns: jse_ticker, etf_name, region, shares, target_percentage
     """
@@ -639,7 +643,8 @@ async def bulk_import_holdings(
         all_prices = sheets_service.get_all_etf_prices()
         prices_map = {p['jse_ticker']: p['current_price'] for p in all_prices}
     
-    success_count = 0
+    created_count = 0
+    updated_count = 0
     failed_count = 0
     errors = []
     added_to_sheet = 0
@@ -654,11 +659,6 @@ async def bulk_import_holdings(
                 models.ETFHolding.user_id == current_user.id,
                 models.ETFHolding.jse_ticker == jse_ticker
             ).first()
-            
-            if existing:
-                errors.append(f"Row {row_num}: {jse_ticker} already exists, skipped")
-                failed_count += 1
-                continue
             
             # Add to Google Sheet if not already there
             if sheets_available:
@@ -676,6 +676,7 @@ async def bulk_import_holdings(
             shares_str = row['shares'].strip()
             shares = float(shares_str) if shares_str else 0.0
             target_pct = float(row['target_percentage'])
+            region = row['region'].strip()
             
             if shares < 0:
                 errors.append(f"Row {row_num}: Shares cannot be negative")
@@ -685,19 +686,30 @@ async def bulk_import_holdings(
             current_price = prices_map.get(jse_ticker)
             price_updated_at = datetime.utcnow() if current_price else None
             
-            new_holding = models.ETFHolding(
-                user_id=current_user.id,
-                jse_ticker=jse_ticker,
-                etf_name=etf_name,
-                region=row['region'].strip(),
-                shares=shares,
-                target_percentage=target_pct,
-                current_price=current_price,
-                price_updated_at=price_updated_at
-            )
-            
-            db.add(new_holding)
-            success_count += 1
+            if existing:
+                # UPDATE existing holding
+                existing.shares = shares
+                existing.target_percentage = target_pct
+                existing.region = region
+                existing.etf_name = etf_name  # Update name in case it changed
+                if current_price:
+                    existing.current_price = current_price
+                    existing.price_updated_at = price_updated_at
+                updated_count += 1
+            else:
+                # CREATE new holding
+                new_holding = models.ETFHolding(
+                    user_id=current_user.id,
+                    jse_ticker=jse_ticker,
+                    etf_name=etf_name,
+                    region=region,
+                    shares=shares,
+                    target_percentage=target_pct,
+                    current_price=current_price,
+                    price_updated_at=price_updated_at
+                )
+                db.add(new_holding)
+                created_count += 1
             
         except ValueError as e:
             errors.append(f"Row {row_num}: Invalid number format - {str(e)}")
@@ -709,7 +721,8 @@ async def bulk_import_holdings(
     db.commit()
     
     return {
-        "success": success_count,
+        "created": created_count,
+        "updated": updated_count,
         "failed": failed_count,
         "errors": errors,
         "added_to_sheet": added_to_sheet

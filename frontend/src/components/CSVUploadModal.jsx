@@ -147,12 +147,13 @@ export default function CSVUploadModal({ isOpen, onClose, onSuccess }) {
                 headers: { 'Content-Type': 'multipart/form-data' }
             })
             setResult(response.data)
-            if (response.data.success > 0) {
+            if (response.data.created > 0 || response.data.updated > 0) {
                 onSuccess?.()
             }
         } catch (err) {
             setResult({
-                success: 0,
+                created: 0,
+                updated: 0,
                 failed: 0,
                 errors: [err.response?.data?.detail || 'Upload failed']
             })
@@ -188,7 +189,7 @@ JSE:SYGWD,Sygnia Itrix MSCI World,Global,8.0,30`
                             Import ETF Holdings
                         </h2>
                         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                            Upload a CSV file to bulk import your ETF holdings
+                            Upload a CSV to create new holdings or update existing ones
                         </p>
                     </div>
                     <button
@@ -313,14 +314,14 @@ JSE:SYGWD,Sygnia Itrix MSCI World,Global,8.0,30`
                     {/* Upload Result */}
                     {result && (
                         <div className={`mt-4 p-4 rounded-lg ${
-                            result.success > 0 && result.failed === 0
+                            (result.created > 0 || result.updated > 0) && result.failed === 0
                                 ? 'bg-green-50 dark:bg-green-900/20'
                                 : result.failed > 0
                                     ? 'bg-yellow-50 dark:bg-yellow-900/20'
                                     : 'bg-red-50 dark:bg-red-900/20'
                         }`}>
                             <div className="flex items-center gap-2 mb-2">
-                                {result.success > 0 ? (
+                                {(result.created > 0 || result.updated > 0) ? (
                                     <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
                                 ) : (
                                     <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
@@ -329,17 +330,24 @@ JSE:SYGWD,Sygnia Itrix MSCI World,Global,8.0,30`
                                     Import Complete
                                 </span>
                             </div>
-                            <p className="text-sm text-gray-700 dark:text-gray-300">
-                                Successfully imported: <strong>{result.success}</strong> holdings
-                            </p>
+                            {result.created > 0 && (
+                                <p className="text-sm text-gray-700 dark:text-gray-300">
+                                    ✓ Created: <strong>{result.created}</strong> new holdings
+                                </p>
+                            )}
+                            {result.updated > 0 && (
+                                <p className="text-sm text-gray-700 dark:text-gray-300">
+                                    ✓ Updated: <strong>{result.updated}</strong> existing holdings
+                                </p>
+                            )}
                             {result.added_to_sheet > 0 && (
                                 <p className="text-sm text-gray-700 dark:text-gray-300">
-                                    Added to Google Sheet: <strong>{result.added_to_sheet}</strong> ETFs
+                                    ✓ Added to Google Sheet: <strong>{result.added_to_sheet}</strong> ETFs
                                 </p>
                             )}
                             {result.failed > 0 && (
                                 <p className="text-sm text-gray-700 dark:text-gray-300">
-                                    Failed: <strong>{result.failed}</strong> rows
+                                    ⚠ Failed: <strong>{result.failed}</strong> rows
                                 </p>
                             )}
                             {result.errors?.length > 0 && (
@@ -359,7 +367,7 @@ JSE:SYGWD,Sygnia Itrix MSCI World,Global,8.0,30`
                         onClick={handleClose}
                         className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
                     >
-                        {result?.success > 0 ? 'Close' : 'Cancel'}
+                        {result?.created > 0 || result?.updated > 0 ? 'Close' : 'Cancel'}
                     </button>
                     {!result && (
                         <button

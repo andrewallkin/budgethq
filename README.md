@@ -60,18 +60,96 @@ A personal finance dashboard for South African users, built with **React** and *
 
 ### Prerequisites
 - Docker and Docker Compose
+- Make (optional, but recommended for easier commands)
+- `.env` file in project root (see Environment Setup below)
+
+### Docker Compose Files
+
+This project uses separate configs for development and production:
+
+| File | Purpose | Usage |
+|------|---------|-------|
+| `docker-compose.yml` | Production (default) | VPS deployment via CI/CD |
+| `docker-compose.dev.yml` | Development | Local coding with hot reload |
+
+### Environment Setup
+
+Create a `.env` file in the project root:
+
+```bash
+# Database
+POSTGRES_USER=budget_user
+POSTGRES_PASSWORD=your_secure_password
+POSTGRES_DB=budget_db
+POSTGRES_PORT=5432
+
+# Application Ports
+BACKEND_PORT=8000
+FRONTEND_PORT=3000
+
+# Database URL (must match POSTGRES_* variables)
+DATABASE_URL=postgresql://budget_user:your_secure_password@postgres:5432/budget_db
+
+# Google Sheets (get from Google Cloud Console)
+GOOGLE_SHEETS_CREDENTIALS={"type":"service_account",...}
+GOOGLE_SPREADSHEET_ID=your_spreadsheet_id
+GOOGLE_SHEET_NAME=ETF Holdings
+```
 
 ### Start the stack
 
-1. Build and start the containers:
-   ```bash
-   docker-compose up --build
-   ```
+**For Development (Recommended):**
+```bash
+# Using Makefile (easiest)
+make dev-up
 
-2. Open your browser and navigate to:
-   `http://localhost:3000`
+# Or manually
+docker-compose -f docker-compose.dev.yml up -d
+```
 
-3. Application data is persisted in the `data/` directory.
+**Features in dev mode:**
+- ✅ Hot reload for backend and frontend code changes
+- ✅ Migration files appear on local filesystem
+- ✅ Direct database access (localhost:5432)
+- ✅ Automatic code sync between host and container
+
+**For Production (testing locally):**
+```bash
+docker-compose up -d
+# or: make prod-up
+# (VPS runs this via CI/CD automatically)
+```
+
+### Access the Application
+
+- **Frontend:** http://localhost:3000
+- **Backend API:** http://localhost:8000
+- **API Docs:** http://localhost:8000/docs
+- **Database:** localhost:5432 (dev mode only)
+
+### Development Commands
+
+```bash
+# Container Management
+make dev-up          # Start development environment
+make dev-down        # Stop development environment
+make dev-build       # Rebuild containers
+make dev-logs        # View live logs
+make dev-shell       # Access backend shell
+
+# Database Migrations (see section below)
+make migrate                        # Run pending migrations
+make migrate-create MSG="desc"      # Create new migration
+make migrate-stamp                  # Mark DB as up-to-date
+make migrate-history                # View migration history
+make migrate-rollback               # Undo last migration
+
+# Utilities
+make clean           # Remove all containers and volumes
+make help            # Show all available commands
+```
+
+For detailed Docker setup information, see [DOCKER_SETUP.md](DOCKER_SETUP.md).
 
 ## Local Development
 
@@ -122,45 +200,94 @@ By default the Vite dev server runs on `http://localhost:3000` and expects the F
 
 This project uses **Alembic** for database schema management. This allows you to modify database tables without losing data.
 
-### Initial Setup (First Time)
+### 🚀 Initial Setup (First Time Only)
 
-If you have an existing database with data:
+If you have an existing database with data, you **must** create an initial migration baseline:
+
 ```bash
-docker-compose exec backend bash
-alembic revision --autogenerate -m "initial_migration"
-alembic stamp head  # Mark as migrated without running
-exit
+# 1. Start dev environment
+make dev-up
+
+# 2. Create initial migration (captures current schema)
+make migrate-create MSG="initial_schema"
+
+# 3. ⚠️ CRITICAL: Mark database as up-to-date (prevents data loss!)
+make migrate-stamp
+
+# 4. Verify it worked
+docker-compose -f docker-compose.dev.yml exec backend alembic current
+
+# 5. Check migration file appeared locally
+ls backend/alembic/versions/
+
+# 6. Commit and push
+git add backend/alembic/versions/*.py
+git commit -m "Add initial Alembic migration"
+git push origin main
 ```
 
-### Creating New Migrations
+**Why `migrate-stamp` is critical:** It tells Alembic your database already has these tables, preventing it from trying to recreate them and **losing all your data** on the next deployment.
+
+### 📝 Creating New Migrations
 
 When you modify models in `backend/app/models.py`:
+
 ```bash
-docker-compose exec backend bash
-alembic revision --autogenerate -m "describe_your_changes"
-alembic upgrade head
-exit
+# 1. Edit your models
+vim backend/app/models.py
+
+# 2. Create migration (file appears in backend/alembic/versions/)
+make migrate-create MSG="add_notes_column"
+
+# 3. Review the generated file
+cat backend/alembic/versions/*_add_notes_column.py
+
+# 4. Test it locally
+make migrate
+
+# 5. Commit and push (CI/CD will apply it to production)
+git add backend/alembic/versions/*.py
+git commit -m "Add notes column migration"
+git push
 ```
 
-### Common Commands
+### 🔧 Migration Commands (via Makefile)
 
 ```bash
+make migrate                        # Run all pending migrations
+make migrate-create MSG="desc"      # Create new migration
+make migrate-stamp                  # Mark DB as current (no changes)
+make migrate-history                # Show all migrations
+make migrate-rollback               # Undo last migration
+```
+
+### 🔍 Manual Migration Commands
+
+If you prefer not to use the Makefile:
+
+```bash
+# Run migrations
+docker-compose -f docker-compose.dev.yml exec backend alembic upgrade head
+
+# Create migration
+docker-compose -f docker-compose.dev.yml exec backend alembic revision --autogenerate -m "description"
+
+# Stamp database
+docker-compose -f docker-compose.dev.yml exec backend alembic stamp head
+
 # Check current version
-docker-compose exec backend alembic current
+docker-compose -f docker-compose.dev.yml exec backend alembic current
 
-# View migration history
-docker-compose exec backend alembic history
+# View history
+docker-compose -f docker-compose.dev.yml exec backend alembic history
 
-# Upgrade to latest
-docker-compose exec backend alembic upgrade head
-
-# Rollback one version
-docker-compose exec backend alembic downgrade -1
+# Rollback
+docker-compose -f docker-compose.dev.yml exec backend alembic downgrade -1
 ```
 
-For detailed migration guides, see:
-- `backend/MIGRATIONS.md` - Development workflow
-- `DEPLOYMENT.md` - CI/CD and production deployments
+### 📚 Additional Resources
+
+For detailed migration workflows and troubleshooting, see [DOCKER_SETUP.md](DOCKER_SETUP.md).
 
 ## CI/CD
 

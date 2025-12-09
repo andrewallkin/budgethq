@@ -7,14 +7,21 @@ services:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
       - ./data:/app/data
+      - ./backend/alembic/versions:/app/alembic/versions  # Migration files appear locally
+      - ./backend/app:/app/app  # Hot reload for code changes
     depends_on:
       - postgres
     env_file:
       - .env
-    restart: always
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+    restart: unless-stopped
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload  # Enable hot reload
 
   postgres:
     image: postgres:15
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"  # Expose for local DB access
     volumes:
       - postgres_data:/var/lib/postgresql/data
     env_file:
@@ -23,16 +30,18 @@ services:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=${POSTGRES_DB}
-    # No host port mapping needed; backend talks to Postgres via Docker network.
-    restart: always
+    restart: unless-stopped
 
   frontend:
     build: ./frontend
     ports:
       - "${FRONTEND_PORT:-3000}:80"
+    volumes:
+      - ./frontend/src:/app/src  # Hot reload for frontend changes
     depends_on:
       - backend
-    restart: always
+    restart: unless-stopped
 
 volumes:
   postgres_data:
+
