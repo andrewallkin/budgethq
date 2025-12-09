@@ -196,37 +196,37 @@ function HomePage() {
                         </div>
 
                         <p className="text-gray-700 dark:text-gray-300 mb-6 text-base leading-relaxed">
-                            Manage your Tax-Free Savings Account investments with precision. Track your ETF allocations and
-                            get intelligent rebalancing recommendations to maintain your target portfolio mix.
+                            Complete TFSA portfolio management with ETFs and government bonds. Live price tracking, 
+                            transaction history, intelligent rebalancing, and powerful tools to optimize your tax-free investments.
                         </p>
 
                         <div className="space-y-3 mb-6">
                             <div className="flex items-start">
                                 <span className="text-green-600 dark:text-green-400 mr-3 mt-1">✓</span>
                                 <div>
-                                    <p className="font-semibold text-gray-900 dark:text-white">Portfolio Rebalancing Calculator</p>
-                                    <p className="text-sm text-gray-600 dark:text-gray-400">Get step-by-step instructions for rebalancing your investments</p>
+                                    <p className="font-semibold text-gray-900 dark:text-white">ETFs & Government Bonds</p>
+                                    <p className="text-sm text-gray-600 dark:text-gray-400">Track both ETFs with live prices and manually-managed government bonds</p>
                                 </div>
                             </div>
                             <div className="flex items-start">
                                 <span className="text-green-600 dark:text-green-400 mr-3 mt-1">✓</span>
                                 <div>
-                                    <p className="font-semibold text-gray-900 dark:text-white">Target Allocation Tracking</p>
-                                    <p className="text-sm text-gray-600 dark:text-gray-400">Set target percentages and monitor your portfolio drift</p>
+                                    <p className="font-semibold text-gray-900 dark:text-white">Live Price Sync & Transaction History</p>
+                                    <p className="text-sm text-gray-600 dark:text-gray-400">Google Sheets integration for ETF prices, full buy/sell transaction tracking</p>
                                 </div>
                             </div>
                             <div className="flex items-start">
                                 <span className="text-green-600 dark:text-green-400 mr-3 mt-1">✓</span>
                                 <div>
-                                    <p className="font-semibold text-gray-900 dark:text-white">Multi-Region Support</p>
-                                    <p className="text-sm text-gray-600 dark:text-gray-400">Track ETFs across different geographic regions</p>
+                                    <p className="font-semibold text-gray-900 dark:text-white">Smart Rebalancing & Analytics</p>
+                                    <p className="text-sm text-gray-600 dark:text-gray-400">Automated rebalancing plans, target allocation tracking, profit/loss analysis</p>
                                 </div>
                             </div>
                             <div className="flex items-start">
                                 <span className="text-green-600 dark:text-green-400 mr-3 mt-1">✓</span>
                                 <div>
-                                    <p className="font-semibold text-gray-900 dark:text-white">Interactive Visualizations</p>
-                                    <p className="text-sm text-gray-600 dark:text-gray-400">Beautiful charts showing current vs. target allocations</p>
+                                    <p className="font-semibold text-gray-900 dark:text-white">CSV Import & Sortable Views</p>
+                                    <p className="text-sm text-gray-600 dark:text-gray-400">Bulk import holdings, sort by any column, edit targets with one click</p>
                                 </div>
                             </div>
                         </div>

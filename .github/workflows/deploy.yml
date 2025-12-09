@@ -24,6 +24,7 @@ jobs:
       - name: Deploy to VPS
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
+          DEPLOY_BRANCH: ${{ github.ref_name }}
           # Values for generating .env on the VPS
           ENV_POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
           ENV_POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
@@ -32,32 +33,43 @@ jobs:
           ENV_BACKEND_PORT: ${{ secrets.BACKEND_PORT }}
           ENV_FRONTEND_PORT: ${{ secrets.FRONTEND_PORT }}
           ENV_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ENV_GOOGLE_SHEETS_CREDENTIALS: ${{ secrets.GOOGLE_SHEETS_CREDENTIALS }}
+          ENV_GOOGLE_SPREADSHEET_ID: ${{ secrets.GOOGLE_SPREADSHEET_ID }}
+          ENV_GOOGLE_SHEET_NAME: ${{ secrets.GOOGLE_SHEET_NAME }}
         run: |
-          ssh -t -vvv -i ~/.ssh/id_rsa -p ${{ secrets.VPS_PORT }} -o StrictHostKeyChecking=no -o ServerAliveInterval=50 -o ServerAliveCountMax=10 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} <<EOF
-          set -euxo pipefail
+          ssh -t -i ~/.ssh/id_rsa -p ${{ secrets.VPS_PORT }} -o StrictHostKeyChecking=no -o ServerAliveInterval=50 -o ServerAliveCountMax=10 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} <<EOF
+          set -euo pipefail
 
           # Derive repo name from owner/repo (github.repository)
           REPO_NAME="\$(basename "${GITHUB_REPOSITORY}")"
+          BRANCH="${DEPLOY_BRANCH}"
 
+          echo "::group::📦 Deployment Setup"
+          echo "Deploying branch: \${BRANCH}"
+          echo "Repository: \${REPO_NAME}"
           echo "Changing directory to /srv/apps"
           cd /srv/apps || { echo "Failed to change directory to /srv/apps"; exit 1; }
+          echo "::endgroup::"
 
+          echo "::group::🔄 Syncing Code"
           if [ ! -d "\${REPO_NAME}/.git" ]; then
-            echo "Project directory '/srv/apps/\${REPO_NAME}' does not contain a git repo. Recreating and cloning..."
+            echo "Cloning fresh repository..."
             rm -rf "\${REPO_NAME}" || true
             mkdir -p "\${REPO_NAME}" || { echo "Failed to create project directory"; exit 1; }
             cd "\${REPO_NAME}" || { echo "Failed to change directory to project directory"; exit 1; }
-
-            echo "Cloning the current GitHub repository into /srv/apps/\${REPO_NAME}"
-            git clone https://${{ secrets.GH_USERNAME }}:${{ secrets.GH_PAT }}@github.com/${{ github.repository }}.git . || { echo "Failed to clone repository"; exit 1; }
+            git clone -b \${BRANCH} https://${{ secrets.GH_USERNAME }}:${{ secrets.GH_PAT }}@github.com/${{ github.repository }}.git . || { echo "Failed to clone repository"; exit 1; }
           else
-            echo "Existing git repo detected in '/srv/apps/\${REPO_NAME}'. Updating from origin..."
+            echo "Updating existing repository..."
             cd "\${REPO_NAME}" || { echo "Failed to change directory to project directory"; exit 1; }
             git fetch origin || { echo "Failed to fetch from origin"; exit 1; }
-            git reset --hard origin/main || { echo "Failed to reset to origin/main"; exit 1; }
+            git checkout \${BRANCH} || git checkout -b \${BRANCH} origin/\${BRANCH} || { echo "Failed to checkout branch"; exit 1; }
+            git reset --hard origin/\${BRANCH} || { echo "Failed to reset to origin/\${BRANCH}"; exit 1; }
           fi
+          echo "✓ Code synced successfully"
+          echo "::endgroup::"
 
-          echo "Creating .env file in project root from CI/CD secrets..."
+          echo "::group::🔐 Setting up Environment"
+          echo "Creating .env file from CI/CD secrets..."
           cat > .env << 'EOF_ENV'
           POSTGRES_USER=${ENV_POSTGRES_USER}
           POSTGRES_PASSWORD=${ENV_POSTGRES_PASSWORD}
@@ -68,24 +80,46 @@ jobs:
           FRONTEND_PORT=${ENV_FRONTEND_PORT}
 
           DATABASE_URL=${ENV_DATABASE_URL}
+
+          GOOGLE_SHEETS_CREDENTIALS=${ENV_GOOGLE_SHEETS_CREDENTIALS}
+          GOOGLE_SPREADSHEET_ID=${ENV_GOOGLE_SPREADSHEET_ID}
+          GOOGLE_SHEET_NAME=${ENV_GOOGLE_SHEET_NAME}
           EOF_ENV
+          echo "✓ Environment configured"
+          echo "::endgroup::"
 
-          echo "Stopping and removing existing Docker containers (if any)..."
-          # Use --remove-orphans to clean up services no longer in the compose file
-          docker compose down --remove-orphans || true
+          echo "::group::🧹 Cleaning up old containers"
+          docker compose down --remove-orphans 2>&1 || true
+          docker image prune -a -f 2>&1 || true
+          docker builder prune -a -f 2>&1 || true
+          echo "✓ Cleanup complete"
+          echo "::endgroup::"
 
-          echo "Cleaning up unused Docker resources..."
-          docker image prune -a -f || true
-          docker builder prune -a -f || true
+          echo "::group::🔨 Building Docker Images"
+          docker compose build || { echo "::error::Docker build failed"; exit 1; }
+          echo "✓ Build complete"
+          echo "::endgroup::"
 
-          echo "Building Docker containers..."
-          docker compose build || { echo "Docker compose build failed"; exit 1; }
+          echo "::group::🚀 Starting Containers"
+          docker compose up -d --force-recreate || { echo "::error::Failed to start containers"; exit 1; }
+          echo "Waiting for containers to stabilize..."
+          sleep 5
+          echo "✓ Containers started"
+          echo "::endgroup::"
 
-          echo "Starting Docker containers..."
-          # Force recreate ensures network changes and environment variables are picked up
-          docker compose up -d --force-recreate || { echo "Docker compose up failed"; exit 1; }
+          echo "::group::🗄️  Running Database Migrations"
+          docker compose exec -T backend bash -c "cd /app && ./run_migrations.sh" || { echo "::error::Database migration failed"; exit 1; }
+          echo "::endgroup::"
 
-          echo "Deployment complete."
+          echo "::group::✅ Deployment Status"
+          docker compose ps
+          echo "::endgroup::"
+
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "✓ Deployment Complete!"
+          echo "✓ All migrations applied successfully"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           EOF
 
 
