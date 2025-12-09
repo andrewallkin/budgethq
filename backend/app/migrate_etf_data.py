@@ -63,7 +63,6 @@ def migrate_etf_data():
                 user_id=old_etf.user_id,
                 jse_ticker=jse_ticker,
                 etf_name=old_etf.ticker,  # Use ticker as name, user can update later
-                investment_company="Unknown",  # Will need to be updated manually
                 region=old_etf.region or "Unknown",
                 shares=0,  # User needs to set this manually
                 target_percentage=old_etf.target_percentage or 0,
@@ -88,9 +87,8 @@ def migrate_etf_data():
         print(f"  Skipped: {skipped}")
         print(f"\nNOTE: Migrated holdings have shares=0 and need manual updates:")
         print("  1. Update 'etf_name' with proper display names")
-        print("  2. Update 'investment_company' with provider names")
-        print("  3. Update 'shares' with actual share counts")
-        print("  4. Run a price sync to populate current_price from Google Sheets")
+        print("  2. Update 'shares' with actual share counts")
+        print("  3. Run a price sync to populate current_price from Google Sheets")
         
     except Exception as e:
         print(f"Error during migration: {e}")

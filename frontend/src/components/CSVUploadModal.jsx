@@ -2,7 +2,7 @@ import { useState, useRef } from 'react'
 import { X, Upload, FileText, AlertCircle, CheckCircle, Download } from 'lucide-react'
 import axios from 'axios'
 
-const REQUIRED_COLUMNS = ['jse_ticker', 'etf_name', 'investment_company', 'region', 'shares', 'target_percentage']
+const REQUIRED_COLUMNS = ['jse_ticker', 'etf_name', 'region', 'shares', 'target_percentage']
 
 export default function CSVUploadModal({ isOpen, onClose, onSuccess }) {
     const [file, setFile] = useState(null)
@@ -158,10 +158,10 @@ export default function CSVUploadModal({ isOpen, onClose, onSuccess }) {
     }
 
     const downloadTemplate = () => {
-        const template = `jse_ticker,etf_name,investment_company,region,shares,target_percentage
-JSE:STX40,Satrix Top 40,Satrix,South Africa,10.5,40
-JSE:STXNDQ,Satrix Nasdaq 100,Satrix,USA,5.25,30
-JSE:SYGWD,Sygnia Itrix MSCI World,Sygnia,Global,8.0,30`
+        const template = `jse_ticker,etf_name,region,shares,target_percentage
+JSE:STX40,Satrix Top 40,South Africa,10.5,40
+JSE:STXNDQ,Satrix Nasdaq 100,USA,5.25,30
+JSE:SYGWD,Sygnia Itrix MSCI World,Global,8.0,30`
 
         const blob = new Blob([template], { type: 'text/csv' })
         const url = URL.createObjectURL(blob)
@@ -242,7 +242,7 @@ JSE:SYGWD,Sygnia Itrix MSCI World,Sygnia,Global,8.0,30`
                                     Drop your CSV file here or click to browse
                                 </p>
                                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                                    Required: jse_ticker, etf_name, investment_company, region, shares, target_percentage
+                                    Required: jse_ticker, etf_name, region, shares, target_percentage
                                 </p>
                             </>
                         )}

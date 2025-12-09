@@ -6,7 +6,6 @@ export default function AddETFModal({ isOpen, onClose, onSuccess }) {
     const [formData, setFormData] = useState({
         jse_ticker: '',
         etf_name: '',
-        investment_company: '',
         region: '',
         shares: '',
         target_percentage: ''
@@ -19,7 +18,6 @@ export default function AddETFModal({ isOpen, onClose, onSuccess }) {
         setFormData({
             jse_ticker: '',
             etf_name: '',
-            investment_company: '',
             region: '',
             shares: '',
             target_percentage: ''
@@ -49,10 +47,6 @@ export default function AddETFModal({ isOpen, onClose, onSuccess }) {
         }
         if (!formData.etf_name.trim()) {
             setError('ETF Name is required')
-            return false
-        }
-        if (!formData.investment_company.trim()) {
-            setError('Investment Company is required')
             return false
         }
         if (!formData.region.trim()) {
@@ -101,7 +95,6 @@ export default function AddETFModal({ isOpen, onClose, onSuccess }) {
             await axios.post('/api/etf/holdings', {
                 jse_ticker: formData.jse_ticker.trim(),
                 etf_name: formData.etf_name.trim(),
-                investment_company: formData.investment_company.trim(),
                 region: formData.region.trim(),
                 shares: parseFloat(formData.shares),
                 target_percentage: parseFloat(formData.target_percentage)
@@ -170,20 +163,6 @@ export default function AddETFModal({ isOpen, onClose, onSuccess }) {
                             value={formData.etf_name}
                             onChange={(e) => handleChange('etf_name', e.target.value)}
                             placeholder="Satrix Top 40"
-                            className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                        />
-                    </div>
-
-                    {/* Investment Company */}
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                            Investment Company <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                            type="text"
-                            value={formData.investment_company}
-                            onChange={(e) => handleChange('investment_company', e.target.value)}
-                            placeholder="Satrix"
                             className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                         />
                     </div>
