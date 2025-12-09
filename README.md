@@ -2,11 +2,23 @@
 
 A personal finance dashboard for South African users, built with **React** and **FastAPI**, focused (for now) on two core areas: a monthly **Budget Dashboard** and a **TFSA Portfolio** view.
 
+**🌟 Key Highlights:**
+- 🔄 **Live ETF Price Sync** via Google Sheets integration with background scheduler
+- 🏦 **Multi-Asset Support** for ETFs and Government Bonds in TFSA tracking
+- 📊 **Smart Rebalancing Engine** with automated buy/sell recommendations
+- 🔐 **Secure Authentication** with JWT tokens and restricted registration
+- 🐳 **Full Docker Support** with separate dev and production environments
+- 🗃️ **Database Migrations** via Alembic for safe schema updates
+- 🎨 **Modern UI** with dark mode, sortable tables, and interactive modals
+- 📈 **TFSA Limit Tracking** for annual and lifetime contributions
+- 🔄 **CI/CD Pipeline** with automated deployments and health checks
+
 ### Core Features
 
 - **Authentication**
   - Email/username + password with JWT-based auth.
   - Per-user storage of budget and TFSA portfolio in the database.
+  - **Restricted Registration**: Registration limited to authorized email addresses for security.
 
 - **💰 Budget Dashboard**
   - **Income & Tax**: Capture monthly gross salary and age and get automatic SARS 2025/2026 PAYE and UIF calculations.
@@ -21,29 +33,59 @@ A personal finance dashboard for South African users, built with **React** and *
   - **Multi-Asset Support**: 
     - Track **ETFs** with JSE tickers and live price updates from Google Sheets
     - Manage **Government Bonds** with manual value tracking (no ticker needed)
+    - Unified holdings view with type badges to distinguish between ETFs and bonds
   - **Live Price Integration**: 
-    - Automatic price sync from Google Sheets every 5 minutes
-    - Manual refresh button with "last updated" timestamp
+    - Automatic price sync from Google Sheets every 5 minutes via background scheduler
+    - Manual refresh button with real-time sync status indicator
+    - "Last updated" timestamp with color-coded freshness (green/yellow/gray)
     - GOOGLEFINANCE formula integration for real-time ETF pricing
   - **Transaction Management**:
-    - Full buy/sell transaction history for both ETFs and bonds
-    - Automatic share count updates for ETFs
+    - Dedicated **Buy/Sell Modal** with automatic share calculation for ETFs
+    - **Transaction History Component** showing all ETF and bond transactions
+    - Transaction type badges (BUY/SELL) with visual indicators
+    - Automatic share count updates for ETFs based on transactions
     - Value tracking for bond transactions
+    - Expandable transaction list (shows recent 5, expand for all)
   - **Portfolio Analytics**:
     - Real-time profit/loss calculation vs. total contributions
-    - Target vs. actual allocation comparison
-    - Sortable holdings table (by name, ticker, region, shares, price, value, target %)
-    - Click-to-edit target percentages
+    - Target vs. actual allocation comparison with color-coded deviations
+    - **Advanced Sortable Holdings Table**:
+      - Sort by: name, ticker, region, shares, price, value, target %, actual %
+      - Visual sort direction indicators (ascending/descending)
+      - Responsive design with hover effects
+    - **Click-to-edit target percentages** via dedicated edit modal
+    - Color-coded allocation status (green = balanced, yellow/red = needs rebalancing)
+  - **Modern UI Components**:
+    - **AddETFModal**: Create new ETF holdings with Google Sheets sync
+    - **AddBondModal**: Create government bond holdings with region selection
+    - **BuySellModal**: Record transactions with automatic calculations
+    - **EditHoldingModal**: Update target allocation percentages
+    - **CSVUploadModal**: Bulk import ETFs with validation and preview
+    - **ConfirmModal**: Reusable confirmation dialogs with customizable variants
+    - **PriceRefreshIndicator**: Live sync status with manual refresh capability
+    - **TransactionHistory**: Comprehensive transaction log with filtering
   - **Smart Rebalancing Engine**:
     - Set deviation threshold (e.g., 5%)
     - Get step-by-step "sell X / buy Y" instructions
-    - Includes both ETFs and bonds in calculations
-  - **Bulk Operations**: CSV import for multiple ETF holdings at once
-  - **TFSA Contribution Tracking**: Monitor annual and lifetime limits with visual progress bars
+    - Includes both ETFs and bonds in rebalancing calculations
+    - Visual deviation indicators per holding
+  - **Bulk Operations**: 
+    - CSV import for multiple ETF holdings at once
+    - Automatic Google Sheets sync on import
+    - Validation and error handling for bulk uploads
+  - **TFSA Contribution Tracking**: 
+    - Monitor annual limit (R36,000) and lifetime limit (R500,000)
+    - Visual progress bars with color-coded warnings
+    - SA Financial Year aware (March - February)
+    - Historical contribution management by financial year
+    - Automatic validation to prevent exceeding limits
+    - Deposit tracking with date stamps
   - **Visualizations**:
     - Pie chart of current allocation by value
-    - Target vs. actual bar charts
-    - "What-if" calculator for investment scenarios
+    - Target vs. actual bar charts (responsive height based on holdings count)
+    - "What-if" calculator for investment scenarios based on target allocations
+    - Deviation indicators showing over/under-allocated positions
+  - **Dark Mode Support**: Complete dark mode theming across all components and modals
   - **Auto-Save**: All changes automatically persisted per user
 
 ### Architecture
@@ -94,6 +136,9 @@ DATABASE_URL=postgresql://budget_user:your_secure_password@postgres:5432/budget_
 GOOGLE_SHEETS_CREDENTIALS={"type":"service_account",...}
 GOOGLE_SPREADSHEET_ID=your_spreadsheet_id
 GOOGLE_SHEET_NAME=ETF Holdings
+
+# Authentication & Security
+AUTHORIZED_EMAIL=your_authorized_email@example.com  # Only this email can register
 ```
 
 ### Start the stack
@@ -150,6 +195,46 @@ make help            # Show all available commands
 ```
 
 For detailed Docker setup information, see [DOCKER_SETUP.md](DOCKER_SETUP.md).
+
+## Google Sheets Integration
+
+The application uses Google Sheets as a data source for ETF prices and as a sync target for holdings:
+
+### Setup Steps
+
+1. **Create a Google Cloud Project**:
+   - Go to [Google Cloud Console](https://console.cloud.google.com/)
+   - Create a new project or select an existing one
+   - Enable the Google Sheets API
+
+2. **Create a Service Account**:
+   - Navigate to "IAM & Admin" → "Service Accounts"
+   - Create a new service account
+   - Generate a JSON key file
+   - Copy the entire JSON content for your `.env` file
+
+3. **Create Your Google Sheet**:
+   - Create a new Google Sheet
+   - Name a sheet tab "ETF Holdings" (or customize `GOOGLE_SHEET_NAME`)
+   - Add columns: `ETF Name`, `JSE Ticker`, `Region`, `Target %`, `Shares`, `Current Price`, `Total Value`
+   - Use `=GOOGLEFINANCE("JSE:XXXX")` formulas in the `Current Price` column for live prices
+
+4. **Share the Sheet**:
+   - Copy the service account email (from the JSON key)
+   - Share your Google Sheet with this email address (Editor access)
+   - Copy the spreadsheet ID from the URL for your `.env` file
+
+5. **Configure Environment**:
+   - Add `GOOGLE_SHEETS_CREDENTIALS` (entire JSON as string)
+   - Add `GOOGLE_SPREADSHEET_ID` (from sheet URL)
+   - Add `GOOGLE_SHEET_NAME` (default: "ETF Holdings")
+
+### How It Works
+
+- **Price Sync**: Background job runs every 5 minutes fetching latest prices from your sheet
+- **Holdings Sync**: When you add/update ETFs via the UI, changes sync to Google Sheets
+- **Manual Refresh**: Click the refresh button to trigger an immediate price update
+- **Offline Mode**: If Google Sheets is unavailable, the app continues using last known prices
 
 ## Local Development
 
@@ -293,12 +378,66 @@ For detailed migration workflows and troubleshooting, see [DOCKER_SETUP.md](DOCK
 
 The project includes automated deployment via GitHub Actions:
 - Automatic deployment on push to `main` branch
+- **Manual deployment with branch selection** via GitHub Actions UI
 - Database migrations run automatically during deployment
 - Clean, organized deployment logs with collapsible sections
+- Zero-downtime deployments with health checks
 
 Deployment workflow:
-1. Pull latest code on VPS
+1. Pull latest code on VPS (from specified branch)
 2. Build Docker images
-3. Start containers
+3. Start containers with proper environment variables
 4. **Run migrations automatically** ✨
 5. Verify deployment health
+6. Cleanup old containers and images
+
+**Manual Deployment:**
+Navigate to Actions → Deploy to VPS → Run workflow → Select branch to deploy
+
+## Troubleshooting
+
+### Google Sheets Issues
+
+**Problem**: Prices not updating
+- **Solution**: Check that service account email has Editor access to the sheet
+- Verify `GOOGLE_SHEETS_CREDENTIALS` is valid JSON
+- Check logs: `make dev-logs` or `docker-compose logs backend`
+- Manually trigger sync via the UI refresh button
+
+**Problem**: ETFs not appearing in sheet
+- **Solution**: Verify sheet name matches `GOOGLE_SHEET_NAME` env variable
+- Check that spreadsheet ID is correct
+- Ensure sheet has the required columns (case-sensitive)
+
+### Database Migration Issues
+
+**Problem**: Migration fails on startup
+- **Solution**: Check if migration files exist in `backend/alembic/versions/`
+- Verify database connection: `make dev-shell` → `alembic current`
+- If needed, stamp database: `make migrate-stamp`
+
+**Problem**: "Target database is not up to date" error
+- **Solution**: Run pending migrations: `make migrate`
+- Check migration history: `make migrate-history`
+
+### Registration Issues
+
+**Problem**: Cannot register new account
+- **Solution**: Ensure email matches `AUTHORIZED_EMAIL` environment variable
+- Check backend logs for validation errors
+- Verify email is entered correctly (case-sensitive)
+
+### General Issues
+
+**Problem**: Container won't start
+- **Solution**: Check logs: `make dev-logs`
+- Verify all required environment variables are set
+- Try rebuilding: `make dev-build`
+- Clean start: `make clean && make dev-up`
+
+**Problem**: Hot reload not working
+- **Solution**: Ensure using `docker-compose.dev.yml` (not production compose file)
+- Check volume mounts are correct in compose file
+- Restart containers: `make dev-down && make dev-up`
+
+For more detailed troubleshooting, see [DOCKER_SETUP.md](DOCKER_SETUP.md).
