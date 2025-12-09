@@ -195,6 +195,15 @@ export default function TFSAPortfolio() {
         const amount = parseFloat(newDepositAmount)
         if (!amount || amount <= 0) return
 
+        // Validate against annual limit
+        const newTotal = annualContributions + amount
+        if (newTotal > TFSA_ANNUAL_LIMIT) {
+            const exceed = newTotal - TFSA_ANNUAL_LIMIT
+            if (!window.confirm(`This will exceed your annual limit by R${exceed.toLocaleString()}. Continue anyway?`)) {
+                return
+            }
+        }
+
         const newDeposit = {
             id: Date.now(),
             amount: amount,
@@ -212,13 +221,36 @@ export default function TFSAPortfolio() {
 
     // Historical contribution management
     const addHistoricalContribution = () => {
-        const financialYear = newHistoricalYear.trim()
+        const fy = newHistoricalYear.trim()
         const amount = parseFloat(newHistoricalAmount)
-        if (!financialYear || !amount || amount <= 0) return
+        if (!fy || !amount || amount <= 0) return
+
+        // Check if this financial year already has contributions
+        const existingForYear = historicalContributions
+            .filter(h => h.financial_year === fy)
+            .reduce((sum, h) => sum + h.amount, 0)
+        const yearTotal = existingForYear + amount
+
+        // Validate against annual limit for this specific year
+        if (yearTotal > TFSA_ANNUAL_LIMIT) {
+            const exceed = yearTotal - TFSA_ANNUAL_LIMIT
+            if (!window.confirm(`FY ${fy} will exceed annual limit by R${exceed.toLocaleString()}. Continue anyway?`)) {
+                return
+            }
+        }
+
+        // Validate against lifetime limit
+        const newLifetimeTotal = historicalTotal + annualContributions + amount
+        if (newLifetimeTotal > TFSA_LIFETIME_LIMIT) {
+            const exceed = newLifetimeTotal - TFSA_LIFETIME_LIMIT
+            if (!window.confirm(`This will exceed your lifetime limit by R${exceed.toLocaleString()}. Continue anyway?`)) {
+                return
+            }
+        }
 
         const newHistorical = {
             id: Date.now(),
-            financial_year: financialYear,
+            financial_year: fy,
             amount: amount
         }
 
@@ -408,7 +440,7 @@ export default function TFSAPortfolio() {
 
                         {/* Deposits List */}
                         {deposits.length > 0 && (
-                            <div className="space-y-1.5 max-h-32 overflow-y-auto">
+                            <div className="space-y-1.5">
                                 {deposits.map((deposit) => (
                                     <div key={deposit.id} className="flex items-center justify-between p-2 bg-blue-50 dark:bg-blue-900/20 rounded text-sm">
                                         <div className="flex items-center gap-2">
@@ -506,7 +538,7 @@ export default function TFSAPortfolio() {
 
                         {/* Historical Contributions List */}
                         {historicalContributions.length > 0 && (
-                            <div className="space-y-1.5 max-h-32 overflow-y-auto">
+                            <div className="space-y-1.5">
                                 {historicalContributions.sort((a, b) => a.financial_year.localeCompare(b.financial_year)).map((hist) => (
                                     <div key={hist.id} className="flex items-center justify-between p-2 bg-purple-50 dark:bg-purple-900/20 rounded text-sm">
                                         <div className="flex items-center gap-2">
@@ -580,7 +612,7 @@ export default function TFSAPortfolio() {
             {etfs.length > 0 && (
                 <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
                     <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Target vs Actual Allocation</h2>
-                    <div className="h-72">
+                    <div style={{ height: Math.max(200, etfs.length * 50) }}>
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={targetVsActualData} layout="vertical" margin={{ left: 20, right: 30 }}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
@@ -588,7 +620,7 @@ export default function TFSAPortfolio() {
                                 <YAxis type="category" dataKey="name" tick={{ fill: '#9ca3af' }} width={80} />
                                 <Tooltip
                                     contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#f3f4f6' }}
-                                    formatter={(value, name) => [`${value}%`, name === 'target' ? 'Target' : 'Actual']}
+                                    formatter={(value, name) => [`${value}%`, name === 'Target' ? 'Target' : 'Actual']}
                                 />
                                 <Legend wrapperStyle={{ color: '#9ca3af' }} />
                                 <Bar dataKey="target" name="Target" fill="#6366f1" radius={[0, 4, 4, 0]} />
