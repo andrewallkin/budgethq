@@ -26,6 +26,12 @@ def get_last_sync_time() -> datetime:
     return last_sync_time
 
 
+def set_last_sync_time(time: datetime = None):
+    """Set the last sync time. If no time provided, uses current UTC time."""
+    global last_sync_time
+    last_sync_time = time if time else datetime.utcnow()
+
+
 async def sync_all_prices():
     """
     Background task to sync prices from Google Sheets for all users.

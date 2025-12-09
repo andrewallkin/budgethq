@@ -14,6 +14,8 @@ class User(Base):
     etfs = relationship("ETF", back_populates="owner")
     etf_holdings = relationship("ETFHolding", back_populates="owner")
     etf_transactions = relationship("ETFTransaction", back_populates="owner")
+    bond_holdings = relationship("BondHolding", back_populates="owner")
+    bond_transactions = relationship("BondTransaction", back_populates="owner")
     tfsa_historical_contributions = relationship("TFSAHistoricalContribution", back_populates="owner")
     tfsa_deposits = relationship("TFSADeposit", back_populates="owner")
 
@@ -109,3 +111,36 @@ class ETFTransaction(Base):
 
     owner = relationship("User", back_populates="etf_transactions")
     holding = relationship("ETFHolding", back_populates="transactions")
+
+
+class BondHolding(Base):
+    """User's government bond holdings - manual tracking only, no ticker"""
+    __tablename__ = "bond_holdings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    bond_name = Column(String)           # e.g., "SA Government Bond 2030"
+    region = Column(String)              # e.g., "South Africa"
+    current_value = Column(Float, default=0)  # Total value (no shares/price tracking)
+    target_percentage = Column(Float, default=0)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    owner = relationship("User", back_populates="bond_holdings")
+    transactions = relationship("BondTransaction", back_populates="holding")
+
+
+class BondTransaction(Base):
+    """Audit trail of all bond buy/sell transactions"""
+    __tablename__ = "bond_transactions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    holding_id = Column(Integer, ForeignKey("bond_holdings.id"))
+    transaction_type = Column(String)    # "BUY" or "SELL"
+    amount = Column(Float)               # Transaction amount (value, not shares)
+    transaction_date = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    owner = relationship("User", back_populates="bond_transactions")
+    holding = relationship("BondHolding", back_populates="transactions")

@@ -1,12 +1,14 @@
 import { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts'
-import { Plus, Trash2, Calculator, TrendingUp, TrendingDown, PiggyBank, Upload, Edit2 } from 'lucide-react'
+import { Plus, Trash2, Calculator, TrendingUp, TrendingDown, PiggyBank, Upload, Edit2, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 
 // Import new components
 import CSVUploadModal from '../components/CSVUploadModal'
 import AddETFModal from '../components/AddETFModal'
+import AddBondModal from '../components/AddBondModal'
 import BuySellModal from '../components/BuySellModal'
+import EditHoldingModal from '../components/EditHoldingModal'
 import TransactionHistory from '../components/TransactionHistory'
 import PriceRefreshIndicator from '../components/PriceRefreshIndicator'
 import ConfirmModal from '../components/ConfirmModal'
@@ -22,10 +24,16 @@ export default function TFSAPortfolio() {
     // Modal states
     const [showCSVModal, setShowCSVModal] = useState(false)
     const [showAddETFModal, setShowAddETFModal] = useState(false)
+    const [showAddBondModal, setShowAddBondModal] = useState(false)
     const [showBuySellModal, setShowBuySellModal] = useState(false)
+    const [showEditModal, setShowEditModal] = useState(false)
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
     const [selectedHolding, setSelectedHolding] = useState(null)
     const [holdingToDelete, setHoldingToDelete] = useState(null)
+
+    // Sorting state
+    const [sortColumn, setSortColumn] = useState(null)
+    const [sortDirection, setSortDirection] = useState('asc') // 'asc' or 'desc'
 
     // TFSA Contribution Limits
     const TFSA_ANNUAL_LIMIT = 36000
@@ -85,8 +93,32 @@ export default function TFSAPortfolio() {
 
     const fetchHoldings = async () => {
         try {
-            const res = await axios.get('/api/etf/holdings')
-            setHoldings(res.data || [])
+            // Fetch both ETFs and Bonds in parallel
+            const [etfRes, bondRes] = await Promise.all([
+                axios.get('/api/etf/holdings'),
+                axios.get('/api/bond/holdings')
+            ])
+            
+            // Combine ETFs and Bonds with type indicator
+            const etfs = (etfRes.data || []).map(etf => ({
+                ...etf,
+                type: 'ETF',
+                total_value: etf.total_value || 0
+            }))
+            
+            const bonds = (bondRes.data || []).map(bond => ({
+                ...bond,
+                type: 'BOND',
+                // For bonds, use current_value as total_value for consistency
+                total_value: bond.current_value || 0,
+                // Add placeholder fields for compatibility
+                jse_ticker: null,
+                etf_name: bond.bond_name,
+                shares: null,
+                current_price: null
+            }))
+            
+            setHoldings([...etfs, ...bonds])
         } catch (err) {
             console.error("Failed to fetch holdings", err)
         } finally {
@@ -169,7 +201,11 @@ export default function TFSAPortfolio() {
         if (!holdingToDelete) return
 
         try {
-            await axios.delete(`/api/etf/holdings/${holdingToDelete.id}?delete_from_sheet=true`)
+            if (holdingToDelete.type === 'BOND') {
+                await axios.delete(`/api/bond/holdings/${holdingToDelete.id}`)
+            } else {
+                await axios.delete(`/api/etf/holdings/${holdingToDelete.id}?delete_from_sheet=true`)
+            }
             setHoldings(holdings.filter(h => h.id !== holdingToDelete.id))
             setTransactionRefresh(prev => prev + 1)
         } catch (err) {
@@ -185,9 +221,85 @@ export default function TFSAPortfolio() {
         setShowBuySellModal(true)
     }
 
+    const handleEdit = (holding) => {
+        setSelectedHolding(holding)
+        setShowEditModal(true)
+    }
+
     const handleTransactionSuccess = () => {
         fetchHoldings()
         setTransactionRefresh(prev => prev + 1)
+    }
+
+    const handleSort = (column) => {
+        if (sortColumn === column) {
+            // Toggle direction if clicking the same column
+            setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
+        } else {
+            // New column, default to ascending
+            setSortColumn(column)
+            setSortDirection('asc')
+        }
+    }
+
+    const getSortedHoldings = () => {
+        if (!sortColumn) return holdings
+
+        const sorted = [...holdings].sort((a, b) => {
+            let aVal, bVal
+
+            switch (sortColumn) {
+                case 'name':
+                    aVal = a.etf_name.toLowerCase()
+                    bVal = b.etf_name.toLowerCase()
+                    break
+                case 'ticker':
+                    aVal = a.jse_ticker ? a.jse_ticker.toLowerCase() : 'zzz' // Put bonds at end
+                    bVal = b.jse_ticker ? b.jse_ticker.toLowerCase() : 'zzz'
+                    break
+                case 'region':
+                    aVal = a.region.toLowerCase()
+                    bVal = b.region.toLowerCase()
+                    break
+                case 'shares':
+                    aVal = a.shares || 0
+                    bVal = b.shares || 0
+                    break
+                case 'price':
+                    aVal = a.current_price || 0
+                    bVal = b.current_price || 0
+                    break
+                case 'value':
+                    aVal = a.total_value || 0
+                    bVal = b.total_value || 0
+                    break
+                case 'target':
+                    aVal = a.target_percentage
+                    bVal = b.target_percentage
+                    break
+                case 'actual':
+                    aVal = totalValue > 0 ? ((a.total_value || 0) / totalValue) * 100 : 0
+                    bVal = totalValue > 0 ? ((b.total_value || 0) / totalValue) * 100 : 0
+                    break
+                default:
+                    return 0
+            }
+
+            if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1
+            if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1
+            return 0
+        })
+
+        return sorted
+    }
+
+    const SortIcon = ({ column }) => {
+        if (sortColumn !== column) {
+            return <ArrowUpDown className="w-3 h-3 opacity-40" />
+        }
+        return sortDirection === 'asc' 
+            ? <ArrowUp className="w-3 h-3" />
+            : <ArrowDown className="w-3 h-3" />
     }
 
     // Deposit management
@@ -337,6 +449,13 @@ export default function TFSAPortfolio() {
                             <Plus className="w-4 h-4" />
                             Add ETF
                         </button>
+                        <button
+                            onClick={() => setShowAddBondModal(true)}
+                            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                        >
+                            <Plus className="w-4 h-4" />
+                            Add Bond
+                        </button>
                     </div>
                 </div>
             </div>
@@ -349,7 +468,7 @@ export default function TFSAPortfolio() {
                         <p className="mt-2 text-4xl font-bold text-white">
                             R {totalValue.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </p>
-                        <p className="text-sm text-emerald-100 mt-1">{holdings.length} ETF{holdings.length !== 1 ? 's' : ''} in portfolio</p>
+                        <p className="text-sm text-emerald-100 mt-1">{holdings.length} holding{holdings.length !== 1 ? 's' : ''} in portfolio</p>
                     </div>
 
                     <div>
@@ -380,49 +499,126 @@ export default function TFSAPortfolio() {
             {/* Holdings Table */}
             {holdings.length > 0 && (
                 <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
-                    <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">ETF Holdings</h2>
+                    <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Holdings</h2>
                     <div className="overflow-x-auto">
                         <table className="w-full">
                             <thead>
                                 <tr className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider border-b border-gray-200 dark:border-gray-700">
-                                    <th className="text-left py-3 px-2">ETF</th>
-                                    <th className="text-left py-3 px-2">Ticker</th>
-                                    <th className="text-left py-3 px-2">Region</th>
-                                    <th className="text-right py-3 px-2">Shares</th>
-                                    <th className="text-right py-3 px-2">Price</th>
-                                    <th className="text-right py-3 px-2">Value</th>
-                                    <th className="text-right py-3 px-2">Target %</th>
-                                    <th className="text-right py-3 px-2">Actual %</th>
+                                    <th 
+                                        onClick={() => handleSort('name')}
+                                        className="text-left py-3 px-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                                    >
+                                        <div className="flex items-center gap-1">
+                                            Name
+                                            <SortIcon column="name" />
+                                        </div>
+                                    </th>
+                                    <th 
+                                        onClick={() => handleSort('ticker')}
+                                        className="text-left py-3 px-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                                    >
+                                        <div className="flex items-center gap-1">
+                                            Ticker
+                                            <SortIcon column="ticker" />
+                                        </div>
+                                    </th>
+                                    <th 
+                                        onClick={() => handleSort('region')}
+                                        className="text-left py-3 px-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                                    >
+                                        <div className="flex items-center gap-1">
+                                            Region
+                                            <SortIcon column="region" />
+                                        </div>
+                                    </th>
+                                    <th 
+                                        onClick={() => handleSort('shares')}
+                                        className="text-right py-3 px-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                                    >
+                                        <div className="flex items-center justify-end gap-1">
+                                            Shares
+                                            <SortIcon column="shares" />
+                                        </div>
+                                    </th>
+                                    <th 
+                                        onClick={() => handleSort('price')}
+                                        className="text-right py-3 px-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                                    >
+                                        <div className="flex items-center justify-end gap-1">
+                                            Price
+                                            <SortIcon column="price" />
+                                        </div>
+                                    </th>
+                                    <th 
+                                        onClick={() => handleSort('value')}
+                                        className="text-right py-3 px-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                                    >
+                                        <div className="flex items-center justify-end gap-1">
+                                            Value
+                                            <SortIcon column="value" />
+                                        </div>
+                                    </th>
+                                    <th 
+                                        onClick={() => handleSort('target')}
+                                        className="text-right py-3 px-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                                    >
+                                        <div className="flex items-center justify-end gap-1">
+                                            Target %
+                                            <SortIcon column="target" />
+                                        </div>
+                                    </th>
+                                    <th 
+                                        onClick={() => handleSort('actual')}
+                                        className="text-right py-3 px-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                                    >
+                                        <div className="flex items-center justify-end gap-1">
+                                            Actual %
+                                            <SortIcon column="actual" />
+                                        </div>
+                                    </th>
                                     <th className="text-center py-3 px-2">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                                {holdings.map((h) => {
+                                {getSortedHoldings().map((h) => {
                                     const actualPct = totalValue > 0 ? ((h.total_value || 0) / totalValue) * 100 : 0
                                     const deviation = actualPct - h.target_percentage
 
                                     return (
-                                        <tr key={h.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                                        <tr key={`${h.type}-${h.id}`} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                                             <td className="py-3 px-2">
-                                                <div className="font-medium text-gray-900 dark:text-white">{h.etf_name}</div>
+                                                <div className="flex items-center gap-2">
+                                                    <div className="font-medium text-gray-900 dark:text-white">{h.etf_name}</div>
+                                                    {h.type === 'BOND' && (
+                                                        <span className="px-1.5 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium rounded">
+                                                            BOND
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </td>
                                             <td className="py-3 px-2 font-mono text-sm text-gray-600 dark:text-gray-400">
-                                                {h.jse_ticker}
+                                                {h.jse_ticker || '—'}
                                             </td>
                                             <td className="py-3 px-2 text-sm text-gray-600 dark:text-gray-400">
                                                 {h.region}
                                             </td>
                                             <td className="py-3 px-2 text-right font-medium text-gray-900 dark:text-white">
-                                                {h.shares.toFixed(4)}
+                                                {h.type === 'BOND' ? '—' : h.shares.toFixed(4)}
                                             </td>
                                             <td className="py-3 px-2 text-right text-gray-600 dark:text-gray-400">
-                                                {h.current_price ? `R ${h.current_price.toFixed(2)}` : '—'}
+                                                {h.type === 'BOND' ? '—' : (h.current_price ? `R ${h.current_price.toFixed(2)}` : '—')}
                                             </td>
                                             <td className="py-3 px-2 text-right font-semibold text-gray-900 dark:text-white">
                                                 R {(h.total_value || 0).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                             </td>
-                                            <td className="py-3 px-2 text-right text-gray-600 dark:text-gray-400">
-                                                {h.target_percentage.toFixed(1)}%
+                                            <td 
+                                                onClick={() => handleEdit(h)}
+                                                className="py-3 px-2 text-right text-gray-600 dark:text-gray-400 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors group"
+                                                title="Click to edit target percentage"
+                                            >
+                                                <span className="group-hover:text-blue-600 dark:group-hover:text-blue-400 font-medium">
+                                                    {h.target_percentage.toFixed(1)}%
+                                                </span>
                                             </td>
                                             <td className="py-3 px-2 text-right">
                                                 <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
@@ -437,6 +633,13 @@ export default function TFSAPortfolio() {
                                             </td>
                                             <td className="py-3 px-2">
                                                 <div className="flex items-center justify-center gap-1">
+                                                    <button
+                                                        onClick={() => handleEdit(h)}
+                                                        className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors"
+                                                        title="Edit Target %"
+                                                    >
+                                                        <Edit2 className="w-4 h-4" />
+                                                    </button>
                                                     <button
                                                         onClick={() => handleBuySell(h)}
                                                         className="p-1.5 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/30 rounded transition-colors"
@@ -471,9 +674,9 @@ export default function TFSAPortfolio() {
             {holdings.length === 0 && (
                 <div className="bg-white dark:bg-gray-800 p-12 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 text-center">
                     <div className="text-6xl mb-4">📊</div>
-                    <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">No ETF Holdings Yet</h3>
+                    <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">No Holdings Yet</h3>
                     <p className="text-gray-500 dark:text-gray-400 mb-6">
-                        Get started by importing a CSV file or adding ETFs individually.
+                        Get started by importing a CSV file, adding ETFs, or adding government bonds.
                     </p>
                     <div className="flex justify-center gap-3">
                         <button
@@ -489,6 +692,13 @@ export default function TFSAPortfolio() {
                         >
                             <Plus className="w-4 h-4" />
                             Add ETF
+                        </button>
+                        <button
+                            onClick={() => setShowAddBondModal(true)}
+                            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                        >
+                            <Plus className="w-4 h-4" />
+                            Add Bond
                         </button>
                     </div>
                 </div>
@@ -862,6 +1072,14 @@ export default function TFSAPortfolio() {
                 }}
             />
 
+            <AddBondModal
+                isOpen={showAddBondModal}
+                onClose={() => setShowAddBondModal(false)}
+                onSuccess={() => {
+                    fetchHoldings()
+                }}
+            />
+
             <BuySellModal
                 isOpen={showBuySellModal}
                 onClose={() => {
@@ -872,6 +1090,16 @@ export default function TFSAPortfolio() {
                 onSuccess={handleTransactionSuccess}
             />
 
+            <EditHoldingModal
+                isOpen={showEditModal}
+                onClose={() => {
+                    setShowEditModal(false)
+                    setSelectedHolding(null)
+                }}
+                holding={selectedHolding}
+                onSuccess={fetchHoldings}
+            />
+
             <ConfirmModal
                 isOpen={showDeleteConfirm}
                 onClose={() => {
@@ -879,12 +1107,13 @@ export default function TFSAPortfolio() {
                     setHoldingToDelete(null)
                 }}
                 onConfirm={handleDeleteConfirm}
-                title="Delete ETF Holding"
+                title={`Delete ${holdingToDelete?.type === 'BOND' ? 'Bond' : 'ETF'} Holding`}
                 message={holdingToDelete ? `Are you sure you want to delete ${holdingToDelete.etf_name}?` : ''}
-                details={[
-                    'Delete all associated transactions',
-                    'Remove the ETF from Google Sheets'
-                ]}
+                details={
+                    holdingToDelete?.type === 'BOND' 
+                        ? ['Delete all associated transactions']
+                        : ['Delete all associated transactions', 'Remove the ETF from Google Sheets']
+                }
                 confirmText="Delete"
                 cancelText="Cancel"
                 variant="danger"

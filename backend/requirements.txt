@@ -10,4 +10,5 @@ python-multipart
 google-auth
 google-api-python-client
 apscheduler
+alembic
 

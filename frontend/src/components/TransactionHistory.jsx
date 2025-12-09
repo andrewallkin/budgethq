@@ -13,8 +13,38 @@ export default function TransactionHistory({ refreshTrigger }) {
 
     const fetchTransactions = async () => {
         try {
-            const res = await axios.get('/api/etf/transactions')
-            setTransactions(res.data || [])
+            // Fetch both ETF and bond transactions in parallel
+            const [etfRes, bondRes] = await Promise.all([
+                axios.get('/api/etf/transactions'),
+                axios.get('/api/bond/transactions')
+            ])
+            
+            // Add type indicator to each transaction
+            const etfTransactions = (etfRes.data || []).map(tx => ({
+                ...tx,
+                type: 'ETF',
+                // For ETFs, use etf_name field
+                name: tx.etf_name
+            }))
+            
+            const bondTransactions = (bondRes.data || []).map(tx => ({
+                ...tx,
+                type: 'BOND',
+                // For bonds, use bond_name field
+                name: tx.bond_name,
+                // Bonds don't have jse_ticker or shares/price_per_share
+                jse_ticker: null,
+                shares: null,
+                price_per_share: null,
+                total_value: tx.amount  // Bonds use 'amount' instead of 'total_value'
+            }))
+            
+            // Combine and sort by date (newest first)
+            const allTransactions = [...etfTransactions, ...bondTransactions].sort(
+                (a, b) => new Date(b.transaction_date) - new Date(a.transaction_date)
+            )
+            
+            setTransactions(allTransactions)
         } catch (err) {
             console.error('Failed to fetch transactions:', err)
         } finally {
@@ -60,15 +90,15 @@ export default function TransactionHistory({ refreshTrigger }) {
                         <tr className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider border-b border-gray-200 dark:border-gray-700">
                             <th className="text-left py-3 px-2">Date</th>
                             <th className="text-left py-3 px-2">Type</th>
-                            <th className="text-left py-3 px-2">ETF</th>
+                            <th className="text-left py-3 px-2">Asset</th>
                             <th className="text-right py-3 px-2">Shares</th>
                             <th className="text-right py-3 px-2">Price</th>
-                            <th className="text-right py-3 px-2">Total</th>
+                            <th className="text-right py-3 px-2">Amount</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                         {displayedTransactions.map((tx) => (
-                            <tr key={tx.id} className="text-sm hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                            <tr key={`${tx.type}-${tx.id}`} className="text-sm hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                                 <td className="py-3 px-2 text-gray-600 dark:text-gray-400">
                                     {new Date(tx.transaction_date).toLocaleDateString('en-ZA', {
                                         day: '2-digit',
@@ -91,18 +121,29 @@ export default function TransactionHistory({ refreshTrigger }) {
                                     </span>
                                 </td>
                                 <td className="py-3 px-2">
-                                    <div className="font-medium text-gray-900 dark:text-white">
-                                        {tx.etf_name}
-                                    </div>
-                                    <div className="text-xs text-gray-500 dark:text-gray-400 font-mono">
-                                        {tx.jse_ticker}
+                                    <div className="flex items-center gap-2">
+                                        <div>
+                                            <div className="font-medium text-gray-900 dark:text-white">
+                                                {tx.name}
+                                            </div>
+                                            {tx.jse_ticker && (
+                                                <div className="text-xs text-gray-500 dark:text-gray-400 font-mono">
+                                                    {tx.jse_ticker}
+                                                </div>
+                                            )}
+                                        </div>
+                                        {tx.type === 'BOND' && (
+                                            <span className="px-1.5 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium rounded">
+                                                BOND
+                                            </span>
+                                        )}
                                     </div>
                                 </td>
                                 <td className="py-3 px-2 text-right font-medium text-gray-900 dark:text-white">
-                                    {tx.shares.toFixed(4)}
+                                    {tx.type === 'BOND' ? '—' : tx.shares.toFixed(4)}
                                 </td>
                                 <td className="py-3 px-2 text-right text-gray-600 dark:text-gray-400">
-                                    R {tx.price_per_share.toFixed(2)}
+                                    {tx.type === 'BOND' ? '—' : `R ${tx.price_per_share.toFixed(2)}`}
                                 </td>
                                 <td className={`py-3 px-2 text-right font-semibold ${
                                     tx.transaction_type === 'BUY'

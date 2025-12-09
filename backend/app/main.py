@@ -10,11 +10,13 @@ import io
 from . import models, database, auth
 from .logic import calculate_monthly_tax_with_age, calculate_uif, calculate_rebalancing
 from .sheets_service import get_sheets_service
-from .scheduler import start_scheduler, stop_scheduler, sync_all_prices, get_last_sync_time
+from .scheduler import start_scheduler, stop_scheduler, sync_all_prices, get_last_sync_time, set_last_sync_time
 from pydantic import BaseModel
 
 # Initialize DB
-models.Base.metadata.create_all(bind=database.engine)
+# Note: Database tables are now managed by Alembic migrations
+# Run: docker-compose exec backend alembic upgrade head
+# models.Base.metadata.create_all(bind=database.engine)
 
 
 @asynccontextmanager
@@ -140,6 +142,40 @@ class BulkImportResult(BaseModel):
     success: int
     failed: int
     errors: List[str]
+
+# Bond Holdings Models
+class BondHoldingCreate(BaseModel):
+    bond_name: str
+    region: str
+    current_value: float
+    target_percentage: float
+
+class BondHoldingUpdate(BaseModel):
+    current_value: Optional[float] = None
+    target_percentage: Optional[float] = None
+    region: Optional[str] = None
+
+class BondHoldingResponse(BaseModel):
+    id: int
+    bond_name: str
+    region: str
+    current_value: float
+    target_percentage: float
+    updated_at: Optional[datetime]
+
+class BondTransactionCreate(BaseModel):
+    holding_id: int
+    transaction_type: str  # "BUY" or "SELL"
+    amount: float
+    transaction_date: Optional[str] = None  # ISO format, defaults to now
+
+class BondTransactionResponse(BaseModel):
+    id: int
+    holding_id: int
+    bond_name: str
+    transaction_type: str
+    amount: float
+    transaction_date: datetime
 
 # Auth Endpoints
 @app.post("/api/auth/register", response_model=Token)
@@ -842,6 +878,9 @@ async def sync_etf_prices(
     
     db.commit()
     
+    # Update the global last sync time so the UI shows the correct time
+    set_last_sync_time(now)
+    
     return {
         "status": "success",
         "updated_count": updated_count,
@@ -913,4 +952,253 @@ async def get_last_price_sync(
     return {
         "last_sync": last_sync.isoformat() + "Z" if last_sync else None,
         "sync_interval_minutes": 5
+    }
+
+
+# =====================================================
+# Bond Holdings Endpoints
+# =====================================================
+
+@app.get("/api/bond/holdings")
+async def get_bond_holdings(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """Get all bond holdings for the current user."""
+    holdings = db.query(models.BondHolding).filter(
+        models.BondHolding.user_id == current_user.id
+    ).all()
+    
+    result = []
+    for h in holdings:
+        result.append({
+            "id": h.id,
+            "bond_name": h.bond_name,
+            "region": h.region,
+            "current_value": h.current_value,
+            "target_percentage": h.target_percentage,
+            "updated_at": (h.updated_at.isoformat() + "Z") if h.updated_at else None
+        })
+    
+    return result
+
+
+@app.post("/api/bond/holdings")
+async def create_bond_holding(
+    holding: BondHoldingCreate,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """Create a new bond holding."""
+    # Check if holding with same name already exists
+    existing = db.query(models.BondHolding).filter(
+        models.BondHolding.user_id == current_user.id,
+        models.BondHolding.bond_name == holding.bond_name
+    ).first()
+    
+    if existing:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Bond holding '{holding.bond_name}' already exists. Use PUT to update."
+        )
+    
+    new_holding = models.BondHolding(
+        user_id=current_user.id,
+        bond_name=holding.bond_name,
+        region=holding.region,
+        current_value=holding.current_value,
+        target_percentage=holding.target_percentage
+    )
+    
+    db.add(new_holding)
+    db.commit()
+    db.refresh(new_holding)
+    
+    return {
+        "id": new_holding.id,
+        "bond_name": new_holding.bond_name,
+        "region": new_holding.region,
+        "current_value": new_holding.current_value,
+        "target_percentage": new_holding.target_percentage,
+        "updated_at": (new_holding.updated_at.isoformat() + "Z") if new_holding.updated_at else None
+    }
+
+
+@app.put("/api/bond/holdings/{holding_id}")
+async def update_bond_holding(
+    holding_id: int,
+    update: BondHoldingUpdate,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """Update an existing bond holding."""
+    holding = db.query(models.BondHolding).filter(
+        models.BondHolding.id == holding_id,
+        models.BondHolding.user_id == current_user.id
+    ).first()
+    
+    if not holding:
+        raise HTTPException(status_code=404, detail="Bond holding not found")
+    
+    if update.current_value is not None:
+        holding.current_value = update.current_value
+    if update.target_percentage is not None:
+        holding.target_percentage = update.target_percentage
+    if update.region is not None:
+        holding.region = update.region
+    
+    holding.updated_at = datetime.utcnow()
+    
+    db.commit()
+    db.refresh(holding)
+    
+    return {
+        "id": holding.id,
+        "bond_name": holding.bond_name,
+        "region": holding.region,
+        "current_value": holding.current_value,
+        "target_percentage": holding.target_percentage,
+        "updated_at": (holding.updated_at.isoformat() + "Z") if holding.updated_at else None
+    }
+
+
+@app.delete("/api/bond/holdings/{holding_id}")
+async def delete_bond_holding(
+    holding_id: int,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """Delete a bond holding and all associated transactions."""
+    holding = db.query(models.BondHolding).filter(
+        models.BondHolding.id == holding_id,
+        models.BondHolding.user_id == current_user.id
+    ).first()
+    
+    if not holding:
+        raise HTTPException(status_code=404, detail="Bond holding not found")
+    
+    bond_name = holding.bond_name
+    
+    # Delete associated transactions first
+    db.query(models.BondTransaction).filter(
+        models.BondTransaction.holding_id == holding_id
+    ).delete()
+    
+    db.delete(holding)
+    db.commit()
+    
+    return {
+        "status": "success", 
+        "message": f"Bond holding '{bond_name}' deleted"
+    }
+
+
+# =====================================================
+# Bond Transaction Endpoints
+# =====================================================
+
+@app.get("/api/bond/transactions")
+async def get_bond_transactions(
+    holding_id: Optional[int] = None,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """Get bond transaction history, optionally filtered by holding."""
+    query = db.query(models.BondTransaction).filter(
+        models.BondTransaction.user_id == current_user.id
+    )
+    
+    if holding_id:
+        query = query.filter(models.BondTransaction.holding_id == holding_id)
+    
+    transactions = query.order_by(models.BondTransaction.transaction_date.desc()).all()
+    
+    result = []
+    for t in transactions:
+        holding = db.query(models.BondHolding).filter(
+            models.BondHolding.id == t.holding_id
+        ).first()
+        
+        result.append({
+            "id": t.id,
+            "holding_id": t.holding_id,
+            "bond_name": holding.bond_name if holding else "Unknown",
+            "transaction_type": t.transaction_type,
+            "amount": t.amount,
+            "transaction_date": (t.transaction_date.isoformat() + "Z") if t.transaction_date else None
+        })
+    
+    return result
+
+
+@app.post("/api/bond/transactions")
+async def create_bond_transaction(
+    transaction: BondTransactionCreate,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """
+    Record a buy or sell transaction for a bond.
+    This updates the holding's current value.
+    """
+    # Verify holding exists and belongs to user
+    holding = db.query(models.BondHolding).filter(
+        models.BondHolding.id == transaction.holding_id,
+        models.BondHolding.user_id == current_user.id
+    ).first()
+    
+    if not holding:
+        raise HTTPException(status_code=404, detail="Bond holding not found")
+    
+    if transaction.transaction_type not in ("BUY", "SELL"):
+        raise HTTPException(status_code=400, detail="Transaction type must be 'BUY' or 'SELL'")
+    
+    if transaction.amount <= 0:
+        raise HTTPException(status_code=400, detail="Amount must be positive")
+    
+    # For SELL, ensure user has enough value
+    if transaction.transaction_type == "SELL" and holding.current_value < transaction.amount:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Insufficient value. Current value is R{holding.current_value}, trying to sell R{transaction.amount}"
+        )
+    
+    # Parse transaction date
+    trans_date = datetime.utcnow()
+    if transaction.transaction_date:
+        try:
+            trans_date = datetime.fromisoformat(transaction.transaction_date.replace('Z', '+00:00'))
+        except ValueError:
+            trans_date = datetime.utcnow()
+    
+    # Create transaction record
+    new_transaction = models.BondTransaction(
+        user_id=current_user.id,
+        holding_id=transaction.holding_id,
+        transaction_type=transaction.transaction_type,
+        amount=transaction.amount,
+        transaction_date=trans_date
+    )
+    
+    db.add(new_transaction)
+    
+    # Update holding value
+    if transaction.transaction_type == "BUY":
+        holding.current_value += transaction.amount
+    else:  # SELL
+        holding.current_value -= transaction.amount
+    
+    holding.updated_at = datetime.utcnow()
+    
+    db.commit()
+    db.refresh(new_transaction)
+    
+    return {
+        "id": new_transaction.id,
+        "holding_id": new_transaction.holding_id,
+        "bond_name": holding.bond_name,
+        "transaction_type": new_transaction.transaction_type,
+        "amount": new_transaction.amount,
+        "transaction_date": new_transaction.transaction_date.isoformat() + "Z",
+        "updated_value": holding.current_value
     }
