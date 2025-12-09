@@ -32,6 +32,10 @@ jobs:
           ENV_BACKEND_PORT: ${{ secrets.BACKEND_PORT }}
           ENV_FRONTEND_PORT: ${{ secrets.FRONTEND_PORT }}
           ENV_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          # Google Sheets integration
+          ENV_GOOGLE_SHEETS_CREDENTIALS: ${{ secrets.GOOGLE_SHEETS_CREDENTIALS }}
+          ENV_GOOGLE_SPREADSHEET_ID: ${{ secrets.GOOGLE_SPREADSHEET_ID }}
+          ENV_GOOGLE_SHEET_NAME: ${{ secrets.GOOGLE_SHEET_NAME }}
         run: |
           ssh -t -vvv -i ~/.ssh/id_rsa -p ${{ secrets.VPS_PORT }} -o StrictHostKeyChecking=no -o ServerAliveInterval=50 -o ServerAliveCountMax=10 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} <<EOF
           set -euxo pipefail
@@ -68,6 +72,10 @@ jobs:
           FRONTEND_PORT=${ENV_FRONTEND_PORT}
 
           DATABASE_URL=${ENV_DATABASE_URL}
+
+          GOOGLE_SHEETS_CREDENTIALS=${ENV_GOOGLE_SHEETS_CREDENTIALS}
+          GOOGLE_SPREADSHEET_ID=${ENV_GOOGLE_SPREADSHEET_ID}
+          GOOGLE_SHEET_NAME=${ENV_GOOGLE_SHEET_NAME}
           EOF_ENV
 
           echo "Stopping and removing existing Docker containers (if any)..."

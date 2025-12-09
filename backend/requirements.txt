@@ -7,4 +7,7 @@ psycopg2-binary
 python-jose[cryptography]
 bcrypt==4.0.1
 python-multipart
+google-auth
+google-api-python-client
+apscheduler
 

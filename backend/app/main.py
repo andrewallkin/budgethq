@@ -1,17 +1,35 @@
-from fastapi import FastAPI, HTTPException, Depends, status
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, HTTPException, Depends, status, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import date, datetime
+import csv
+import io
 from . import models, database, auth
 from .logic import calculate_monthly_tax_with_age, calculate_uif, calculate_rebalancing
+from .sheets_service import get_sheets_service
+from .scheduler import start_scheduler, stop_scheduler, sync_all_prices, get_last_sync_time
 from pydantic import BaseModel
 
 # Initialize DB
 models.Base.metadata.create_all(bind=database.engine)
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage application lifecycle - start/stop background tasks."""
+    # Startup: Start the price sync scheduler
+    start_scheduler()
+    # Run initial sync on startup
+    await sync_all_prices()
+    yield
+    # Shutdown: Stop the scheduler
+    stop_scheduler()
+
+
+app = FastAPI(lifespan=lifespan)
 
 # CORS configuration
 app.add_middleware(
@@ -71,6 +89,57 @@ class TFSAContributionData(BaseModel):
     historical_contributions: List[TFSAHistoricalContributionBase]
     deposits: List[TFSADepositBase]
     financial_year_start: int
+
+# ETF Holdings Models (New System)
+class ETFHoldingCreate(BaseModel):
+    jse_ticker: str
+    etf_name: str
+    region: str
+    shares: float
+    target_percentage: float
+
+class ETFHoldingUpdate(BaseModel):
+    shares: Optional[float] = None
+    target_percentage: Optional[float] = None
+    region: Optional[str] = None
+
+class ETFHoldingResponse(BaseModel):
+    id: int
+    jse_ticker: str
+    etf_name: str
+    region: str
+    shares: float
+    target_percentage: float
+    current_price: Optional[float]
+    total_value: Optional[float]
+    price_updated_at: Optional[datetime]
+
+class ETFTransactionCreate(BaseModel):
+    holding_id: int
+    transaction_type: str  # "BUY" or "SELL"
+    shares: float
+    price_per_share: float
+    transaction_date: Optional[str] = None  # ISO format, defaults to now
+
+class ETFTransactionResponse(BaseModel):
+    id: int
+    holding_id: int
+    jse_ticker: str
+    etf_name: str
+    transaction_type: str
+    shares: float
+    price_per_share: float
+    total_value: float
+    transaction_date: datetime
+
+class AddETFToSheetRequest(BaseModel):
+    jse_ticker: str
+    etf_name: str
+
+class BulkImportResult(BaseModel):
+    success: int
+    failed: int
+    errors: List[str]
 
 # Auth Endpoints
 @app.post("/api/auth/register", response_model=Token)
@@ -307,4 +376,507 @@ async def calculate_rebalance_endpoint(req: RebalanceRequest):
         "actions": actions,
         "over_allocated": over,
         "under_allocated": under
+    }
+
+
+# =====================================================
+# ETF Holdings Endpoints (New System)
+# =====================================================
+
+@app.get("/api/etf/holdings")
+async def get_etf_holdings(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """Get all ETF holdings for the current user with computed total values."""
+    holdings = db.query(models.ETFHolding).filter(
+        models.ETFHolding.user_id == current_user.id
+    ).all()
+    
+    result = []
+    for h in holdings:
+        total_value = (h.shares * h.current_price) if h.current_price else None
+        result.append({
+            "id": h.id,
+            "jse_ticker": h.jse_ticker,
+            "etf_name": h.etf_name,
+            "region": h.region,
+            "shares": h.shares,
+            "target_percentage": h.target_percentage,
+            "current_price": h.current_price,
+            "total_value": total_value,
+            "price_updated_at": h.price_updated_at.isoformat() if h.price_updated_at else None
+        })
+    
+    return result
+
+
+@app.post("/api/etf/holdings")
+async def create_etf_holding(
+    holding: ETFHoldingCreate,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """Create a new ETF holding."""
+    # Check if holding already exists for this ticker
+    existing = db.query(models.ETFHolding).filter(
+        models.ETFHolding.user_id == current_user.id,
+        models.ETFHolding.jse_ticker == holding.jse_ticker
+    ).first()
+    
+    if existing:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Holding for {holding.jse_ticker} already exists. Use PUT to update."
+        )
+    
+    # Get current price from Google Sheets
+    sheets_service = get_sheets_service()
+    current_price = None
+    price_updated_at = None
+    
+    if sheets_service.is_available():
+        current_price = sheets_service.get_price_for_ticker(holding.jse_ticker)
+        if current_price:
+            price_updated_at = datetime.utcnow()
+    
+    new_holding = models.ETFHolding(
+        user_id=current_user.id,
+        jse_ticker=holding.jse_ticker,
+        etf_name=holding.etf_name,
+        region=holding.region,
+        shares=holding.shares,
+        target_percentage=holding.target_percentage,
+        current_price=current_price,
+        price_updated_at=price_updated_at
+    )
+    
+    db.add(new_holding)
+    db.commit()
+    db.refresh(new_holding)
+    
+    total_value = (new_holding.shares * new_holding.current_price) if new_holding.current_price else None
+    
+    return {
+        "id": new_holding.id,
+        "jse_ticker": new_holding.jse_ticker,
+        "etf_name": new_holding.etf_name,
+        "region": new_holding.region,
+        "shares": new_holding.shares,
+        "target_percentage": new_holding.target_percentage,
+        "current_price": new_holding.current_price,
+        "total_value": total_value,
+        "price_updated_at": new_holding.price_updated_at.isoformat() if new_holding.price_updated_at else None
+    }
+
+
+@app.put("/api/etf/holdings/{holding_id}")
+async def update_etf_holding(
+    holding_id: int,
+    update: ETFHoldingUpdate,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """Update an existing ETF holding."""
+    holding = db.query(models.ETFHolding).filter(
+        models.ETFHolding.id == holding_id,
+        models.ETFHolding.user_id == current_user.id
+    ).first()
+    
+    if not holding:
+        raise HTTPException(status_code=404, detail="Holding not found")
+    
+    if update.shares is not None:
+        holding.shares = update.shares
+    if update.target_percentage is not None:
+        holding.target_percentage = update.target_percentage
+    if update.region is not None:
+        holding.region = update.region
+    
+    db.commit()
+    db.refresh(holding)
+    
+    total_value = (holding.shares * holding.current_price) if holding.current_price else None
+    
+    return {
+        "id": holding.id,
+        "jse_ticker": holding.jse_ticker,
+        "etf_name": holding.etf_name,
+        "region": holding.region,
+        "shares": holding.shares,
+        "target_percentage": holding.target_percentage,
+        "current_price": holding.current_price,
+        "total_value": total_value,
+        "price_updated_at": holding.price_updated_at.isoformat() if holding.price_updated_at else None
+    }
+
+
+@app.delete("/api/etf/holdings/{holding_id}")
+async def delete_etf_holding(
+    holding_id: int,
+    delete_from_sheet: bool = True,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """Delete an ETF holding. Optionally also removes from Google Sheet."""
+    holding = db.query(models.ETFHolding).filter(
+        models.ETFHolding.id == holding_id,
+        models.ETFHolding.user_id == current_user.id
+    ).first()
+    
+    if not holding:
+        raise HTTPException(status_code=404, detail="Holding not found")
+    
+    jse_ticker = holding.jse_ticker
+    
+    # Delete associated transactions first
+    db.query(models.ETFTransaction).filter(
+        models.ETFTransaction.holding_id == holding_id
+    ).delete()
+    
+    db.delete(holding)
+    db.commit()
+    
+    # Also delete from Google Sheet if requested
+    sheet_deleted = False
+    if delete_from_sheet:
+        sheets_service = get_sheets_service()
+        if sheets_service.is_available():
+            sheet_deleted = sheets_service.delete_etf_from_sheet(jse_ticker)
+    
+    return {
+        "status": "success", 
+        "message": f"Holding {holding_id} deleted",
+        "sheet_deleted": sheet_deleted
+    }
+
+
+@app.post("/api/etf/bulk-import")
+async def bulk_import_holdings(
+    file: UploadFile = File(...),
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """
+    Bulk import ETF holdings from a CSV file.
+    
+    Required columns: jse_ticker, etf_name, region, shares, target_percentage
+    """
+    if not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="File must be a CSV")
+    
+    content = await file.read()
+    decoded = content.decode('utf-8')
+    reader = csv.DictReader(io.StringIO(decoded))
+    
+    required_columns = {'jse_ticker', 'etf_name', 'region', 'shares', 'target_percentage'}
+    
+    # Validate headers
+    if not required_columns.issubset(set(reader.fieldnames or [])):
+        missing = required_columns - set(reader.fieldnames or [])
+        raise HTTPException(
+            status_code=400,
+            detail=f"Missing required columns: {', '.join(missing)}"
+        )
+    
+    # Get prices from Google Sheets
+    sheets_service = get_sheets_service()
+    prices_map = {}
+    if sheets_service.is_available():
+        all_prices = sheets_service.get_all_etf_prices()
+        prices_map = {p['jse_ticker']: p['current_price'] for p in all_prices}
+    
+    success_count = 0
+    failed_count = 0
+    errors = []
+    
+    for row_num, row in enumerate(reader, start=2):
+        try:
+            jse_ticker = row['jse_ticker'].strip()
+            
+            # Check if already exists
+            existing = db.query(models.ETFHolding).filter(
+                models.ETFHolding.user_id == current_user.id,
+                models.ETFHolding.jse_ticker == jse_ticker
+            ).first()
+            
+            if existing:
+                errors.append(f"Row {row_num}: {jse_ticker} already exists, skipped")
+                failed_count += 1
+                continue
+            
+            shares = float(row['shares'])
+            target_pct = float(row['target_percentage'])
+            
+            if shares < 0:
+                errors.append(f"Row {row_num}: Shares cannot be negative")
+                failed_count += 1
+                continue
+            
+            current_price = prices_map.get(jse_ticker)
+            price_updated_at = datetime.utcnow() if current_price else None
+            
+            new_holding = models.ETFHolding(
+                user_id=current_user.id,
+                jse_ticker=jse_ticker,
+                etf_name=row['etf_name'].strip(),
+                region=row['region'].strip(),
+                shares=shares,
+                target_percentage=target_pct,
+                current_price=current_price,
+                price_updated_at=price_updated_at
+            )
+            
+            db.add(new_holding)
+            success_count += 1
+            
+        except ValueError as e:
+            errors.append(f"Row {row_num}: Invalid number format - {str(e)}")
+            failed_count += 1
+        except Exception as e:
+            errors.append(f"Row {row_num}: {str(e)}")
+            failed_count += 1
+    
+    db.commit()
+    
+    return {
+        "success": success_count,
+        "failed": failed_count,
+        "errors": errors
+    }
+
+
+# =====================================================
+# ETF Transaction Endpoints
+# =====================================================
+
+@app.get("/api/etf/transactions")
+async def get_etf_transactions(
+    holding_id: Optional[int] = None,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """Get transaction history, optionally filtered by holding."""
+    query = db.query(models.ETFTransaction).filter(
+        models.ETFTransaction.user_id == current_user.id
+    )
+    
+    if holding_id:
+        query = query.filter(models.ETFTransaction.holding_id == holding_id)
+    
+    transactions = query.order_by(models.ETFTransaction.transaction_date.desc()).all()
+    
+    result = []
+    for t in transactions:
+        holding = db.query(models.ETFHolding).filter(
+            models.ETFHolding.id == t.holding_id
+        ).first()
+        
+        result.append({
+            "id": t.id,
+            "holding_id": t.holding_id,
+            "jse_ticker": holding.jse_ticker if holding else "Unknown",
+            "etf_name": holding.etf_name if holding else "Unknown",
+            "transaction_type": t.transaction_type,
+            "shares": t.shares,
+            "price_per_share": t.price_per_share,
+            "total_value": t.total_value,
+            "transaction_date": t.transaction_date.isoformat() if t.transaction_date else None
+        })
+    
+    return result
+
+
+@app.post("/api/etf/transactions")
+async def create_etf_transaction(
+    transaction: ETFTransactionCreate,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """
+    Record a buy or sell transaction.
+    This also updates the holding's share count.
+    """
+    # Verify holding exists and belongs to user
+    holding = db.query(models.ETFHolding).filter(
+        models.ETFHolding.id == transaction.holding_id,
+        models.ETFHolding.user_id == current_user.id
+    ).first()
+    
+    if not holding:
+        raise HTTPException(status_code=404, detail="Holding not found")
+    
+    if transaction.transaction_type not in ("BUY", "SELL"):
+        raise HTTPException(status_code=400, detail="Transaction type must be 'BUY' or 'SELL'")
+    
+    if transaction.shares <= 0:
+        raise HTTPException(status_code=400, detail="Shares must be positive")
+    
+    if transaction.price_per_share <= 0:
+        raise HTTPException(status_code=400, detail="Price per share must be positive")
+    
+    # For SELL, ensure user has enough shares
+    if transaction.transaction_type == "SELL" and holding.shares < transaction.shares:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Insufficient shares. You have {holding.shares}, trying to sell {transaction.shares}"
+        )
+    
+    # Parse transaction date
+    trans_date = datetime.utcnow()
+    if transaction.transaction_date:
+        try:
+            trans_date = datetime.fromisoformat(transaction.transaction_date.replace('Z', '+00:00'))
+        except ValueError:
+            trans_date = datetime.utcnow()
+    
+    total_value = transaction.shares * transaction.price_per_share
+    
+    # Create transaction record
+    new_transaction = models.ETFTransaction(
+        user_id=current_user.id,
+        holding_id=transaction.holding_id,
+        transaction_type=transaction.transaction_type,
+        shares=transaction.shares,
+        price_per_share=transaction.price_per_share,
+        total_value=total_value,
+        transaction_date=trans_date
+    )
+    
+    db.add(new_transaction)
+    
+    # Update holding share count
+    if transaction.transaction_type == "BUY":
+        holding.shares += transaction.shares
+    else:  # SELL
+        holding.shares -= transaction.shares
+    
+    db.commit()
+    db.refresh(new_transaction)
+    
+    return {
+        "id": new_transaction.id,
+        "holding_id": new_transaction.holding_id,
+        "jse_ticker": holding.jse_ticker,
+        "etf_name": holding.etf_name,
+        "transaction_type": new_transaction.transaction_type,
+        "shares": new_transaction.shares,
+        "price_per_share": new_transaction.price_per_share,
+        "total_value": new_transaction.total_value,
+        "transaction_date": new_transaction.transaction_date.isoformat(),
+        "updated_share_count": holding.shares
+    }
+
+
+# =====================================================
+# Google Sheets Integration Endpoints
+# =====================================================
+
+@app.post("/api/etf/sync-prices")
+async def sync_etf_prices(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """Manually trigger a price sync from Google Sheets."""
+    sheets_service = get_sheets_service()
+    
+    if not sheets_service.is_available():
+        raise HTTPException(
+            status_code=503,
+            detail="Google Sheets service is not available. Check credentials."
+        )
+    
+    # Get all prices from sheets
+    all_prices = sheets_service.get_all_etf_prices()
+    prices_map = {p['jse_ticker']: p['current_price'] for p in all_prices}
+    
+    # Update all user holdings
+    holdings = db.query(models.ETFHolding).filter(
+        models.ETFHolding.user_id == current_user.id
+    ).all()
+    
+    updated_count = 0
+    now = datetime.utcnow()
+    
+    for holding in holdings:
+        if holding.jse_ticker in prices_map:
+            new_price = prices_map[holding.jse_ticker]
+            if new_price is not None:
+                holding.current_price = new_price
+                holding.price_updated_at = now
+                updated_count += 1
+    
+    db.commit()
+    
+    return {
+        "status": "success",
+        "updated_count": updated_count,
+        "total_holdings": len(holdings),
+        "sync_time": now.isoformat()
+    }
+
+
+@app.post("/api/etf/add-to-sheet")
+async def add_etf_to_sheet(
+    request: AddETFToSheetRequest,
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    """Add a new ETF to the Google Sheet (creates row with GOOGLEFINANCE formula)."""
+    sheets_service = get_sheets_service()
+    
+    if not sheets_service.is_available():
+        raise HTTPException(
+            status_code=503,
+            detail="Google Sheets service is not available. Check credentials."
+        )
+    
+    # Check if ticker already exists
+    if sheets_service.check_ticker_exists(request.jse_ticker):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Ticker {request.jse_ticker} already exists in the sheet"
+        )
+    
+    success = sheets_service.add_etf_to_sheet(
+        request.jse_ticker,
+        request.etf_name
+    )
+    
+    if not success:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to add ETF to Google Sheet"
+        )
+    
+    return {
+        "status": "success",
+        "message": f"Added {request.jse_ticker} to Google Sheet"
+    }
+
+
+@app.get("/api/etf/sheet-prices")
+async def get_sheet_prices(
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    """Get all ETF prices directly from Google Sheets (for debugging/reference)."""
+    sheets_service = get_sheets_service()
+    
+    if not sheets_service.is_available():
+        raise HTTPException(
+            status_code=503,
+            detail="Google Sheets service is not available. Check credentials."
+        )
+    
+    return sheets_service.get_all_etf_prices()
+
+
+@app.get("/api/etf/last-sync")
+async def get_last_price_sync(
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    """Get the timestamp of the last price sync."""
+    last_sync = get_last_sync_time()
+    return {
+        "last_sync": last_sync.isoformat() if last_sync else None,
+        "sync_interval_minutes": 5
     }

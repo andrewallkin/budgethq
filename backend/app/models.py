@@ -1,5 +1,6 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, Date
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, Date, DateTime
 from sqlalchemy.orm import relationship
+from datetime import datetime
 from .database import Base
 
 class User(Base):
@@ -11,6 +12,8 @@ class User(Base):
 
     budget = relationship("Budget", back_populates="owner", uselist=False)
     etfs = relationship("ETF", back_populates="owner")
+    etf_holdings = relationship("ETFHolding", back_populates="owner")
+    etf_transactions = relationship("ETFTransaction", back_populates="owner")
     tfsa_historical_contributions = relationship("TFSAHistoricalContribution", back_populates="owner")
     tfsa_deposits = relationship("TFSADeposit", back_populates="owner")
 
@@ -69,3 +72,40 @@ class TFSADeposit(Base):
     financial_year_start = Column(Integer)  # e.g., 2024 for FY 2024/2025
 
     owner = relationship("User", back_populates="tfsa_deposits")
+
+
+class ETFHolding(Base):
+    """User's ETF holdings - links to Google Sheets ticker for prices"""
+    __tablename__ = "etf_holdings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    jse_ticker = Column(String)          # e.g., "JSE:STX40"
+    etf_name = Column(String)            # e.g., "Satrix Top 40"
+    region = Column(String)              # e.g., "South Africa"
+    shares = Column(Float, default=0)    # Fractional shares allowed
+    target_percentage = Column(Float, default=0)
+    current_price = Column(Float, nullable=True)  # Cached from Google Sheets
+    price_updated_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    owner = relationship("User", back_populates="etf_holdings")
+    transactions = relationship("ETFTransaction", back_populates="holding")
+
+
+class ETFTransaction(Base):
+    """Audit trail of all buy/sell transactions"""
+    __tablename__ = "etf_transactions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    holding_id = Column(Integer, ForeignKey("etf_holdings.id"))
+    transaction_type = Column(String)    # "BUY" or "SELL"
+    shares = Column(Float)
+    price_per_share = Column(Float)
+    total_value = Column(Float)
+    transaction_date = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    owner = relationship("User", back_populates="etf_transactions")
+    holding = relationship("ETFHolding", back_populates="transactions")
