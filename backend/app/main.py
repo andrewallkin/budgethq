@@ -144,6 +144,13 @@ class BulkImportResult(BaseModel):
 # Auth Endpoints
 @app.post("/api/auth/register", response_model=Token)
 def register(user: UserCreate, db: Session = Depends(database.get_db)):
+    # Restrict registration to authorized email only
+    if user.username != "andrewallkin@gmail.com":
+        raise HTTPException(
+            status_code=403, 
+            detail="Registration is currently restricted. Only authorized users can create accounts."
+        )
+    
     db_user = db.query(models.User).filter(models.User.username == user.username).first()
     if db_user:
         raise HTTPException(status_code=400, detail="Username already registered")
@@ -164,6 +171,14 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Restrict login to authorized email only
+    if user.username != "andrewallkin@gmail.com":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access restricted. This account is not authorized to login.",
             headers={"WWW-Authenticate": "Bearer"},
         )
     
@@ -309,7 +324,7 @@ async def get_tfsa_contributions(
             {
                 "id": d.id,
                 "amount": d.amount,
-                "date": d.deposit_date.isoformat() if d.deposit_date else None
+                "date": (d.deposit_date.isoformat() + "Z") if d.deposit_date else None
             }
             for d in deposits
         ]
@@ -405,7 +420,7 @@ async def get_etf_holdings(
             "target_percentage": h.target_percentage,
             "current_price": h.current_price,
             "total_value": total_value,
-            "price_updated_at": h.price_updated_at.isoformat() if h.price_updated_at else None
+            "price_updated_at": (h.price_updated_at.isoformat() + "Z") if h.price_updated_at else None
         })
     
     return result
@@ -466,7 +481,7 @@ async def create_etf_holding(
         "target_percentage": new_holding.target_percentage,
         "current_price": new_holding.current_price,
         "total_value": total_value,
-        "price_updated_at": new_holding.price_updated_at.isoformat() if new_holding.price_updated_at else None
+        "price_updated_at": (new_holding.price_updated_at.isoformat() + "Z") if new_holding.price_updated_at else None
     }
 
 
@@ -507,7 +522,7 @@ async def update_etf_holding(
         "target_percentage": holding.target_percentage,
         "current_price": holding.current_price,
         "total_value": total_value,
-        "price_updated_at": holding.price_updated_at.isoformat() if holding.price_updated_at else None
+        "price_updated_at": (holding.price_updated_at.isoformat() + "Z") if holding.price_updated_at else None
     }
 
 
@@ -700,7 +715,7 @@ async def get_etf_transactions(
             "shares": t.shares,
             "price_per_share": t.price_per_share,
             "total_value": t.total_value,
-            "transaction_date": t.transaction_date.isoformat() if t.transaction_date else None
+            "transaction_date": (t.transaction_date.isoformat() + "Z") if t.transaction_date else None
         })
     
     return result
@@ -782,7 +797,7 @@ async def create_etf_transaction(
         "shares": new_transaction.shares,
         "price_per_share": new_transaction.price_per_share,
         "total_value": new_transaction.total_value,
-        "transaction_date": new_transaction.transaction_date.isoformat(),
+        "transaction_date": new_transaction.transaction_date.isoformat() + "Z",
         "updated_share_count": holding.shares
     }
 
@@ -831,7 +846,7 @@ async def sync_etf_prices(
         "status": "success",
         "updated_count": updated_count,
         "total_holdings": len(holdings),
-        "sync_time": now.isoformat()
+        "sync_time": now.isoformat() + "Z"
     }
 
 
@@ -896,6 +911,6 @@ async def get_last_price_sync(
     """Get the timestamp of the last price sync."""
     last_sync = get_last_sync_time()
     return {
-        "last_sync": last_sync.isoformat() if last_sync else None,
+        "last_sync": last_sync.isoformat() + "Z" if last_sync else None,
         "sync_interval_minutes": 5
     }
