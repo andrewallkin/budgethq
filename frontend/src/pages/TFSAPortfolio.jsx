@@ -754,7 +754,7 @@ export default function TFSAPortfolio() {
 
                         {deposits.length > 0 && (
                             <div className="space-y-1.5">
-                                {deposits.map((deposit) => (
+                                {deposits.sort((a, b) => new Date(a.date) - new Date(b.date)).map((deposit) => (
                                     <div key={deposit.id} className="flex items-center justify-between p-2 bg-blue-50 dark:bg-blue-900/20 rounded text-sm">
                                         <div className="flex items-center gap-2">
                                             <span className="font-medium text-blue-700 dark:text-blue-400">

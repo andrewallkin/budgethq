@@ -5,7 +5,7 @@ import axios from 'axios'
 export default function AddBondModal({ isOpen, onClose, onSuccess }) {
     const [formData, setFormData] = useState({
         bond_name: '',
-        region: '',
+        region: 'South Africa',
         current_value: '',
         target_percentage: ''
     })
@@ -15,7 +15,7 @@ export default function AddBondModal({ isOpen, onClose, onSuccess }) {
     const resetForm = () => {
         setFormData({
             bond_name: '',
-            region: '',
+            region: 'South Africa',
             current_value: '',
             target_percentage: ''
         })
@@ -35,10 +35,6 @@ export default function AddBondModal({ isOpen, onClose, onSuccess }) {
     const validateForm = () => {
         if (!formData.bond_name.trim()) {
             setError('Bond name is required')
-            return false
-        }
-        if (!formData.region.trim()) {
-            setError('Region is required')
             return false
         }
 
@@ -82,8 +78,6 @@ export default function AddBondModal({ isOpen, onClose, onSuccess }) {
 
     if (!isOpen) return null
 
-    const regions = ['South Africa', 'USA', 'Europe', 'Global', 'Emerging Markets', 'Asia', 'Other']
-
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
             <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
@@ -119,23 +113,6 @@ export default function AddBondModal({ isOpen, onClose, onSuccess }) {
                             placeholder="SA Government Bond 2030"
                             className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                         />
-                    </div>
-
-                    {/* Region */}
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                            Region <span className="text-red-500">*</span>
-                        </label>
-                        <select
-                            value={formData.region}
-                            onChange={(e) => handleChange('region', e.target.value)}
-                            className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                        >
-                            <option value="">Select region...</option>
-                            {regions.map(r => (
-                                <option key={r} value={r}>{r}</option>
-                            ))}
-                        </select>
                     </div>
 
                     {/* Current Value and Target % in 2 columns */}
