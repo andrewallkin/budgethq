@@ -44,8 +44,12 @@ async def sync_all_prices():
     # Get all prices from Google Sheets
     all_prices = sheets_service.get_all_etf_prices()
     
+    # Always update last sync time, even if no prices found
+    now = datetime.utcnow()
+    last_sync_time = now
+    
     if not all_prices:
-        print("No prices retrieved from Google Sheets")
+        print(f"[{now.isoformat()}] Price sync complete: No prices retrieved from Google Sheets")
         return
     
     prices_map = {p['jse_ticker']: p['current_price'] for p in all_prices}
@@ -58,7 +62,6 @@ async def sync_all_prices():
         holdings = db.query(models.ETFHolding).all()
         
         updated_count = 0
-        now = datetime.utcnow()
         
         for holding in holdings:
             if holding.jse_ticker in prices_map:
@@ -69,7 +72,6 @@ async def sync_all_prices():
                     updated_count += 1
         
         db.commit()
-        last_sync_time = now
         
         print(f"[{now.isoformat()}] Price sync complete: {updated_count} holdings updated")
         
