@@ -198,6 +198,9 @@ export default function AddETFModal({ isOpen, onClose, onSuccess }) {
                                 placeholder="0"
                                 className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                             />
+                            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                Can be 0 if planning to buy
+                            </p>
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -216,6 +219,9 @@ export default function AddETFModal({ isOpen, onClose, onSuccess }) {
                                 />
                                 <span className="ml-2 text-gray-500 dark:text-gray-400">%</span>
                             </div>
+                            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                Can be 0 if planning to sell
+                            </p>
                         </div>
                     </div>
 

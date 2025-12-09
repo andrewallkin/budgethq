@@ -605,7 +605,9 @@ async def bulk_import_holdings(
                 failed_count += 1
                 continue
             
-            shares = float(row['shares'])
+            # Handle empty shares (for ETFs you plan to buy)
+            shares_str = row['shares'].strip()
+            shares = float(shares_str) if shares_str else 0.0
             target_pct = float(row['target_percentage'])
             
             if shares < 0:

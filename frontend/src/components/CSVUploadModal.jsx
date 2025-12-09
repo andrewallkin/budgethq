@@ -68,9 +68,13 @@ export default function CSVUploadModal({ isOpen, onClose, onSuccess }) {
                 validationErrors.push(`Row ${rowNum}: ETF name is required`)
             }
 
-            const shares = parseFloat(row.shares)
-            if (isNaN(shares) || shares < 0) {
-                validationErrors.push(`Row ${rowNum}: Shares must be a non-negative number`)
+            // Allow empty shares (for ETFs you plan to buy) or 0+
+            const sharesStr = row.shares?.trim()
+            if (sharesStr && sharesStr !== '') {
+                const shares = parseFloat(sharesStr)
+                if (isNaN(shares) || shares < 0) {
+                    validationErrors.push(`Row ${rowNum}: Shares must be a non-negative number or blank`)
+                }
             }
 
             const targetPct = parseFloat(row.target_percentage)
