@@ -332,6 +332,11 @@ JSE:SYGWD,Sygnia Itrix MSCI World,Global,8.0,30`
                             <p className="text-sm text-gray-700 dark:text-gray-300">
                                 Successfully imported: <strong>{result.success}</strong> holdings
                             </p>
+                            {result.added_to_sheet > 0 && (
+                                <p className="text-sm text-gray-700 dark:text-gray-300">
+                                    Added to Google Sheet: <strong>{result.added_to_sheet}</strong> ETFs
+                                </p>
+                            )}
                             {result.failed > 0 && (
                                 <p className="text-sm text-gray-700 dark:text-gray-300">
                                     Failed: <strong>{result.failed}</strong> rows

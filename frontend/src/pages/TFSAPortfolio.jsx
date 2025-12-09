@@ -678,12 +678,12 @@ export default function TFSAPortfolio() {
             {holdings.length > 0 && (
                 <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
                     <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Target vs Actual Allocation</h2>
-                    <div style={{ height: Math.max(200, holdings.length * 50) }}>
+                    <div style={{ height: Math.max(300, holdings.length * 80) }}>
                         <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={targetVsActualData} layout="vertical" margin={{ left: 20, right: 30 }}>
+                            <BarChart data={targetVsActualData} layout="vertical" margin={{ left: 20, right: 30, top: 20, bottom: 20 }}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                                 <XAxis type="number" domain={[0, 'dataMax']} unit="%" tick={{ fill: '#9ca3af' }} />
-                                <YAxis type="category" dataKey="name" tick={{ fill: '#9ca3af' }} width={80} />
+                                <YAxis type="category" dataKey="name" tick={{ fill: '#9ca3af', fontSize: 12 }} width={120} />
                                 <Tooltip
                                     contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#f3f4f6' }}
                                     formatter={(value, name) => [`${value}%`, name === 'Target' ? 'Target' : 'Actual']}

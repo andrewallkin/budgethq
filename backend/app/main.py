@@ -582,19 +582,23 @@ async def bulk_import_holdings(
     # Get prices from Google Sheets
     sheets_service = get_sheets_service()
     prices_map = {}
-    if sheets_service.is_available():
+    sheets_available = sheets_service.is_available()
+    
+    if sheets_available:
         all_prices = sheets_service.get_all_etf_prices()
         prices_map = {p['jse_ticker']: p['current_price'] for p in all_prices}
     
     success_count = 0
     failed_count = 0
     errors = []
+    added_to_sheet = 0
     
     for row_num, row in enumerate(reader, start=2):
         try:
             jse_ticker = row['jse_ticker'].strip()
+            etf_name = row['etf_name'].strip()
             
-            # Check if already exists
+            # Check if already exists in database
             existing = db.query(models.ETFHolding).filter(
                 models.ETFHolding.user_id == current_user.id,
                 models.ETFHolding.jse_ticker == jse_ticker
@@ -604,6 +608,18 @@ async def bulk_import_holdings(
                 errors.append(f"Row {row_num}: {jse_ticker} already exists, skipped")
                 failed_count += 1
                 continue
+            
+            # Add to Google Sheet if not already there
+            if sheets_available:
+                if not sheets_service.check_ticker_exists(jse_ticker):
+                    try:
+                        if sheets_service.add_etf_to_sheet(jse_ticker, etf_name):
+                            added_to_sheet += 1
+                            # Refresh prices after adding
+                            all_prices = sheets_service.get_all_etf_prices()
+                            prices_map = {p['jse_ticker']: p['current_price'] for p in all_prices}
+                    except Exception as sheet_err:
+                        errors.append(f"Row {row_num}: Added to DB but failed to add to sheet - {str(sheet_err)}")
             
             # Handle empty shares (for ETFs you plan to buy)
             shares_str = row['shares'].strip()
@@ -621,7 +637,7 @@ async def bulk_import_holdings(
             new_holding = models.ETFHolding(
                 user_id=current_user.id,
                 jse_ticker=jse_ticker,
-                etf_name=row['etf_name'].strip(),
+                etf_name=etf_name,
                 region=row['region'].strip(),
                 shares=shares,
                 target_percentage=target_pct,
@@ -644,7 +660,8 @@ async def bulk_import_holdings(
     return {
         "success": success_count,
         "failed": failed_count,
-        "errors": errors
+        "errors": errors,
+        "added_to_sheet": added_to_sheet
     }
 
 
