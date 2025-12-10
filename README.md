@@ -238,14 +238,22 @@ The application uses Google Sheets as a data source for ETF prices and as a sync
 
 ## Local Development
 
+### Prerequisites
+- [uv](https://github.com/astral-sh/uv) - Fast Python package installer and resolver
+- Node.js 18+ (for frontend)
+- Docker and Docker Compose (for containerized development)
+
 ### Backend
 Backend code lives in `backend/`.
 
 To run it locally:
 ```bash
-cd backend
-pip install -r requirements.txt
-uvicorn app.main:app --reload
+# Install uv if you haven't already
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Install dependencies and run
+uv sync
+uv run uvicorn app.main:app --reload
 ```
 
 The FastAPI app exposes:
@@ -300,7 +308,7 @@ make migrate-create MSG="initial_schema"
 make migrate-stamp
 
 # 4. Verify it worked
-docker-compose -f docker-compose.dev.yml exec backend alembic current
+docker-compose -f docker-compose.dev.yml exec backend uv run alembic current
 
 # 5. Check migration file appeared locally
 ls backend/alembic/versions/
@@ -352,22 +360,22 @@ If you prefer not to use the Makefile:
 
 ```bash
 # Run migrations
-docker-compose -f docker-compose.dev.yml exec backend alembic upgrade head
+docker-compose -f docker-compose.dev.yml exec backend uv run alembic upgrade head
 
 # Create migration
-docker-compose -f docker-compose.dev.yml exec backend alembic revision --autogenerate -m "description"
+docker-compose -f docker-compose.dev.yml exec backend uv run alembic revision --autogenerate -m "description"
 
 # Stamp database
-docker-compose -f docker-compose.dev.yml exec backend alembic stamp head
+docker-compose -f docker-compose.dev.yml exec backend uv run alembic stamp head
 
 # Check current version
-docker-compose -f docker-compose.dev.yml exec backend alembic current
+docker-compose -f docker-compose.dev.yml exec backend uv run alembic current
 
 # View history
-docker-compose -f docker-compose.dev.yml exec backend alembic history
+docker-compose -f docker-compose.dev.yml exec backend uv run alembic history
 
 # Rollback
-docker-compose -f docker-compose.dev.yml exec backend alembic downgrade -1
+docker-compose -f docker-compose.dev.yml exec backend uv run alembic downgrade -1
 ```
 
 ### 📚 Additional Resources
@@ -413,7 +421,7 @@ Navigate to Actions → Deploy to VPS → Run workflow → Select branch to depl
 
 **Problem**: Migration fails on startup
 - **Solution**: Check if migration files exist in `backend/alembic/versions/`
-- Verify database connection: `make dev-shell` → `alembic current`
+- Verify database connection: `make dev-shell` → `uv run alembic current`
 - If needed, stamp database: `make migrate-stamp`
 
 **Problem**: "Target database is not up to date" error

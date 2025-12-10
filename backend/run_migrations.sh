@@ -11,7 +11,7 @@ max_attempts=30
 attempt=0
 
 while [ $attempt -lt $max_attempts ]; do
-    if alembic current &>/dev/null; then
+    if uv run alembic current &>/dev/null; then
         echo "✓ Database is ready!"
         break
     fi
@@ -28,18 +28,18 @@ fi
 # Show current migration status
 echo ""
 echo "Current database version:"
-alembic current
+uv run alembic current
 
 # Run migrations
 echo ""
 echo "Running migrations..."
-alembic upgrade head
+uv run alembic upgrade head
 
 # Show final status
 echo ""
 echo "Migration completed successfully!"
 echo "Current database version:"
-alembic current
+uv run alembic current
 
 echo "==================================="
 

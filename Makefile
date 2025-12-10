@@ -53,25 +53,25 @@ dev-shell:
 
 # Database Migrations
 migrate:
-	docker-compose -f docker-compose.dev.yml exec backend alembic upgrade head
+	docker-compose -f docker-compose.dev.yml exec backend uv run alembic upgrade head
 
 migrate-create:
 ifndef MSG
 	@echo "Error: Please provide a message: make migrate-create MSG='description'"
 	@exit 1
 endif
-	docker-compose -f docker-compose.dev.yml exec backend alembic revision --autogenerate -m "$(MSG)"
+	docker-compose -f docker-compose.dev.yml exec backend uv run alembic revision --autogenerate -m "$(MSG)"
 	@echo "✓ Migration created! Check: backend/alembic/versions/"
 
 migrate-stamp:
-	docker-compose -f docker-compose.dev.yml exec backend alembic stamp head
+	docker-compose -f docker-compose.dev.yml exec backend uv run alembic stamp head
 	@echo "✓ Database marked as up-to-date (prevents recreating existing tables)"
 
 migrate-history:
-	docker-compose -f docker-compose.dev.yml exec backend alembic history
+	docker-compose -f docker-compose.dev.yml exec backend uv run alembic history
 
 migrate-rollback:
-	docker-compose -f docker-compose.dev.yml exec backend alembic downgrade -1
+	docker-compose -f docker-compose.dev.yml exec backend uv run alembic downgrade -1
 
 # Production (for testing prod build locally, VPS uses default via CI/CD)
 prod-up:
