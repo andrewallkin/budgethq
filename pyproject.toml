@@ -13,6 +13,10 @@ dependencies = [
     "python-jose[cryptography]>=3.3.0",
     "bcrypt>=4.0.1",
     "python-multipart>=0.0.6",
+    "google-auth>=2.0.0",
+    "google-api-python-client>=2.0.0",
+    "apscheduler>=3.10.0",
+    "alembic>=1.12.0",
 ]
 
 [project.optional-dependencies]
@@ -22,15 +26,16 @@ dev = [
     "flake8>=6.1.0",
 ]
 
-[build-system]
-requires = ["setuptools>=68.0", "wheel"]
-build-backend = "setuptools.build_meta"
+# Build system not needed - we run the app directly, not as an installed package
+# [build-system]
+# requires = ["setuptools>=68.0", "wheel"]
+# build-backend = "setuptools.build_meta"
 
-[tool.setuptools]
-packages = ["backend.app"]
+# [tool.setuptools]
+# packages = ["backend.app"]
 
-[tool.setuptools.package-data]
-"*" = ["*.json", "*.csv"]
+# [tool.setuptools.package-data]
+# "*" = ["*.json", "*.csv"]
 
 [tool.black]
 line-length = 100

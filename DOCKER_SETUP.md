@@ -42,7 +42,7 @@ docker-compose -f docker-compose.dev.yml logs -f
 docker-compose -f docker-compose.dev.yml exec backend bash
 
 # Run migrations
-docker-compose -f docker-compose.dev.yml exec backend alembic upgrade head
+docker-compose -f docker-compose.dev.yml exec backend uv run alembic upgrade head
 
 # Stop
 docker-compose -f docker-compose.dev.yml down
