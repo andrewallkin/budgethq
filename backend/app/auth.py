@@ -10,7 +10,7 @@ from . import models, database
 # Secret key for JWT encoding/decoding
 SECRET_KEY = "your-secret-key-keep-it-secret"
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login")
 
