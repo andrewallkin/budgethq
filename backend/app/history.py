@@ -3,12 +3,18 @@ Historical price tracking and portfolio value snapshots.
 Contains core functions for recording and aggregating portfolio history data.
 """
 
+import logging
 from datetime import datetime, date, timedelta
 from typing import List, Dict, Optional, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
 
 from . import models
+from .utils import get_sast_now
+
+
+# Initialize logger
+logger = logging.getLogger(__name__)
 
 
 def calculate_total_contributions(db: Session, user_id: int, as_of_date: Optional[date] = None) -> float:
@@ -171,8 +177,8 @@ def record_hourly_snapshot(db: Session) -> dict:
     Called by scheduler every hour.
     Returns summary of what was recorded.
     """
-    now = datetime.utcnow()
-    stats = {
+    now = get_sast_now()
+    STATS = {
         'prices_recorded': 0,
         'users_processed': 0,
         'holdings_recorded': 0
@@ -186,6 +192,8 @@ def record_hourly_snapshot(db: Session) -> dict:
         models.ETFHolding.current_price.isnot(None)
     ).all()
     
+    logger.info(f"Found {len(tickers_prices)} unique tickers to record")
+    
     # Record price history for each ticker
     for jse_ticker, price in tickers_prices:
         if price is not None:
@@ -196,11 +204,15 @@ def record_hourly_snapshot(db: Session) -> dict:
                 snapshot_type="hourly"
             )
             db.add(price_record)
-            stats['prices_recorded'] += 1
+            STATS['prices_recorded'] += 1
+            
+    logger.info(f"Recorded {STATS['prices_recorded']} price points")
     
     # Get all users with holdings
     users_with_holdings = db.query(models.ETFHolding.user_id).distinct().all()
     user_ids = [u[0] for u in users_with_holdings]
+    
+    logger.info(f"Processing snapshots for {len(user_ids)} users")
     
     for user_id in user_ids:
         # Calculate portfolio value and contributions
@@ -238,12 +250,14 @@ def record_hourly_snapshot(db: Session) -> dict:
                 snapshot_type="hourly"
             )
             db.add(holding_record)
-            stats['holdings_recorded'] += 1
+            STATS['holdings_recorded'] += 1
         
-        stats['users_processed'] += 1
+        STATS['users_processed'] += 1
+        logger.debug(f"User {user_id}: Recorded value R{total_value:.2f}")
     
     db.commit()
-    return stats
+    logger.info(f"Snapshot complete. Stats: {STATS}")
+    return STATS
 
 
 def record_transaction_snapshot(db: Session, user_id: int, transaction_id: int) -> dict:
@@ -251,7 +265,7 @@ def record_transaction_snapshot(db: Session, user_id: int, transaction_id: int) 
     Record a snapshot when a transaction occurs.
     This captures the portfolio state at the moment of a buy/sell.
     """
-    now = datetime.utcnow()
+    now = get_sast_now()
     
     # Update cost basis for the holding involved (incremental update)
     transaction = db.query(models.ETFTransaction).filter(
@@ -314,13 +328,15 @@ def create_daily_summary(db: Session, target_date: Optional[date] = None) -> dic
     start_of_day = datetime.combine(target_date, datetime.min.time())
     end_of_day = datetime.combine(target_date, datetime.max.time())
     
-    stats = {'summaries_created': 0}
+    STATS = {'summaries_created': 0}
     
     # Get all users with portfolio history for this day
     users_with_data = db.query(models.PortfolioValueHistory.user_id).filter(
         models.PortfolioValueHistory.recorded_at >= start_of_day,
         models.PortfolioValueHistory.recorded_at <= end_of_day
     ).distinct().all()
+    
+    logger.info(f"Creating daily summaries for {len(users_with_data)} users for {target_date}")
     
     for (user_id,) in users_with_data:
         # Check if summary already exists
@@ -330,6 +346,7 @@ def create_daily_summary(db: Session, target_date: Optional[date] = None) -> dic
         ).first()
         
         if existing:
+            logger.debug(f"Summary already exists for user {user_id} on {target_date}, skipping")
             continue
         
         # Get all snapshots for this user today
@@ -381,7 +398,8 @@ def create_daily_summary(db: Session, target_date: Optional[date] = None) -> dic
         stats['summaries_created'] += 1
     
     db.commit()
-    return stats
+    logger.info(f"Daily summary complete. Stats: {STATS}")
+    return STATS
 
 
 def create_monthly_summary(db: Session, year: int, month: int) -> dict:
@@ -465,7 +483,7 @@ def cleanup_old_hourly_data(db: Session, retention_days: int = 90) -> dict:
     Transaction snapshots are never deleted.
     Called weekly (e.g., Sunday 3am).
     """
-    cutoff_date = datetime.utcnow() - timedelta(days=retention_days)
+    cutoff_date = get_sast_now() - timedelta(days=retention_days)
     
     stats = {
         'portfolio_deleted': 0,
@@ -507,22 +525,27 @@ def get_portfolio_history(
     Get portfolio history data for charting.
     Automatically selects the right granularity based on range.
     
-    range_param options: "1m", "3m", "6m", "1y", "all"
+    range_param options: "1d", "1m", "3m", "6m", "1y", "all"
     
     Returns list of {date, contributions, gain, total} for stacked area chart.
     """
-    now = datetime.utcnow()
+    now = get_sast_now()
     
     # Determine date range and data source
-    if range_param == "1m":
+    if range_param == "1d":
+        # Use hourly data, no aggregation
+        start_date = now - timedelta(hours=24)
+        return _get_hourly_history(db, user_id, start_date, now)
+
+    elif range_param == "1m":
         # Use hourly data, aggregate to daily
         start_date = now - timedelta(days=30)
         return _get_daily_from_hourly(db, user_id, start_date, now)
     
     elif range_param == "3m":
-        # Use daily summaries
+        # Use hourly data, aggregate to daily (retention is 90 days)
         start_date = now - timedelta(days=90)
-        return _get_from_daily_summary(db, user_id, start_date, now)
+        return _get_daily_from_hourly(db, user_id, start_date, now)
     
     elif range_param == "6m":
         # Use daily summaries, aggregate to weekly
@@ -540,32 +563,31 @@ def get_portfolio_history(
 
 
 def _get_daily_from_hourly(db: Session, user_id: int, start_date: datetime, end_date: datetime) -> List[Dict]:
-    """Aggregate hourly data to daily points."""
-    # Get daily aggregates from hourly data
+    """Aggregate hourly data to daily points (using last value of the day)."""
+    # Get all hourly records in range
     results = db.query(
-        func.date(models.PortfolioValueHistory.recorded_at).label('date'),
-        func.avg(models.PortfolioValueHistory.total_value).label('avg_value'),
-        func.avg(models.PortfolioValueHistory.total_contributions).label('avg_contributions'),
-        func.avg(models.PortfolioValueHistory.total_growth).label('avg_growth')
+        models.PortfolioValueHistory.recorded_at,
+        models.PortfolioValueHistory.total_value,
+        models.PortfolioValueHistory.total_contributions,
+        models.PortfolioValueHistory.total_growth
     ).filter(
         models.PortfolioValueHistory.user_id == user_id,
         models.PortfolioValueHistory.recorded_at >= start_date,
         models.PortfolioValueHistory.recorded_at <= end_date
-    ).group_by(
-        func.date(models.PortfolioValueHistory.recorded_at)
-    ).order_by(
-        func.date(models.PortfolioValueHistory.recorded_at)
-    ).all()
+    ).order_by(models.PortfolioValueHistory.recorded_at).all()
     
-    return [
-        {
-            'date': str(r.date),
-            'contributions': round(r.avg_contributions or 0, 2),
-            'gain': round(r.avg_growth or 0, 2),
-            'total': round(r.avg_value or 0, 2)
+    # Process in Python to get last record per day
+    daily_map = {}
+    for r in results:
+        day_str = str(r.recorded_at.date())
+        daily_map[day_str] = {
+            'date': day_str,
+            'contributions': round(r.total_contributions or 0, 2),
+            'gain': round(r.total_growth or 0, 2),
+            'total': round(r.total_value or 0, 2)
         }
-        for r in results
-    ]
+    
+    return list(daily_map.values())
 
 
 def _get_from_daily_summary(db: Session, user_id: int, start_date: datetime, end_date: datetime) -> List[Dict]:
@@ -730,7 +752,7 @@ def get_etf_price_history(db: Session, jse_ticker: str, range_param: str = "1m")
     """
     Get price history for a specific ETF ticker.
     """
-    now = datetime.utcnow()
+    now = get_sast_now()
     
     if range_param == "1m":
         start_date = now - timedelta(days=30)
@@ -767,3 +789,23 @@ def get_etf_price_history(db: Session, jse_ticker: str, range_param: str = "1m")
         for r in results
     ]
 
+
+
+def _get_hourly_history(db: Session, user_id: int, start_date: datetime, end_date: datetime) -> List[Dict]:
+    """Get raw hourly data points."""
+    results = db.query(models.PortfolioValueHistory).filter(
+        models.PortfolioValueHistory.user_id == user_id,
+        models.PortfolioValueHistory.recorded_at >= start_date,
+        models.PortfolioValueHistory.recorded_at <= end_date,
+        models.PortfolioValueHistory.snapshot_type == 'hourly'
+    ).order_by(models.PortfolioValueHistory.recorded_at).all()
+    
+    return [
+        {
+            'date': r.recorded_at.isoformat(),
+            'contributions': round(r.total_contributions or 0, 2),
+            'gain': round(r.total_growth or 0, 2),
+            'total': round(r.total_value or 0, 2)
+        }
+        for r in results
+    ]

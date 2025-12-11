@@ -13,6 +13,7 @@ import {
 import { TrendingUp, TrendingDown, Calendar, RefreshCw } from 'lucide-react'
 
 const TIME_RANGES = [
+    { key: '1d', label: '1D' },
     { key: '1m', label: '1M' },
     { key: '3m', label: '3M' },
     { key: '6m', label: '6M' },
@@ -34,7 +35,7 @@ export default function PortfolioChart() {
     const fetchHistory = async () => {
         setLoading(true)
         setError(null)
-        
+
         try {
             const res = await axios.get(`/api/portfolio/history?range=${selectedRange}`)
             setChartData(res.data.data || [])
@@ -57,6 +58,9 @@ export default function PortfolioChart() {
         const date = new Date(dateStr)
         if (selectedRange === 'all' || selectedRange === '1y') {
             return date.toLocaleDateString('en-ZA', { month: 'short', year: '2-digit' })
+        }
+        if (selectedRange === '1d') {
+            return date.toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' })
         }
         return date.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })
     }
@@ -134,7 +138,7 @@ export default function PortfolioChart() {
                     <TrendingUp className="w-5 h-5 text-emerald-500" />
                     Portfolio Performance
                 </h2>
-                
+
                 <div className="flex items-center gap-3">
                     {/* Refresh button */}
                     <button
@@ -145,18 +149,17 @@ export default function PortfolioChart() {
                     >
                         <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
                     </button>
-                    
+
                     {/* Time range selector */}
                     <div className="flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
                         {TIME_RANGES.map(({ key, label }) => (
                             <button
                                 key={key}
                                 onClick={() => setSelectedRange(key)}
-                                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                                    selectedRange === key
+                                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${selectedRange === key
                                         ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
                                         : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-                                }`}
+                                    }`}
                             >
                                 {label}
                             </button>
@@ -182,18 +185,16 @@ export default function PortfolioChart() {
                     </div>
                     <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                         <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Change</p>
-                        <p className={`text-lg font-semibold flex items-center gap-1 ${
-                            summary.period_change >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
-                        }`}>
+                        <p className={`text-lg font-semibold flex items-center gap-1 ${summary.period_change >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
+                            }`}>
                             {summary.period_change >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
                             {summary.period_change >= 0 ? '+' : ''}{formatCurrency(summary.period_change)}
                         </p>
                     </div>
                     <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                         <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Return</p>
-                        <p className={`text-lg font-semibold ${
-                            summary.period_change_percent >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
-                        }`}>
+                        <p className={`text-lg font-semibold ${summary.period_change_percent >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
+                            }`}>
                             {summary.period_change_percent >= 0 ? '+' : ''}{summary.period_change_percent.toFixed(2)}%
                         </p>
                     </div>
@@ -230,16 +231,16 @@ export default function PortfolioChart() {
                         >
                             <defs>
                                 <linearGradient id="colorContributions" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.8}/>
-                                    <stop offset="95%" stopColor="#3B82F6" stopOpacity={0.1}/>
+                                    <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.8} />
+                                    <stop offset="95%" stopColor="#3B82F6" stopOpacity={0.1} />
                                 </linearGradient>
                                 <linearGradient id="colorGain" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#10B981" stopOpacity={0.8}/>
-                                    <stop offset="95%" stopColor="#10B981" stopOpacity={0.1}/>
+                                    <stop offset="5%" stopColor="#10B981" stopOpacity={0.8} />
+                                    <stop offset="95%" stopColor="#10B981" stopOpacity={0.1} />
                                 </linearGradient>
                                 <linearGradient id="colorLoss" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#EF4444" stopOpacity={0.8}/>
-                                    <stop offset="95%" stopColor="#EF4444" stopOpacity={0.1}/>
+                                    <stop offset="5%" stopColor="#EF4444" stopOpacity={0.8} />
+                                    <stop offset="95%" stopColor="#EF4444" stopOpacity={0.1} />
                                 </linearGradient>
                             </defs>
                             <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />

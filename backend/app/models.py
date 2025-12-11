@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, String, Float, ForeignKey, Date, DateTim
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from .database import Base
+from .utils import get_sast_now
 
 class User(Base):
     __tablename__ = "users"
@@ -94,7 +95,7 @@ class ETFHolding(Base):
     current_price = Column(Float, nullable=True)  # Cached from Google Sheets
     price_updated_at = Column(DateTime, nullable=True)
     cost_basis = Column(Float, default=0)  # Total cost of shares purchased
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=get_sast_now)
 
     owner = relationship("User", back_populates="etf_holdings")
     transactions = relationship("ETFTransaction", back_populates="holding")
@@ -113,7 +114,7 @@ class ETFTransaction(Base):
     price_per_share = Column(Float)
     total_value = Column(Float)
     transaction_date = Column(DateTime)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=get_sast_now)
 
     owner = relationship("User", back_populates="etf_transactions")
     holding = relationship("ETFHolding", back_populates="transactions")
@@ -130,8 +131,8 @@ class BondHolding(Base):
     current_value = Column(Float, default=0)  # Total value (no shares/price tracking)
     target_percentage = Column(Float, default=0)
     cost_basis = Column(Float, default=0)  # Total cost of bond purchases
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=get_sast_now, onupdate=get_sast_now)
+    created_at = Column(DateTime, default=get_sast_now)
 
     owner = relationship("User", back_populates="bond_holdings")
     transactions = relationship("BondTransaction", back_populates="holding")
@@ -147,7 +148,7 @@ class BondTransaction(Base):
     transaction_type = Column(String)    # "BUY" or "SELL"
     amount = Column(Float)               # Transaction amount (value, not shares)
     transaction_date = Column(DateTime)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=get_sast_now)
 
     owner = relationship("User", back_populates="bond_transactions")
     holding = relationship("BondHolding", back_populates="transactions")
@@ -164,7 +165,7 @@ class ETFPriceHistory(Base):
     id = Column(Integer, primary_key=True, index=True)
     jse_ticker = Column(String, index=True)
     price = Column(Float)
-    recorded_at = Column(DateTime, index=True, default=datetime.utcnow)
+    recorded_at = Column(DateTime, index=True, default=get_sast_now)
     snapshot_type = Column(String, default="hourly")  # "hourly", "transaction", "eod"
 
 
@@ -177,7 +178,7 @@ class PortfolioValueHistory(Base):
     total_value = Column(Float)
     total_contributions = Column(Float)  # Total TFSA deposits up to this point
     total_growth = Column(Float)         # total_value - total_contributions
-    recorded_at = Column(DateTime, index=True, default=datetime.utcnow)
+    recorded_at = Column(DateTime, index=True, default=get_sast_now)
     snapshot_type = Column(String, default="hourly")  # "hourly", "transaction", "eod", "monthly"
 
     owner = relationship("User", back_populates="portfolio_value_history")
@@ -196,7 +197,7 @@ class HoldingValueHistory(Base):
     value = Column(Float)              # shares * price
     cost_basis = Column(Float)         # What user paid for these shares
     unrealized_gain = Column(Float)    # value - cost_basis
-    recorded_at = Column(DateTime, index=True, default=datetime.utcnow)
+    recorded_at = Column(DateTime, index=True, default=get_sast_now)
     snapshot_type = Column(String, default="hourly")
 
     owner = relationship("User", back_populates="holding_value_history")

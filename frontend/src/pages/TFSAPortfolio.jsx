@@ -13,6 +13,7 @@ import TransactionHistory from '../components/TransactionHistory'
 import PriceRefreshIndicator from '../components/PriceRefreshIndicator'
 import ConfirmModal from '../components/ConfirmModal'
 import PortfolioChart from '../components/PortfolioChart'
+import HistoryDebugView from '../components/HistoryDebugView'
 
 export default function TFSAPortfolio() {
     const [loading, setLoading] = useState(true)
@@ -99,14 +100,14 @@ export default function TFSAPortfolio() {
                 axios.get('/api/etf/holdings'),
                 axios.get('/api/bond/holdings')
             ])
-            
+
             // Combine ETFs and Bonds with type indicator
             const etfs = (etfRes.data || []).map(etf => ({
                 ...etf,
                 type: 'ETF',
                 total_value: etf.total_value || 0
             }))
-            
+
             const bonds = (bondRes.data || []).map(bond => ({
                 ...bond,
                 type: 'BOND',
@@ -118,7 +119,7 @@ export default function TFSAPortfolio() {
                 shares: null,
                 current_price: null
             }))
-            
+
             setHoldings([...etfs, ...bonds])
         } catch (err) {
             console.error("Failed to fetch holdings", err)
@@ -298,7 +299,7 @@ export default function TFSAPortfolio() {
         if (sortColumn !== column) {
             return <ArrowUpDown className="w-3 h-3 opacity-40" />
         }
-        return sortDirection === 'asc' 
+        return sortDirection === 'asc'
             ? <ArrowUp className="w-3 h-3" />
             : <ArrowDown className="w-3 h-3" />
     }
@@ -577,11 +578,10 @@ export default function TFSAPortfolio() {
                             </div>
                             <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                                 <div
-                                    className={`h-full rounded-full transition-all duration-500 ${
-                                        contributionPercentUsed >= 100 ? 'bg-red-500' :
-                                        contributionPercentUsed >= 80 ? 'bg-yellow-500' :
-                                        'bg-gradient-to-r from-blue-500 to-cyan-500'
-                                    }`}
+                                    className={`h-full rounded-full transition-all duration-500 ${contributionPercentUsed >= 100 ? 'bg-red-500' :
+                                            contributionPercentUsed >= 80 ? 'bg-yellow-500' :
+                                                'bg-gradient-to-r from-blue-500 to-cyan-500'
+                                        }`}
                                     style={{ width: `${Math.min(contributionPercentUsed, 100)}%` }}
                                 />
                             </div>
@@ -657,11 +657,10 @@ export default function TFSAPortfolio() {
                             <div>
                                 <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden mb-1">
                                     <div
-                                        className={`h-full rounded-full transition-all duration-500 ${
-                                            lifetimePercentUsed >= 100 ? 'bg-red-500' :
-                                            lifetimePercentUsed >= 80 ? 'bg-yellow-500' :
-                                            'bg-gradient-to-r from-purple-500 to-indigo-500'
-                                        }`}
+                                        className={`h-full rounded-full transition-all duration-500 ${lifetimePercentUsed >= 100 ? 'bg-red-500' :
+                                                lifetimePercentUsed >= 80 ? 'bg-yellow-500' :
+                                                    'bg-gradient-to-r from-purple-500 to-indigo-500'
+                                            }`}
                                         style={{ width: `${Math.min(lifetimePercentUsed, 100)}%` }}
                                     />
                                 </div>
@@ -685,7 +684,7 @@ export default function TFSAPortfolio() {
                         <table className="w-full">
                             <thead>
                                 <tr className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider border-b border-gray-200 dark:border-gray-700">
-                                    <th 
+                                    <th
                                         onClick={() => handleSort('name')}
                                         className="text-left py-3 px-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
                                     >
@@ -694,7 +693,7 @@ export default function TFSAPortfolio() {
                                             <SortIcon column="name" />
                                         </div>
                                     </th>
-                                    <th 
+                                    <th
                                         onClick={() => handleSort('ticker')}
                                         className="text-left py-3 px-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
                                     >
@@ -703,7 +702,7 @@ export default function TFSAPortfolio() {
                                             <SortIcon column="ticker" />
                                         </div>
                                     </th>
-                                    <th 
+                                    <th
                                         onClick={() => handleSort('region')}
                                         className="text-left py-3 px-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
                                     >
@@ -712,7 +711,7 @@ export default function TFSAPortfolio() {
                                             <SortIcon column="region" />
                                         </div>
                                     </th>
-                                    <th 
+                                    <th
                                         onClick={() => handleSort('shares')}
                                         className="text-right py-3 px-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
                                     >
@@ -721,7 +720,7 @@ export default function TFSAPortfolio() {
                                             <SortIcon column="shares" />
                                         </div>
                                     </th>
-                                    <th 
+                                    <th
                                         onClick={() => handleSort('price')}
                                         className="text-right py-3 px-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
                                     >
@@ -730,7 +729,7 @@ export default function TFSAPortfolio() {
                                             <SortIcon column="price" />
                                         </div>
                                     </th>
-                                    <th 
+                                    <th
                                         onClick={() => handleSort('value')}
                                         className="text-right py-3 px-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
                                     >
@@ -739,7 +738,7 @@ export default function TFSAPortfolio() {
                                             <SortIcon column="value" />
                                         </div>
                                     </th>
-                                    <th 
+                                    <th
                                         onClick={() => handleSort('target')}
                                         className="text-right py-3 px-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
                                     >
@@ -748,7 +747,7 @@ export default function TFSAPortfolio() {
                                             <SortIcon column="target" />
                                         </div>
                                     </th>
-                                    <th 
+                                    <th
                                         onClick={() => handleSort('actual')}
                                         className="text-right py-3 px-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
                                     >
@@ -792,7 +791,7 @@ export default function TFSAPortfolio() {
                                             <td className="py-3 px-2 text-right font-semibold text-gray-900 dark:text-white">
                                                 R {(h.total_value || 0).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                             </td>
-                                            <td 
+                                            <td
                                                 onClick={() => handleEdit(h)}
                                                 className="py-3 px-2 text-right text-gray-600 dark:text-gray-400 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors group"
                                                 title="Click to edit target percentage"
@@ -802,13 +801,12 @@ export default function TFSAPortfolio() {
                                                 </span>
                                             </td>
                                             <td className="py-3 px-2 text-right">
-                                                <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
-                                                    Math.abs(deviation) <= threshold
+                                                <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${Math.abs(deviation) <= threshold
                                                         ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
                                                         : deviation > 0
                                                             ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
                                                             : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
-                                                }`}>
+                                                    }`}>
                                                     {actualPct.toFixed(1)}%
                                                 </span>
                                             </td>
@@ -913,13 +911,12 @@ export default function TFSAPortfolio() {
                         {targetVsActualData.map((etf, i) => (
                             <div
                                 key={i}
-                                className={`px-3 py-1 rounded-full text-xs font-medium ${
-                                    Math.abs(etf.deviation) <= threshold
+                                className={`px-3 py-1 rounded-full text-xs font-medium ${Math.abs(etf.deviation) <= threshold
                                         ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
                                         : etf.deviation > 0
                                             ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
                                             : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
-                                }`}
+                                    }`}
                             >
                                 {etf.name}: {etf.deviation > 0 ? '+' : ''}{etf.deviation}%
                             </div>
@@ -1114,7 +1111,7 @@ export default function TFSAPortfolio() {
                 title={`Delete ${holdingToDelete?.type === 'BOND' ? 'Bond' : 'ETF'} Holding`}
                 message={holdingToDelete ? `Are you sure you want to delete ${holdingToDelete.etf_name}?` : ''}
                 details={
-                    holdingToDelete?.type === 'BOND' 
+                    holdingToDelete?.type === 'BOND'
                         ? ['Delete all associated transactions']
                         : ['Delete all associated transactions', 'Remove the ETF from Google Sheets']
                 }
@@ -1122,6 +1119,9 @@ export default function TFSAPortfolio() {
                 cancelText="Cancel"
                 variant="danger"
             />
+
+            {/* Debug & History View */}
+            <HistoryDebugView />
         </div>
     )
 }

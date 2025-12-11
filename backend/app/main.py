@@ -10,8 +10,13 @@ import io
 from . import models, database, auth, history
 from .logic import calculate_monthly_tax_with_age, calculate_uif, calculate_rebalancing
 from .sheets_service import get_sheets_service
-from .scheduler import start_scheduler, stop_scheduler, sync_all_prices, get_last_sync_time, set_last_sync_time
+from .scheduler import start_scheduler, stop_scheduler, sync_all_prices, get_last_sync_time, set_last_sync_time, record_hourly_snapshot
+from .utils import get_sast_now
+from .logging_config import configure_logging
 from pydantic import BaseModel
+
+# Configure logging on startup
+configure_logging()
 
 # Initialize DB
 # Note: Database tables are now managed by Alembic migrations
@@ -26,6 +31,8 @@ async def lifespan(app: FastAPI):
     start_scheduler()
     # Run initial sync on startup
     await sync_all_prices()
+    # Run initial snapshot on startup so we have data immediately
+    await record_hourly_snapshot()
     yield
     # Shutdown: Stop the scheduler
     stop_scheduler()
@@ -491,7 +498,7 @@ async def create_etf_holding(
     if sheets_service.is_available():
         current_price = sheets_service.get_price_for_ticker(holding.jse_ticker)
         if current_price:
-            price_updated_at = datetime.utcnow()
+            price_updated_at = get_sast_now()
     
     new_holding = models.ETFHolding(
         user_id=current_user.id,
@@ -680,17 +687,18 @@ async def bulk_import_holdings(
             target_pct = float(row['target_percentage'])
             region = row['region'].strip()
             
+
             if shares < 0:
                 errors.append(f"Row {row_num}: Shares cannot be negative")
                 failed_count += 1
                 continue
-            
+
             current_price = prices_map.get(jse_ticker)
-            price_updated_at = datetime.utcnow() if current_price else None
-            
+            price_updated_at = get_sast_now() if current_price else None
+
             # Calculate cost_basis as shares × current_price (initialize at current value)
             cost_basis = (shares * current_price) if (shares and current_price) else 0
-            
+
             if existing:
                 # UPDATE existing holding
                 existing.shares = shares
@@ -718,16 +726,16 @@ async def bulk_import_holdings(
                 )
                 db.add(new_holding)
                 created_count += 1
-            
+
         except ValueError as e:
             errors.append(f"Row {row_num}: Invalid number format - {str(e)}")
             failed_count += 1
         except Exception as e:
             errors.append(f"Row {row_num}: {str(e)}")
             failed_count += 1
-    
+
     db.commit()
-    
+
     return {
         "created": created_count,
         "updated": updated_count,
@@ -751,18 +759,18 @@ async def get_etf_transactions(
     query = db.query(models.ETFTransaction).filter(
         models.ETFTransaction.user_id == current_user.id
     )
-    
+
     if holding_id:
         query = query.filter(models.ETFTransaction.holding_id == holding_id)
-    
+
     transactions = query.order_by(models.ETFTransaction.transaction_date.desc()).all()
-    
+
     result = []
     for t in transactions:
         holding = db.query(models.ETFHolding).filter(
             models.ETFHolding.id == t.holding_id
         ).first()
-        
+
         result.append({
             "id": t.id,
             "holding_id": t.holding_id,
@@ -774,7 +782,7 @@ async def get_etf_transactions(
             "total_value": t.total_value,
             "transaction_date": (t.transaction_date.isoformat() + "Z") if t.transaction_date else None
         })
-    
+
     return result
 
 
@@ -793,36 +801,36 @@ async def create_etf_transaction(
         models.ETFHolding.id == transaction.holding_id,
         models.ETFHolding.user_id == current_user.id
     ).first()
-    
+
     if not holding:
         raise HTTPException(status_code=404, detail="Holding not found")
-    
+
     if transaction.transaction_type not in ("BUY", "SELL"):
         raise HTTPException(status_code=400, detail="Transaction type must be 'BUY' or 'SELL'")
-    
+
     if transaction.shares <= 0:
         raise HTTPException(status_code=400, detail="Shares must be positive")
-    
+
     if transaction.price_per_share <= 0:
         raise HTTPException(status_code=400, detail="Price per share must be positive")
-    
+
     # For SELL, ensure user has enough shares
     if transaction.transaction_type == "SELL" and holding.shares < transaction.shares:
         raise HTTPException(
             status_code=400,
             detail=f"Insufficient shares. You have {holding.shares}, trying to sell {transaction.shares}"
         )
-    
+
     # Parse transaction date
-    trans_date = datetime.utcnow()
+    trans_date = get_sast_now()
     if transaction.transaction_date:
         try:
             trans_date = datetime.fromisoformat(transaction.transaction_date.replace('Z', '+00:00'))
         except ValueError:
-            trans_date = datetime.utcnow()
-    
+            trans_date = get_sast_now()
+
     total_value = transaction.shares * transaction.price_per_share
-    
+
     # Create transaction record
     new_transaction = models.ETFTransaction(
         user_id=current_user.id,
@@ -833,18 +841,18 @@ async def create_etf_transaction(
         total_value=total_value,
         transaction_date=trans_date
     )
-    
+
     db.add(new_transaction)
-    
+
     # Update holding share count
     if transaction.transaction_type == "BUY":
         holding.shares += transaction.shares
     else:  # SELL
         holding.shares -= transaction.shares
-    
+
     db.commit()
     db.refresh(new_transaction)
-    
+
     # Record transaction snapshot for historical tracking
     # This captures portfolio state at the moment of the transaction
     try:
@@ -853,7 +861,7 @@ async def create_etf_transaction(
         # Don't fail the transaction if snapshot fails
         print(f"Warning: Failed to record transaction snapshot: {e}")
         snapshot_result = None
-    
+
     return {
         "id": new_transaction.id,
         "holding_id": new_transaction.holding_id,
@@ -880,25 +888,25 @@ async def sync_etf_prices(
 ):
     """Manually trigger a price sync from Google Sheets."""
     sheets_service = get_sheets_service()
-    
+
     if not sheets_service.is_available():
         raise HTTPException(
             status_code=503,
             detail="Google Sheets service is not available. Check credentials."
         )
-    
+
     # Get all prices from sheets
     all_prices = sheets_service.get_all_etf_prices()
     prices_map = {p['jse_ticker']: p['current_price'] for p in all_prices}
-    
+
     # Update all user holdings
     holdings = db.query(models.ETFHolding).filter(
         models.ETFHolding.user_id == current_user.id
     ).all()
-    
+
     updated_count = 0
-    now = datetime.utcnow()
-    
+    now = get_sast_now()
+
     for holding in holdings:
         if holding.jse_ticker in prices_map:
             new_price = prices_map[holding.jse_ticker]
@@ -906,12 +914,12 @@ async def sync_etf_prices(
                 holding.current_price = new_price
                 holding.price_updated_at = now
                 updated_count += 1
-    
+
     db.commit()
-    
+
     # Update the global last sync time so the UI shows the correct time
     set_last_sync_time(now)
-    
+
     return {
         "status": "success",
         "updated_count": updated_count,
@@ -927,31 +935,31 @@ async def add_etf_to_sheet(
 ):
     """Add a new ETF to the Google Sheet (creates row with GOOGLEFINANCE formula)."""
     sheets_service = get_sheets_service()
-    
+
     if not sheets_service.is_available():
         raise HTTPException(
             status_code=503,
             detail="Google Sheets service is not available. Check credentials."
         )
-    
+
     # Check if ticker already exists
     if sheets_service.check_ticker_exists(request.jse_ticker):
         raise HTTPException(
             status_code=400,
             detail=f"Ticker {request.jse_ticker} already exists in the sheet"
         )
-    
+
     success = sheets_service.add_etf_to_sheet(
         request.jse_ticker,
         request.etf_name
     )
-    
+
     if not success:
         raise HTTPException(
             status_code=500,
             detail="Failed to add ETF to Google Sheet"
         )
-    
+
     return {
         "status": "success",
         "message": f"Added {request.jse_ticker} to Google Sheet"
@@ -964,13 +972,13 @@ async def get_sheet_prices(
 ):
     """Get all ETF prices directly from Google Sheets (for debugging/reference)."""
     sheets_service = get_sheets_service()
-    
+
     if not sheets_service.is_available():
         raise HTTPException(
             status_code=503,
             detail="Google Sheets service is not available. Check credentials."
         )
-    
+
     return sheets_service.get_all_etf_prices()
 
 
@@ -999,7 +1007,7 @@ async def get_bond_holdings(
     holdings = db.query(models.BondHolding).filter(
         models.BondHolding.user_id == current_user.id
     ).all()
-    
+
     result = []
     for h in holdings:
         result.append({
@@ -1010,7 +1018,7 @@ async def get_bond_holdings(
             "target_percentage": h.target_percentage,
             "updated_at": (h.updated_at.isoformat() + "Z") if h.updated_at else None
         })
-    
+
     return result
 
 
@@ -1026,13 +1034,13 @@ async def create_bond_holding(
         models.BondHolding.user_id == current_user.id,
         models.BondHolding.bond_name == holding.bond_name
     ).first()
-    
+
     if existing:
         raise HTTPException(
             status_code=400,
             detail=f"Bond holding '{holding.bond_name}' already exists. Use PUT to update."
         )
-    
+
     new_holding = models.BondHolding(
         user_id=current_user.id,
         bond_name=holding.bond_name,
@@ -1040,11 +1048,11 @@ async def create_bond_holding(
         current_value=holding.current_value,
         target_percentage=holding.target_percentage
     )
-    
+
     db.add(new_holding)
     db.commit()
     db.refresh(new_holding)
-    
+
     return {
         "id": new_holding.id,
         "bond_name": new_holding.bond_name,
@@ -1067,22 +1075,22 @@ async def update_bond_holding(
         models.BondHolding.id == holding_id,
         models.BondHolding.user_id == current_user.id
     ).first()
-    
+
     if not holding:
         raise HTTPException(status_code=404, detail="Bond holding not found")
-    
+
     if update.current_value is not None:
         holding.current_value = update.current_value
     if update.target_percentage is not None:
         holding.target_percentage = update.target_percentage
     if update.region is not None:
         holding.region = update.region
-    
-    holding.updated_at = datetime.utcnow()
-    
+
+    holding.updated_at = get_sast_now()
+
     db.commit()
     db.refresh(holding)
-    
+
     return {
         "id": holding.id,
         "bond_name": holding.bond_name,
@@ -1104,22 +1112,22 @@ async def delete_bond_holding(
         models.BondHolding.id == holding_id,
         models.BondHolding.user_id == current_user.id
     ).first()
-    
+
     if not holding:
         raise HTTPException(status_code=404, detail="Bond holding not found")
-    
+
     bond_name = holding.bond_name
-    
+
     # Delete associated transactions first
     db.query(models.BondTransaction).filter(
         models.BondTransaction.holding_id == holding_id
     ).delete()
-    
+
     db.delete(holding)
     db.commit()
-    
+
     return {
-        "status": "success", 
+        "status": "success",
         "message": f"Bond holding '{bond_name}' deleted"
     }
 
@@ -1138,18 +1146,18 @@ async def get_bond_transactions(
     query = db.query(models.BondTransaction).filter(
         models.BondTransaction.user_id == current_user.id
     )
-    
+
     if holding_id:
         query = query.filter(models.BondTransaction.holding_id == holding_id)
-    
+
     transactions = query.order_by(models.BondTransaction.transaction_date.desc()).all()
-    
+
     result = []
     for t in transactions:
         holding = db.query(models.BondHolding).filter(
             models.BondHolding.id == t.holding_id
         ).first()
-        
+
         result.append({
             "id": t.id,
             "holding_id": t.holding_id,
@@ -1158,7 +1166,7 @@ async def get_bond_transactions(
             "amount": t.amount,
             "transaction_date": (t.transaction_date.isoformat() + "Z") if t.transaction_date else None
         })
-    
+
     return result
 
 
@@ -1177,31 +1185,31 @@ async def create_bond_transaction(
         models.BondHolding.id == transaction.holding_id,
         models.BondHolding.user_id == current_user.id
     ).first()
-    
+
     if not holding:
         raise HTTPException(status_code=404, detail="Bond holding not found")
-    
+
     if transaction.transaction_type not in ("BUY", "SELL"):
         raise HTTPException(status_code=400, detail="Transaction type must be 'BUY' or 'SELL'")
-    
+
     if transaction.amount <= 0:
         raise HTTPException(status_code=400, detail="Amount must be positive")
-    
+
     # For SELL, ensure user has enough value
     if transaction.transaction_type == "SELL" and holding.current_value < transaction.amount:
         raise HTTPException(
             status_code=400,
             detail=f"Insufficient value. Current value is R{holding.current_value}, trying to sell R{transaction.amount}"
         )
-    
+
     # Parse transaction date
-    trans_date = datetime.utcnow()
+    trans_date = get_sast_now()
     if transaction.transaction_date:
         try:
             trans_date = datetime.fromisoformat(transaction.transaction_date.replace('Z', '+00:00'))
         except ValueError:
-            trans_date = datetime.utcnow()
-    
+            trans_date = get_sast_now()
+
     # Create transaction record
     new_transaction = models.BondTransaction(
         user_id=current_user.id,
@@ -1210,12 +1218,12 @@ async def create_bond_transaction(
         amount=transaction.amount,
         transaction_date=trans_date
     )
-    
+
     db.add(new_transaction)
-    
+
     # Update holding value and cost_basis
     current_cost_basis = holding.cost_basis or 0
-    
+
     if transaction.transaction_type == "BUY":
         holding.current_value += transaction.amount
         # Add to cost_basis
@@ -1228,15 +1236,15 @@ async def create_bond_transaction(
         else:
             holding.cost_basis = 0
         holding.current_value -= transaction.amount
-    
-    holding.updated_at = datetime.utcnow()
-    
+
+    holding.updated_at = get_sast_now()
+
     db.commit()
     db.refresh(new_transaction)
-    
+
     # Calculate unrealized gain for the bond
     unrealized_gain = (holding.current_value or 0) - (holding.cost_basis or 0)
-    
+
     return {
         "id": new_transaction.id,
         "holding_id": new_transaction.holding_id,
@@ -1263,14 +1271,14 @@ async def initialize_cost_basis(
     One-time initialization: Set cost_basis = current_value for all holdings.
     Use this when you have existing holdings but don't know the original purchase price.
     This sets your starting point at 0% gain/loss.
-    
+
     Works for both ETFs (cost_basis = shares × price) and Bonds (cost_basis = current_value).
     """
     # Initialize ETF holdings
     etf_holdings = db.query(models.ETFHolding).filter(
         models.ETFHolding.user_id == current_user.id
     ).all()
-    
+
     etf_updated = []
     for h in etf_holdings:
         if h.shares and h.current_price:
@@ -1283,12 +1291,12 @@ async def initialize_cost_basis(
                 'value': h.shares * h.current_price,
                 'cost_basis': h.cost_basis
             })
-    
+
     # Initialize Bond holdings
     bond_holdings = db.query(models.BondHolding).filter(
         models.BondHolding.user_id == current_user.id
     ).all()
-    
+
     bond_updated = []
     for b in bond_holdings:
         if b.current_value:
@@ -1300,11 +1308,11 @@ async def initialize_cost_basis(
                 'value': b.current_value,
                 'cost_basis': b.cost_basis
             })
-    
+
     db.commit()
-    
+
     all_updated = etf_updated + bond_updated
-    
+
     return {
         'status': 'success',
         'message': f'Initialized cost_basis for {len(etf_updated)} ETFs and {len(bond_updated)} Bonds',
@@ -1323,13 +1331,13 @@ async def trigger_snapshot(
     Manually trigger a portfolio snapshot for debugging.
     Records current portfolio state to history tables.
     """
-    now = datetime.utcnow()
-    
+    now = get_sast_now()
+
     # Calculate portfolio value and contributions
     total_value, holdings_breakdown = history.calculate_portfolio_value(db, current_user.id)
     total_contributions = history.calculate_total_contributions(db, current_user.id)
     total_growth = total_value - total_contributions
-    
+
     # Record portfolio value history
     portfolio_record = models.PortfolioValueHistory(
         user_id=current_user.id,
@@ -1403,8 +1411,8 @@ async def get_portfolio_history(
     
     Range options: "1m", "3m", "6m", "1y", "all"
     """
-    if range not in ["1m", "3m", "6m", "1y", "all"]:
-        raise HTTPException(status_code=400, detail="Invalid range. Use: 1m, 3m, 6m, 1y, all")
+    if range not in ["1d", "1m", "3m", "6m", "1y", "all"]:
+        raise HTTPException(status_code=400, detail="Invalid range. Use: 1d, 1m, 3m, 6m, 1y, all")
     
     data = history.get_portfolio_history(db, current_user.id, range)
     
@@ -1562,3 +1570,87 @@ async def get_etf_price_history(
         "range": range,
         "data": data
     }
+
+
+# =====================================================
+# Admin & Debug Endpoints
+# =====================================================
+
+@app.post("/api/admin/trigger-sync")
+async def trigger_manual_sync(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """
+    Manually trigger a price sync and portfolio snapshot.
+    Useful for debugging or forcing an update.
+    """
+    try:
+        # 1. Sync prices
+        await sync_all_prices()
+        
+        # 2. Record snapshot
+        await record_hourly_snapshot()
+        
+        return {"status": "success", "message": "Manual sync and snapshot completed"}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error during manual sync: {str(e)}")
+
+
+@app.get("/api/admin/history/etf-prices")
+async def get_admin_etf_price_history(
+    limit: int = 50,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """Get raw ETF price history table data."""
+    prices = db.query(models.ETFPriceHistory).order_by(
+        models.ETFPriceHistory.recorded_at.desc()
+    ).limit(limit).all()
+    return prices
+
+
+@app.get("/api/admin/history/portfolio-values")
+async def get_admin_portfolio_history(
+    limit: int = 50,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """Get raw portfolio value history table data."""
+    values = db.query(models.PortfolioValueHistory).filter(
+        models.PortfolioValueHistory.user_id == current_user.id
+    ).order_by(
+        models.PortfolioValueHistory.recorded_at.desc()
+    ).limit(limit).all()
+    return values
+
+
+@app.get("/api/admin/history/holding-values")
+async def get_admin_holding_history(
+    limit: int = 50,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """Get raw holding value history table data."""
+    values = db.query(models.HoldingValueHistory).filter(
+        models.HoldingValueHistory.user_id == current_user.id
+    ).order_by(
+        models.HoldingValueHistory.recorded_at.desc()
+    ).limit(limit).all()
+    return values
+
+
+@app.get("/api/admin/history/daily-summaries")
+async def get_admin_daily_summaries(
+    limit: int = 50,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """Get raw daily summary table data."""
+    summaries = db.query(models.DailyPortfolioSummary).filter(
+        models.DailyPortfolioSummary.user_id == current_user.id
+    ).order_by(
+        models.DailyPortfolioSummary.date.desc()
+    ).limit(limit).all()
+    return summaries
