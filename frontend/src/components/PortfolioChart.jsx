@@ -14,6 +14,7 @@ import { TrendingUp, TrendingDown, Calendar, RefreshCw } from 'lucide-react'
 
 const TIME_RANGES = [
     { key: '1d', label: '1D' },
+    { key: '7d', label: '7D' },
     { key: '1m', label: '1M' },
     { key: '3m', label: '3M' },
     { key: '6m', label: '6M' },
@@ -61,6 +62,9 @@ export default function PortfolioChart() {
         }
         if (selectedRange === '1d') {
             return date.toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' })
+        }
+        if (selectedRange === '7d') {
+            return date.toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric' })
         }
         return date.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })
     }
@@ -157,8 +161,8 @@ export default function PortfolioChart() {
                                 key={key}
                                 onClick={() => setSelectedRange(key)}
                                 className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${selectedRange === key
-                                        ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
-                                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                                    ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
+                                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
                                     }`}
                             >
                                 {label}

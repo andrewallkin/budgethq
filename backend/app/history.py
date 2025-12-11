@@ -525,7 +525,7 @@ def get_portfolio_history(
     Get portfolio history data for charting.
     Automatically selects the right granularity based on range.
     
-    range_param options: "1d", "1m", "3m", "6m", "1y", "all"
+    range_param options: "1d", "7d", "1m", "3m", "6m", "1y", "all"
     
     Returns list of {date, contributions, gain, total} for stacked area chart.
     """
@@ -535,6 +535,11 @@ def get_portfolio_history(
     if range_param == "1d":
         # Use hourly data, no aggregation
         start_date = now - timedelta(hours=24)
+        return _get_hourly_history(db, user_id, start_date, now)
+        
+    elif range_param == "7d":
+        # Use hourly data for 7 days
+        start_date = now - timedelta(days=7)
         return _get_hourly_history(db, user_id, start_date, now)
 
     elif range_param == "1m":
