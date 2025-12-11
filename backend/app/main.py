@@ -391,10 +391,12 @@ async def save_tfsa_contributions(
     ).delete()
     
     for deposit in data.deposits:
+        # Handle date strings with 'Z' suffix (e.g., '2025-09-16Z' -> '2025-09-16')
+        deposit_date_str = deposit.date.replace('Z', '').split('T')[0] if deposit.date else None
         db.add(models.TFSADeposit(
             user_id=current_user.id,
             amount=deposit.amount,
-            deposit_date=date.fromisoformat(deposit.date) if deposit.date else None,
+            deposit_date=date.fromisoformat(deposit_date_str) if deposit_date_str else None,
             financial_year_start=data.financial_year_start
         ))
     
@@ -686,6 +688,9 @@ async def bulk_import_holdings(
             current_price = prices_map.get(jse_ticker)
             price_updated_at = datetime.utcnow() if current_price else None
             
+            # Calculate cost_basis as shares × current_price (initialize at current value)
+            cost_basis = (shares * current_price) if (shares and current_price) else 0
+            
             if existing:
                 # UPDATE existing holding
                 existing.shares = shares
@@ -695,6 +700,8 @@ async def bulk_import_holdings(
                 if current_price:
                     existing.current_price = current_price
                     existing.price_updated_at = price_updated_at
+                # Update cost_basis to match new share count (reset to current value)
+                existing.cost_basis = cost_basis
                 updated_count += 1
             else:
                 # CREATE new holding
@@ -706,7 +713,8 @@ async def bulk_import_holdings(
                     shares=shares,
                     target_percentage=target_pct,
                     current_price=current_price,
-                    price_updated_at=price_updated_at
+                    price_updated_at=price_updated_at,
+                    cost_basis=cost_basis  # Initialize cost_basis
                 )
                 db.add(new_holding)
                 created_count += 1
@@ -1205,16 +1213,29 @@ async def create_bond_transaction(
     
     db.add(new_transaction)
     
-    # Update holding value
+    # Update holding value and cost_basis
+    current_cost_basis = holding.cost_basis or 0
+    
     if transaction.transaction_type == "BUY":
         holding.current_value += transaction.amount
+        # Add to cost_basis
+        holding.cost_basis = current_cost_basis + transaction.amount
     else:  # SELL
+        # Reduce cost_basis proportionally
+        if holding.current_value > 0:
+            proportion_sold = transaction.amount / holding.current_value
+            holding.cost_basis = current_cost_basis * (1 - proportion_sold)
+        else:
+            holding.cost_basis = 0
         holding.current_value -= transaction.amount
     
     holding.updated_at = datetime.utcnow()
     
     db.commit()
     db.refresh(new_transaction)
+    
+    # Calculate unrealized gain for the bond
+    unrealized_gain = (holding.current_value or 0) - (holding.cost_basis or 0)
     
     return {
         "id": new_transaction.id,
@@ -1223,13 +1244,152 @@ async def create_bond_transaction(
         "transaction_type": new_transaction.transaction_type,
         "amount": new_transaction.amount,
         "transaction_date": new_transaction.transaction_date.isoformat() + "Z",
-        "updated_value": holding.current_value
+        "updated_value": holding.current_value,
+        "cost_basis": holding.cost_basis,
+        "unrealized_gain": round(unrealized_gain, 2)
     }
 
 
 # =====================================================
 # Portfolio History & Analytics Endpoints
 # =====================================================
+
+@app.post("/api/portfolio/initialize-cost-basis")
+async def initialize_cost_basis(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """
+    One-time initialization: Set cost_basis = current_value for all holdings.
+    Use this when you have existing holdings but don't know the original purchase price.
+    This sets your starting point at 0% gain/loss.
+    
+    Works for both ETFs (cost_basis = shares × price) and Bonds (cost_basis = current_value).
+    """
+    # Initialize ETF holdings
+    etf_holdings = db.query(models.ETFHolding).filter(
+        models.ETFHolding.user_id == current_user.id
+    ).all()
+    
+    etf_updated = []
+    for h in etf_holdings:
+        if h.shares and h.current_price:
+            h.cost_basis = h.shares * h.current_price
+            etf_updated.append({
+                'type': 'ETF',
+                'holding_id': h.id,
+                'name': h.etf_name,
+                'jse_ticker': h.jse_ticker,
+                'value': h.shares * h.current_price,
+                'cost_basis': h.cost_basis
+            })
+    
+    # Initialize Bond holdings
+    bond_holdings = db.query(models.BondHolding).filter(
+        models.BondHolding.user_id == current_user.id
+    ).all()
+    
+    bond_updated = []
+    for b in bond_holdings:
+        if b.current_value:
+            b.cost_basis = b.current_value
+            bond_updated.append({
+                'type': 'BOND',
+                'holding_id': b.id,
+                'name': b.bond_name,
+                'value': b.current_value,
+                'cost_basis': b.cost_basis
+            })
+    
+    db.commit()
+    
+    all_updated = etf_updated + bond_updated
+    
+    return {
+        'status': 'success',
+        'message': f'Initialized cost_basis for {len(etf_updated)} ETFs and {len(bond_updated)} Bonds',
+        'etf_count': len(etf_updated),
+        'bond_count': len(bond_updated),
+        'holdings': all_updated
+    }
+
+
+@app.post("/api/portfolio/trigger-snapshot")
+async def trigger_snapshot(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """
+    Manually trigger a portfolio snapshot for debugging.
+    Records current portfolio state to history tables.
+    """
+    now = datetime.utcnow()
+    
+    # Calculate portfolio value and contributions
+    total_value, holdings_breakdown = history.calculate_portfolio_value(db, current_user.id)
+    total_contributions = history.calculate_total_contributions(db, current_user.id)
+    total_growth = total_value - total_contributions
+    
+    # Record portfolio value history
+    portfolio_record = models.PortfolioValueHistory(
+        user_id=current_user.id,
+        total_value=total_value,
+        total_contributions=total_contributions,
+        total_growth=total_growth,
+        recorded_at=now,
+        snapshot_type="manual"
+    )
+    db.add(portfolio_record)
+    
+    # Record holding value history for each ETF (skip bonds - they have negative IDs)
+    holdings_recorded = 0
+    for holding_id, data in holdings_breakdown.items():
+        # Skip bonds (negative IDs) - HoldingValueHistory only tracks ETFs
+        if holding_id < 0 or data.get('type') == 'BOND':
+            continue
+        
+        holding_record = models.HoldingValueHistory(
+            user_id=current_user.id,
+            holding_id=holding_id,
+            jse_ticker=data['jse_ticker'],
+            shares=data['shares'],
+            price=data['price'],
+            value=data['value'],
+            cost_basis=data['cost_basis'],
+            unrealized_gain=data['unrealized_gain'],
+            recorded_at=now,
+            snapshot_type="manual"
+        )
+        db.add(holding_record)
+        holdings_recorded += 1
+    
+    # Record ETF prices
+    prices_recorded = 0
+    tickers_seen = set()
+    for data in holdings_breakdown.values():
+        if data.get('jse_ticker') and data['jse_ticker'] not in tickers_seen and data.get('price'):
+            price_record = models.ETFPriceHistory(
+                jse_ticker=data['jse_ticker'],
+                price=data['price'],
+                recorded_at=now,
+                snapshot_type="manual"
+            )
+            db.add(price_record)
+            tickers_seen.add(data['jse_ticker'])
+            prices_recorded += 1
+    
+    db.commit()
+    
+    return {
+        'status': 'success',
+        'snapshot_time': now.isoformat() + 'Z',
+        'total_value': round(total_value, 2),
+        'total_contributions': round(total_contributions, 2),
+        'total_growth': round(total_growth, 2),
+        'holdings_recorded': holdings_recorded,
+        'prices_recorded': prices_recorded
+    }
+
 
 @app.get("/api/portfolio/history")
 async def get_portfolio_history(

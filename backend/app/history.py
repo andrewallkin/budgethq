@@ -33,13 +33,52 @@ def calculate_total_contributions(db: Session, user_id: int, as_of_date: Optiona
     return float(historical_total) + float(deposits_total)
 
 
-def calculate_holding_cost_basis(db: Session, holding_id: int) -> float:
+def update_cost_basis_for_transaction(db: Session, holding_id: int, transaction_id: int) -> float:
     """
-    Calculate cost basis for a holding from transaction history.
-    Cost basis = sum of (shares * price) for all BUY transactions
-                - sum of (shares * price) for all SELL transactions (weighted average)
+    Update cost_basis based on a specific transaction.
     
-    For simplicity, we use total buy value minus total sell value.
+    - BUY: Adds transaction value to existing cost_basis
+    - SELL: Reduces cost_basis proportionally (weighted average method)
+    
+    This preserves any initial cost_basis set during CSV import.
+    """
+    holding = db.query(models.ETFHolding).filter(
+        models.ETFHolding.id == holding_id
+    ).first()
+    
+    if not holding:
+        return 0.0
+    
+    transaction = db.query(models.ETFTransaction).filter(
+        models.ETFTransaction.id == transaction_id
+    ).first()
+    
+    if not transaction:
+        return holding.cost_basis or 0.0
+    
+    current_cost_basis = holding.cost_basis or 0.0
+    
+    if transaction.transaction_type == "BUY":
+        # Add the purchase cost to existing cost_basis
+        holding.cost_basis = current_cost_basis + (transaction.total_value or 0)
+    
+    elif transaction.transaction_type == "SELL":
+        # Reduce cost_basis proportionally
+        # If selling 20% of shares, reduce cost_basis by 20%
+        shares_before_sale = holding.shares + transaction.shares  # shares already reduced
+        if shares_before_sale > 0:
+            proportion_sold = transaction.shares / shares_before_sale
+            holding.cost_basis = current_cost_basis * (1 - proportion_sold)
+        else:
+            holding.cost_basis = 0
+    
+    return holding.cost_basis
+
+
+def update_holding_cost_basis(db: Session, holding_id: int) -> float:
+    """
+    Legacy function: Recalculate cost_basis from all transaction history.
+    Only use this for full recalculation, not for incremental updates.
     """
     transactions = db.query(models.ETFTransaction).filter(
         models.ETFTransaction.holding_id == holding_id
@@ -54,15 +93,7 @@ def calculate_holding_cost_basis(db: Session, holding_id: int) -> float:
         elif t.transaction_type == "SELL":
             total_sell_value += t.total_value or 0
     
-    return max(0, total_buy_value - total_sell_value)
-
-
-def update_holding_cost_basis(db: Session, holding_id: int) -> float:
-    """
-    Update the cost_basis field on an ETFHolding based on transaction history.
-    Returns the calculated cost basis.
-    """
-    cost_basis = calculate_holding_cost_basis(db, holding_id)
+    cost_basis = max(0, total_buy_value - total_sell_value)
     
     holding = db.query(models.ETFHolding).filter(
         models.ETFHolding.id == holding_id
@@ -78,7 +109,9 @@ def calculate_portfolio_value(db: Session, user_id: int) -> Tuple[float, Dict[in
     """
     Calculate current portfolio value for a user.
     Returns (total_value, holdings_breakdown) where holdings_breakdown is:
-    {holding_id: {shares, price, value, cost_basis, unrealized_gain, jse_ticker}}
+    {holding_id: {shares, price, value, cost_basis, unrealized_gain, jse_ticker, type}}
+    
+    Note: ETF holding_ids are positive, Bond holding_ids use negative offset to avoid collision.
     """
     etf_holdings = db.query(models.ETFHolding).filter(
         models.ETFHolding.user_id == user_id
@@ -97,18 +130,37 @@ def calculate_portfolio_value(db: Session, user_id: int) -> Tuple[float, Dict[in
         unrealized_gain = value - cost_basis
         
         holdings_breakdown[h.id] = {
+            'type': 'ETF',
             'shares': h.shares or 0,
             'price': h.current_price or 0,
             'value': value,
             'cost_basis': cost_basis,
             'unrealized_gain': unrealized_gain,
-            'jse_ticker': h.jse_ticker
+            'jse_ticker': h.jse_ticker,
+            'name': h.etf_name
         }
         total_value += value
     
-    # Add bond values (no per-holding tracking for bonds in history)
+    # Add bond values with cost_basis tracking
     for b in bond_holdings:
-        total_value += b.current_value or 0
+        value = b.current_value or 0
+        cost_basis = b.cost_basis or 0
+        unrealized_gain = value - cost_basis
+        
+        # Use negative ID offset for bonds to avoid collision with ETF IDs
+        bond_key = -b.id
+        holdings_breakdown[bond_key] = {
+            'type': 'BOND',
+            'shares': None,
+            'price': None,
+            'value': value,
+            'cost_basis': cost_basis,
+            'unrealized_gain': unrealized_gain,
+            'jse_ticker': None,
+            'name': b.bond_name,
+            'bond_id': b.id
+        }
+        total_value += value
     
     return total_value, holdings_breakdown
 
@@ -167,8 +219,12 @@ def record_hourly_snapshot(db: Session) -> dict:
         )
         db.add(portfolio_record)
         
-        # Record holding value history for each ETF
+        # Record holding value history for each ETF (skip bonds - they have negative IDs)
         for holding_id, data in holdings_breakdown.items():
+            # Skip bonds (negative IDs) - HoldingValueHistory only tracks ETFs
+            if holding_id < 0 or data.get('type') == 'BOND':
+                continue
+            
             holding_record = models.HoldingValueHistory(
                 user_id=user_id,
                 holding_id=holding_id,
@@ -197,13 +253,13 @@ def record_transaction_snapshot(db: Session, user_id: int, transaction_id: int) 
     """
     now = datetime.utcnow()
     
-    # Update cost basis for the holding involved
+    # Update cost basis for the holding involved (incremental update)
     transaction = db.query(models.ETFTransaction).filter(
         models.ETFTransaction.id == transaction_id
     ).first()
     
     if transaction:
-        update_holding_cost_basis(db, transaction.holding_id)
+        update_cost_basis_for_transaction(db, transaction.holding_id, transaction_id)
     
     # Calculate portfolio state
     total_value, holdings_breakdown = calculate_portfolio_value(db, user_id)
@@ -595,24 +651,52 @@ def get_holding_attribution(db: Session, user_id: int) -> List[Dict]:
     """
     Get per-holding gain/loss attribution for the current portfolio state.
     Returns breakdown of which holdings are driving gains/losses.
+    Includes both ETFs and Bonds.
     """
-    holdings = db.query(models.ETFHolding).filter(
+    result = []
+    
+    # ETF holdings
+    etf_holdings = db.query(models.ETFHolding).filter(
         models.ETFHolding.user_id == user_id
     ).all()
     
-    result = []
-    for h in holdings:
+    for h in etf_holdings:
         value = (h.shares or 0) * (h.current_price or 0)
         cost_basis = h.cost_basis or 0
         unrealized_gain = value - cost_basis
         gain_percent = (unrealized_gain / cost_basis * 100) if cost_basis > 0 else 0
         
         result.append({
+            'type': 'ETF',
             'holding_id': h.id,
             'jse_ticker': h.jse_ticker,
-            'etf_name': h.etf_name,
+            'name': h.etf_name,
             'shares': h.shares,
             'current_price': h.current_price,
+            'value': round(value, 2),
+            'cost_basis': round(cost_basis, 2),
+            'unrealized_gain': round(unrealized_gain, 2),
+            'gain_percent': round(gain_percent, 2)
+        })
+    
+    # Bond holdings
+    bond_holdings = db.query(models.BondHolding).filter(
+        models.BondHolding.user_id == user_id
+    ).all()
+    
+    for b in bond_holdings:
+        value = b.current_value or 0
+        cost_basis = b.cost_basis or 0
+        unrealized_gain = value - cost_basis
+        gain_percent = (unrealized_gain / cost_basis * 100) if cost_basis > 0 else 0
+        
+        result.append({
+            'type': 'BOND',
+            'holding_id': b.id,
+            'jse_ticker': None,
+            'name': b.bond_name,
+            'shares': None,
+            'current_price': None,
             'value': round(value, 2),
             'cost_basis': round(cost_basis, 2),
             'unrealized_gain': round(unrealized_gain, 2),

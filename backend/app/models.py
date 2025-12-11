@@ -129,6 +129,7 @@ class BondHolding(Base):
     region = Column(String)              # e.g., "South Africa"
     current_value = Column(Float, default=0)  # Total value (no shares/price tracking)
     target_percentage = Column(Float, default=0)
+    cost_basis = Column(Float, default=0)  # Total cost of bond purchases
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     created_at = Column(DateTime, default=datetime.utcnow)
 
