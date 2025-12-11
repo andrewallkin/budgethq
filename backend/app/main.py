@@ -7,7 +7,7 @@ from typing import List, Optional
 from datetime import date, datetime
 import csv
 import io
-from . import models, database, auth
+from . import models, database, auth, history
 from .logic import calculate_monthly_tax_with_age, calculate_uif, calculate_rebalancing
 from .sheets_service import get_sheets_service
 from .scheduler import start_scheduler, stop_scheduler, sync_all_prices, get_last_sync_time, set_last_sync_time
@@ -837,6 +837,15 @@ async def create_etf_transaction(
     db.commit()
     db.refresh(new_transaction)
     
+    # Record transaction snapshot for historical tracking
+    # This captures portfolio state at the moment of the transaction
+    try:
+        snapshot_result = history.record_transaction_snapshot(db, current_user.id, new_transaction.id)
+    except Exception as e:
+        # Don't fail the transaction if snapshot fails
+        print(f"Warning: Failed to record transaction snapshot: {e}")
+        snapshot_result = None
+    
     return {
         "id": new_transaction.id,
         "holding_id": new_transaction.holding_id,
@@ -847,7 +856,8 @@ async def create_etf_transaction(
         "price_per_share": new_transaction.price_per_share,
         "total_value": new_transaction.total_value,
         "transaction_date": new_transaction.transaction_date.isoformat() + "Z",
-        "updated_share_count": holding.shares
+        "updated_share_count": holding.shares,
+        "cost_basis": holding.cost_basis
     }
 
 
@@ -1214,4 +1224,181 @@ async def create_bond_transaction(
         "amount": new_transaction.amount,
         "transaction_date": new_transaction.transaction_date.isoformat() + "Z",
         "updated_value": holding.current_value
+    }
+
+
+# =====================================================
+# Portfolio History & Analytics Endpoints
+# =====================================================
+
+@app.get("/api/portfolio/history")
+async def get_portfolio_history(
+    range: str = "1m",
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """
+    Get portfolio value history for charting.
+    Returns data formatted for stacked area chart (contributions vs gains).
+    
+    Range options: "1m", "3m", "6m", "1y", "all"
+    """
+    if range not in ["1m", "3m", "6m", "1y", "all"]:
+        raise HTTPException(status_code=400, detail="Invalid range. Use: 1m, 3m, 6m, 1y, all")
+    
+    data = history.get_portfolio_history(db, current_user.id, range)
+    
+    # Calculate summary statistics
+    if data:
+        period_start_value = data[0]['total']
+        period_end_value = data[-1]['total']
+        period_change = period_end_value - period_start_value
+        period_change_percent = (period_change / period_start_value * 100) if period_start_value > 0 else 0
+    else:
+        period_start_value = period_end_value = period_change = period_change_percent = 0
+    
+    return {
+        "range": range,
+        "data": data,
+        "summary": {
+            "period_start_value": round(period_start_value, 2),
+            "period_end_value": round(period_end_value, 2),
+            "period_change": round(period_change, 2),
+            "period_change_percent": round(period_change_percent, 2)
+        }
+    }
+
+
+@app.get("/api/portfolio/attribution")
+async def get_portfolio_attribution(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """
+    Get per-holding gain/loss attribution.
+    Shows which holdings are driving portfolio gains/losses.
+    """
+    return history.get_holding_attribution(db, current_user.id)
+
+
+@app.get("/api/portfolio/growth-breakdown")
+async def get_growth_breakdown(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """
+    Get breakdown of contributions vs growth.
+    Shows total deposited vs total investment returns.
+    """
+    return history.get_growth_breakdown(db, current_user.id)
+
+
+@app.get("/api/portfolio/daily-summary")
+async def get_daily_summaries(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """
+    Get daily EOD summaries for a date range.
+    """
+    query = db.query(models.DailyPortfolioSummary).filter(
+        models.DailyPortfolioSummary.user_id == current_user.id
+    )
+    
+    if start_date:
+        try:
+            start = date.fromisoformat(start_date)
+            query = query.filter(models.DailyPortfolioSummary.date >= start)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid start_date format. Use YYYY-MM-DD")
+    
+    if end_date:
+        try:
+            end = date.fromisoformat(end_date)
+            query = query.filter(models.DailyPortfolioSummary.date <= end)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid end_date format. Use YYYY-MM-DD")
+    
+    summaries = query.order_by(models.DailyPortfolioSummary.date).all()
+    
+    return [
+        {
+            "date": str(s.date),
+            "opening_value": s.opening_value,
+            "closing_value": s.closing_value,
+            "high_value": s.high_value,
+            "low_value": s.low_value,
+            "total_contributions": s.total_contributions,
+            "contributions_today": s.contributions_today,
+            "total_growth": s.total_growth,
+            "daily_change": s.daily_change,
+            "daily_change_percent": s.daily_change_percent
+        }
+        for s in summaries
+    ]
+
+
+@app.get("/api/portfolio/monthly-summary")
+async def get_monthly_summaries(
+    year: Optional[int] = None,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """
+    Get monthly summaries, optionally filtered by year.
+    """
+    query = db.query(models.MonthlyPortfolioSummary).filter(
+        models.MonthlyPortfolioSummary.user_id == current_user.id
+    )
+    
+    if year:
+        query = query.filter(models.MonthlyPortfolioSummary.year == year)
+    
+    summaries = query.order_by(
+        models.MonthlyPortfolioSummary.year,
+        models.MonthlyPortfolioSummary.month
+    ).all()
+    
+    return [
+        {
+            "year": s.year,
+            "month": s.month,
+            "opening_value": s.opening_value,
+            "closing_value": s.closing_value,
+            "high_value": s.high_value,
+            "low_value": s.low_value,
+            "average_value": s.average_value,
+            "total_contributions": s.total_contributions,
+            "contributions_this_month": s.contributions_this_month,
+            "total_growth": s.total_growth,
+            "monthly_change": s.monthly_change,
+            "monthly_change_percent": s.monthly_change_percent
+        }
+        for s in summaries
+    ]
+
+
+@app.get("/api/etf/{ticker}/price-history")
+async def get_etf_price_history(
+    ticker: str,
+    range: str = "1m",
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """
+    Get price history for a specific ETF ticker.
+    
+    Range options: "1m", "3m", "6m", "1y", "all"
+    """
+    if range not in ["1m", "3m", "6m", "1y", "all"]:
+        raise HTTPException(status_code=400, detail="Invalid range. Use: 1m, 3m, 6m, 1y, all")
+    
+    data = history.get_etf_price_history(db, ticker, range)
+    
+    return {
+        "ticker": ticker,
+        "range": range,
+        "data": data
     }
