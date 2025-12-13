@@ -13,7 +13,7 @@ import TransactionHistory from '../components/TransactionHistory'
 import PriceRefreshIndicator from '../components/PriceRefreshIndicator'
 import ConfirmModal from '../components/ConfirmModal'
 import PortfolioChart from '../components/PortfolioChart'
-import HistoryDebugView from '../components/HistoryDebugView'
+
 
 export default function TFSAPortfolio() {
     const [loading, setLoading] = useState(true)
@@ -579,8 +579,8 @@ export default function TFSAPortfolio() {
                             <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                                 <div
                                     className={`h-full rounded-full transition-all duration-500 ${contributionPercentUsed >= 100 ? 'bg-red-500' :
-                                            contributionPercentUsed >= 80 ? 'bg-yellow-500' :
-                                                'bg-gradient-to-r from-blue-500 to-cyan-500'
+                                        contributionPercentUsed >= 80 ? 'bg-yellow-500' :
+                                            'bg-gradient-to-r from-blue-500 to-cyan-500'
                                         }`}
                                     style={{ width: `${Math.min(contributionPercentUsed, 100)}%` }}
                                 />
@@ -658,8 +658,8 @@ export default function TFSAPortfolio() {
                                 <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden mb-1">
                                     <div
                                         className={`h-full rounded-full transition-all duration-500 ${lifetimePercentUsed >= 100 ? 'bg-red-500' :
-                                                lifetimePercentUsed >= 80 ? 'bg-yellow-500' :
-                                                    'bg-gradient-to-r from-purple-500 to-indigo-500'
+                                            lifetimePercentUsed >= 80 ? 'bg-yellow-500' :
+                                                'bg-gradient-to-r from-purple-500 to-indigo-500'
                                             }`}
                                         style={{ width: `${Math.min(lifetimePercentUsed, 100)}%` }}
                                     />
@@ -802,10 +802,10 @@ export default function TFSAPortfolio() {
                                             </td>
                                             <td className="py-3 px-2 text-right">
                                                 <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${Math.abs(deviation) <= threshold
-                                                        ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                                                        : deviation > 0
-                                                            ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
-                                                            : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
+                                                    ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                                                    : deviation > 0
+                                                        ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+                                                        : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
                                                     }`}>
                                                     {actualPct.toFixed(1)}%
                                                 </span>
@@ -912,10 +912,10 @@ export default function TFSAPortfolio() {
                             <div
                                 key={i}
                                 className={`px-3 py-1 rounded-full text-xs font-medium ${Math.abs(etf.deviation) <= threshold
-                                        ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                                        : etf.deviation > 0
-                                            ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
-                                            : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
+                                    ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                                    : etf.deviation > 0
+                                        ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+                                        : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
                                     }`}
                             >
                                 {etf.name}: {etf.deviation > 0 ? '+' : ''}{etf.deviation}%
@@ -1120,8 +1120,7 @@ export default function TFSAPortfolio() {
                 variant="danger"
             />
 
-            {/* Debug & History View */}
-            <HistoryDebugView />
+
         </div>
     )
 }

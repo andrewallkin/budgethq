@@ -25,7 +25,7 @@ const TIME_RANGES = [
 export default function PortfolioChart() {
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState(null)
-    const [selectedRange, setSelectedRange] = useState('3m')
+    const [selectedRange, setSelectedRange] = useState('1m')
     const [chartData, setChartData] = useState([])
     const [summary, setSummary] = useState(null)
 

@@ -217,12 +217,12 @@ def start_scheduler():
         replace_existing=True
     )
     
-    # Job 2: Record snapshot every 10 minutes (on the clock: :00, :10, :20...)
+    # Job 2: Record snapshot every hour on the hour
     scheduler.add_job(
         record_hourly_snapshot,
-        trigger=CronTrigger(minute='*/10'),  # Every 10 minutes on the clock
+        trigger=CronTrigger(minute='0'),
         id='record_hourly_snapshot',
-        name='Record portfolio snapshot (10 min debug mode)',
+        name='Record portfolio snapshot',
         replace_existing=True
     )
     
@@ -257,7 +257,7 @@ def start_scheduler():
 
     logger.info("Background scheduler started with the following jobs:")
     logger.info("  - Price sync: every 5 minutes (on the clock)")
-    logger.info("  - Portfolio snapshot: every 10 minutes (on the clock - DEBUG MODE)")
+    logger.info("  - Portfolio snapshot: every hour (on the clock)")
     logger.info("  - Daily summary: daily at 17:30 SAST (15:30 UTC)")
     logger.info("  - Monthly summary: 1st of month at 00:00 UTC")
     logger.info("  - Data cleanup: Sundays at 03:00 SAST (01:00 UTC)")
