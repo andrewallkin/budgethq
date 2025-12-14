@@ -133,7 +133,7 @@ FRONTEND_PORT=3000
 DATABASE_URL=postgresql://budget_user:your_secure_password@postgres:5432/budget_db
 
 # Google Sheets (get from Google Cloud Console)
-GOOGLE_SHEETS_CREDENTIALS={"type":"service_account",...}
+GCP_SERVICE_ACCOUNT_CREDENTIALS={"type":"service_account",...}
 GOOGLE_SPREADSHEET_ID=your_spreadsheet_id
 GOOGLE_SHEET_NAME=ETF Holdings
 
@@ -225,7 +225,7 @@ The application uses Google Sheets as a data source for ETF prices and as a sync
    - Copy the spreadsheet ID from the URL for your `.env` file
 
 5. **Configure Environment**:
-   - Add `GOOGLE_SHEETS_CREDENTIALS` (entire JSON as string)
+   - Add `GCP_SERVICE_ACCOUNT_CREDENTIALS` (entire JSON as string)
    - Add `GOOGLE_SPREADSHEET_ID` (from sheet URL)
    - Add `GOOGLE_SHEET_NAME` (default: "ETF Holdings")
 
@@ -408,7 +408,7 @@ Navigate to Actions → Deploy to VPS → Run workflow → Select branch to depl
 
 **Problem**: Prices not updating
 - **Solution**: Check that service account email has Editor access to the sheet
-- Verify `GOOGLE_SHEETS_CREDENTIALS` is valid JSON
+- Verify `GCP_SERVICE_ACCOUNT_CREDENTIALS` is valid JSON
 - Check logs: `make dev-logs` or `docker-compose logs backend`
 - Manually trigger sync via the UI refresh button
 

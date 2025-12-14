@@ -30,12 +30,16 @@ jobs:
           ENV_POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           ENV_POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
           ENV_POSTGRES_PORT: ${{ secrets.POSTGRES_PORT }}
+          ENV_DATABASE_URL: ${{ secrets.DATABASE_URL }}
           ENV_BACKEND_PORT: ${{ secrets.BACKEND_PORT }}
           ENV_FRONTEND_PORT: ${{ secrets.FRONTEND_PORT }}
-          ENV_DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          ENV_GOOGLE_SHEETS_CREDENTIALS: ${{ secrets.GOOGLE_SHEETS_CREDENTIALS }}
+          ENV_GCP_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GCP_SERVICE_ACCOUNT_CREDENTIALS }}
+          ENV_GCS_BUCKET_NAME: ${{ secrets.GCS_BUCKET_NAME }}
           ENV_GOOGLE_SPREADSHEET_ID: ${{ secrets.GOOGLE_SPREADSHEET_ID }}
           ENV_GOOGLE_SHEET_NAME: ${{ secrets.GOOGLE_SHEET_NAME }}
+          ENV_BACKUP_RETENTION_DAYS: ${{ secrets.BACKUP_RETENTION_DAYS }}
+          ENV_BACKUP_SCHEDULE_HOUR: ${{ secrets.BACKUP_SCHEDULE_HOUR }}
+          ENV_BACKUP_SCHEDULE_MINUTE: ${{ secrets.BACKUP_SCHEDULE_MINUTE }}
         run: |
           ssh -t -i ~/.ssh/id_rsa -p ${{ secrets.VPS_PORT }} -o StrictHostKeyChecking=no -o ServerAliveInterval=50 -o ServerAliveCountMax=10 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} <<EOF
           set -euo pipefail
@@ -75,15 +79,20 @@ jobs:
           POSTGRES_PASSWORD=${ENV_POSTGRES_PASSWORD}
           POSTGRES_DB=${ENV_POSTGRES_DB}
           POSTGRES_PORT=${ENV_POSTGRES_PORT}
+          DATABASE_URL=${ENV_DATABASE_URL}
 
           BACKEND_PORT=${ENV_BACKEND_PORT}
           FRONTEND_PORT=${ENV_FRONTEND_PORT}
 
-          DATABASE_URL=${ENV_DATABASE_URL}
+          GCP_SERVICE_ACCOUNT_CREDENTIALS=${ENV_GCP_SERVICE_ACCOUNT_CREDENTIALS}
+          GCS_BUCKET_NAME=${ENV_GCS_BUCKET_NAME}
 
-          GOOGLE_SHEETS_CREDENTIALS=${ENV_GOOGLE_SHEETS_CREDENTIALS}
           GOOGLE_SPREADSHEET_ID=${ENV_GOOGLE_SPREADSHEET_ID}
           GOOGLE_SHEET_NAME=${ENV_GOOGLE_SHEET_NAME}
+          
+          BACKUP_RETENTION_DAYS=${ENV_BACKUP_RETENTION_DAYS}
+          BACKUP_SCHEDULE_HOUR=${ENV_BACKUP_SCHEDULE_HOUR}
+          BACKUP_SCHEDULE_MINUTE=${ENV_BACKUP_SCHEDULE_MINUTE}
           EOF_ENV
           echo "✓ Environment configured"
           echo "::endgroup::"

@@ -44,6 +44,16 @@ services:
       - backend
     restart: unless-stopped
 
+  backup:
+    build:
+      context: .
+      dockerfile: backup/Dockerfile
+    depends_on:
+      - postgres
+    env_file:
+      - .env
+    restart: unless-stopped
+
 volumes:
   postgres_data:
 

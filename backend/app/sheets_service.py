@@ -31,10 +31,10 @@ class GoogleSheetsService:
     
     def _initialize_service(self):
         """Initialize the Google Sheets API service using base64-encoded credentials."""
-        credentials_b64 = os.getenv('GOOGLE_SHEETS_CREDENTIALS')
+        credentials_b64 = os.getenv('GCP_SERVICE_ACCOUNT_CREDENTIALS')
         
         if not credentials_b64:
-            logger.warning("GOOGLE_SHEETS_CREDENTIALS environment variable not set")
+            logger.warning("GCP_SERVICE_ACCOUNT_CREDENTIALS environment variable not set")
             return
         
         if not self.spreadsheet_id:
