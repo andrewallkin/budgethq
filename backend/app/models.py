@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, String, Float, ForeignKey, Date, DateTim
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from .database import Base
+from .utils import get_sast_now
 
 class User(Base):
     __tablename__ = "users"
@@ -18,6 +19,10 @@ class User(Base):
     bond_transactions = relationship("BondTransaction", back_populates="owner")
     tfsa_historical_contributions = relationship("TFSAHistoricalContribution", back_populates="owner")
     tfsa_deposits = relationship("TFSADeposit", back_populates="owner")
+    portfolio_value_history = relationship("PortfolioValueHistory", back_populates="owner")
+    holding_value_history = relationship("HoldingValueHistory", back_populates="owner")
+    daily_portfolio_summaries = relationship("DailyPortfolioSummary", back_populates="owner")
+    monthly_portfolio_summaries = relationship("MonthlyPortfolioSummary", back_populates="owner")
 
 class Budget(Base):
     __tablename__ = "budgets"
@@ -89,10 +94,12 @@ class ETFHolding(Base):
     target_percentage = Column(Float, default=0)
     current_price = Column(Float, nullable=True)  # Cached from Google Sheets
     price_updated_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    cost_basis = Column(Float, default=0)  # Total cost of shares purchased
+    created_at = Column(DateTime, default=get_sast_now)
 
     owner = relationship("User", back_populates="etf_holdings")
     transactions = relationship("ETFTransaction", back_populates="holding")
+    value_history = relationship("HoldingValueHistory", back_populates="holding")
 
 
 class ETFTransaction(Base):
@@ -107,7 +114,7 @@ class ETFTransaction(Base):
     price_per_share = Column(Float)
     total_value = Column(Float)
     transaction_date = Column(DateTime)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=get_sast_now)
 
     owner = relationship("User", back_populates="etf_transactions")
     holding = relationship("ETFHolding", back_populates="transactions")
@@ -123,8 +130,9 @@ class BondHolding(Base):
     region = Column(String)              # e.g., "South Africa"
     current_value = Column(Float, default=0)  # Total value (no shares/price tracking)
     target_percentage = Column(Float, default=0)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    cost_basis = Column(Float, default=0)  # Total cost of bond purchases
+    updated_at = Column(DateTime, default=get_sast_now, onupdate=get_sast_now)
+    created_at = Column(DateTime, default=get_sast_now)
 
     owner = relationship("User", back_populates="bond_holdings")
     transactions = relationship("BondTransaction", back_populates="holding")
@@ -140,7 +148,111 @@ class BondTransaction(Base):
     transaction_type = Column(String)    # "BUY" or "SELL"
     amount = Column(Float)               # Transaction amount (value, not shares)
     transaction_date = Column(DateTime)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=get_sast_now)
 
     owner = relationship("User", back_populates="bond_transactions")
     holding = relationship("BondHolding", back_populates="transactions")
+
+
+# =====================================================
+# Historical Price & Portfolio Tracking Models
+# =====================================================
+
+class ETFPriceHistory(Base):
+    """Hourly price snapshots for ETFs - raw granular data"""
+    __tablename__ = "etf_price_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    jse_ticker = Column(String, index=True)
+    price = Column(Float)
+    recorded_at = Column(DateTime, index=True, default=get_sast_now)
+    snapshot_type = Column(String, default="hourly")  # "hourly", "transaction", "eod"
+
+
+class PortfolioValueHistory(Base):
+    """Historical total portfolio value per user"""
+    __tablename__ = "portfolio_value_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    total_value = Column(Float)
+    total_contributions = Column(Float)  # Total TFSA deposits up to this point
+    total_growth = Column(Float)         # total_value - total_contributions
+    recorded_at = Column(DateTime, index=True, default=get_sast_now)
+    snapshot_type = Column(String, default="hourly")  # "hourly", "transaction", "eod", "monthly"
+
+    owner = relationship("User", back_populates="portfolio_value_history")
+
+
+class HoldingValueHistory(Base):
+    """Per-holding value snapshots for gain/loss attribution"""
+    __tablename__ = "holding_value_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    holding_id = Column(Integer, ForeignKey("etf_holdings.id"), index=True)
+    jse_ticker = Column(String, index=True)
+    shares = Column(Float)
+    price = Column(Float)
+    value = Column(Float)              # shares * price
+    cost_basis = Column(Float)         # What user paid for these shares
+    unrealized_gain = Column(Float)    # value - cost_basis
+    recorded_at = Column(DateTime, index=True, default=get_sast_now)
+    snapshot_type = Column(String, default="hourly")
+
+    owner = relationship("User", back_populates="holding_value_history")
+    holding = relationship("ETFHolding", back_populates="value_history")
+
+
+class DailyPortfolioSummary(Base):
+    """End-of-day aggregated portfolio summary for long-term storage"""
+    __tablename__ = "daily_portfolio_summary"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    date = Column(Date, index=True)
+
+    # Portfolio totals
+    opening_value = Column(Float)
+    closing_value = Column(Float)
+    high_value = Column(Float)         # Highest value during the day
+    low_value = Column(Float)          # Lowest value during the day
+
+    # Contributions tracking
+    total_contributions = Column(Float)
+    contributions_today = Column(Float, default=0)
+
+    # Growth metrics
+    total_growth = Column(Float)       # closing_value - total_contributions
+    daily_change = Column(Float)       # closing_value - opening_value
+    daily_change_percent = Column(Float)
+
+    owner = relationship("User", back_populates="daily_portfolio_summaries")
+
+
+class MonthlyPortfolioSummary(Base):
+    """Monthly aggregated portfolio summary for multi-year views"""
+    __tablename__ = "monthly_portfolio_summary"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    year = Column(Integer, index=True)
+    month = Column(Integer, index=True)
+
+    # Portfolio totals
+    opening_value = Column(Float)      # First day of month
+    closing_value = Column(Float)      # Last day of month
+    high_value = Column(Float)         # Highest value during month
+    low_value = Column(Float)          # Lowest value during month
+    average_value = Column(Float)      # Average daily closing value
+
+    # Contributions tracking
+    total_contributions = Column(Float)
+    contributions_this_month = Column(Float, default=0)
+
+    # Growth metrics
+    total_growth = Column(Float)
+    monthly_change = Column(Float)
+    monthly_change_percent = Column(Float)
+
+    owner = relationship("User", back_populates="monthly_portfolio_summaries")

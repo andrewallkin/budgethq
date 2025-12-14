@@ -12,6 +12,8 @@ import EditHoldingModal from '../components/EditHoldingModal'
 import TransactionHistory from '../components/TransactionHistory'
 import PriceRefreshIndicator from '../components/PriceRefreshIndicator'
 import ConfirmModal from '../components/ConfirmModal'
+import PortfolioChart from '../components/PortfolioChart'
+
 
 export default function TFSAPortfolio() {
     const [loading, setLoading] = useState(true)
@@ -98,14 +100,14 @@ export default function TFSAPortfolio() {
                 axios.get('/api/etf/holdings'),
                 axios.get('/api/bond/holdings')
             ])
-            
+
             // Combine ETFs and Bonds with type indicator
             const etfs = (etfRes.data || []).map(etf => ({
                 ...etf,
                 type: 'ETF',
                 total_value: etf.total_value || 0
             }))
-            
+
             const bonds = (bondRes.data || []).map(bond => ({
                 ...bond,
                 type: 'BOND',
@@ -117,7 +119,7 @@ export default function TFSAPortfolio() {
                 shares: null,
                 current_price: null
             }))
-            
+
             setHoldings([...etfs, ...bonds])
         } catch (err) {
             console.error("Failed to fetch holdings", err)
@@ -297,7 +299,7 @@ export default function TFSAPortfolio() {
         if (sortColumn !== column) {
             return <ArrowUpDown className="w-3 h-3 opacity-40" />
         }
-        return sortDirection === 'asc' 
+        return sortDirection === 'asc'
             ? <ArrowUp className="w-3 h-3" />
             : <ArrowDown className="w-3 h-3" />
     }
@@ -496,6 +498,184 @@ export default function TFSAPortfolio() {
                 </div>
             </div>
 
+            {/* Portfolio Performance Chart */}
+            <PortfolioChart />
+
+            {/* TFSA Contribution Tracking */}
+            <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
+                <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                        <PiggyBank className="w-5 h-5 text-blue-500" />
+                        TFSA Contributions (FY {financialYear.start}/{financialYear.end})
+                    </h2>
+                    <span className="text-sm text-gray-500 dark:text-gray-400">
+                        {isSaving ? 'Saving...' : 'Auto-saved'}
+                    </span>
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-6">
+                    {/* Annual Contributions */}
+                    <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Annual Limit</h3>
+                            <span className="text-sm font-bold text-gray-900 dark:text-white">R {TFSA_ANNUAL_LIMIT.toLocaleString()}</span>
+                        </div>
+
+                        <div className="flex gap-2 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                            <div className="flex items-center flex-1">
+                                <span className="mr-1 text-gray-500 dark:text-gray-400 text-sm">R</span>
+                                <input
+                                    type="number"
+                                    value={newDepositAmount}
+                                    onChange={(e) => setNewDepositAmount(e.target.value)}
+                                    placeholder="Amount"
+                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                />
+                            </div>
+                            <input
+                                type="date"
+                                value={newDepositDate}
+                                onChange={(e) => setNewDepositDate(e.target.value)}
+                                className="px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                            />
+                            <button
+                                onClick={addDeposit}
+                                className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors flex items-center gap-1"
+                            >
+                                <Plus className="w-4 h-4" /> Add
+                            </button>
+                        </div>
+
+                        {deposits.length > 0 && (
+                            <div className="space-y-1.5">
+                                {deposits.sort((a, b) => new Date(a.date) - new Date(b.date)).map((deposit) => (
+                                    <div key={deposit.id} className="flex items-center justify-between p-2 bg-blue-50 dark:bg-blue-900/20 rounded text-sm">
+                                        <div className="flex items-center gap-2">
+                                            <span className="font-medium text-blue-700 dark:text-blue-400">
+                                                R {deposit.amount.toLocaleString()}
+                                            </span>
+                                            <span className="text-gray-500 dark:text-gray-400 text-xs">
+                                                {new Date(deposit.date).toLocaleDateString('en-ZA')}
+                                            </span>
+                                        </div>
+                                        <button
+                                            onClick={() => removeDeposit(deposit.id)}
+                                            className="text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+                                        >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        <div>
+                            <div className="flex justify-between text-xs mb-1">
+                                <span className="text-gray-600 dark:text-gray-400">R {annualContributions.toLocaleString()}</span>
+                                <span className={`font-medium ${contributionsRemaining < 0 ? 'text-red-500' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                                    R {contributionsRemaining.toLocaleString()} left
+                                </span>
+                            </div>
+                            <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                <div
+                                    className={`h-full rounded-full transition-all duration-500 ${contributionPercentUsed >= 100 ? 'bg-red-500' :
+                                        contributionPercentUsed >= 80 ? 'bg-yellow-500' :
+                                            'bg-gradient-to-r from-blue-500 to-cyan-500'
+                                        }`}
+                                    style={{ width: `${Math.min(contributionPercentUsed, 100)}%` }}
+                                />
+                            </div>
+                            <div className="text-center mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                                {contributionPercentUsed.toFixed(1)}% used
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Lifetime Contributions */}
+                    <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Lifetime Limit</h3>
+                            <span className="text-sm font-bold text-gray-900 dark:text-white">R {TFSA_LIFETIME_LIMIT.toLocaleString()}</span>
+                        </div>
+
+                        <div className="flex gap-2 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                            <input
+                                type="text"
+                                value={newHistoricalYear}
+                                onChange={(e) => setNewHistoricalYear(e.target.value)}
+                                placeholder="2018/19"
+                                className="w-24 px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-purple-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                            />
+                            <div className="flex items-center flex-1">
+                                <span className="mr-1 text-gray-500 dark:text-gray-400 text-sm">R</span>
+                                <input
+                                    type="number"
+                                    value={newHistoricalAmount}
+                                    onChange={(e) => setNewHistoricalAmount(e.target.value)}
+                                    placeholder="Amount"
+                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-purple-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                />
+                            </div>
+                            <button
+                                onClick={addHistoricalContribution}
+                                className="px-3 py-1.5 bg-purple-600 text-white text-sm rounded hover:bg-purple-700 transition-colors flex items-center gap-1"
+                            >
+                                <Plus className="w-4 h-4" /> Add
+                            </button>
+                        </div>
+
+                        {historicalContributions.length > 0 && (
+                            <div className="space-y-1.5">
+                                {historicalContributions.sort((a, b) => a.financial_year.localeCompare(b.financial_year)).map((hist) => (
+                                    <div key={hist.id} className="flex items-center justify-between p-2 bg-purple-50 dark:bg-purple-900/20 rounded text-sm">
+                                        <div className="flex items-center gap-2">
+                                            <span className="font-medium text-purple-700 dark:text-purple-400">FY {hist.financial_year}</span>
+                                            <span className="text-gray-500 dark:text-gray-400 text-xs">→</span>
+                                            <span className="font-medium text-gray-900 dark:text-white">R {hist.amount.toLocaleString()}</span>
+                                        </div>
+                                        <button
+                                            onClick={() => removeHistoricalContribution(hist.id)}
+                                            className="text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+                                        >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        <div className="p-4 bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 rounded-lg">
+                            <div className="text-center mb-3">
+                                <p className="text-2xl font-bold text-purple-700 dark:text-purple-400">
+                                    R {totalLifetimeContributions.toLocaleString()}
+                                </p>
+                                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                                    Total (R {historicalTotal.toLocaleString()} + R {annualContributions.toLocaleString()})
+                                </p>
+                            </div>
+
+                            <div>
+                                <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden mb-1">
+                                    <div
+                                        className={`h-full rounded-full transition-all duration-500 ${lifetimePercentUsed >= 100 ? 'bg-red-500' :
+                                            lifetimePercentUsed >= 80 ? 'bg-yellow-500' :
+                                                'bg-gradient-to-r from-purple-500 to-indigo-500'
+                                            }`}
+                                        style={{ width: `${Math.min(lifetimePercentUsed, 100)}%` }}
+                                    />
+                                </div>
+                                <div className="flex justify-between text-xs">
+                                    <span className="text-gray-600 dark:text-gray-400">{lifetimePercentUsed.toFixed(1)}% used</span>
+                                    <span className={`font-medium ${lifetimeRemaining < 0 ? 'text-red-500' : 'text-purple-600 dark:text-purple-400'}`}>
+                                        R {lifetimeRemaining.toLocaleString()} left
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             {/* Holdings Table */}
             {holdings.length > 0 && (
                 <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
@@ -504,7 +684,7 @@ export default function TFSAPortfolio() {
                         <table className="w-full">
                             <thead>
                                 <tr className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider border-b border-gray-200 dark:border-gray-700">
-                                    <th 
+                                    <th
                                         onClick={() => handleSort('name')}
                                         className="text-left py-3 px-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
                                     >
@@ -513,7 +693,7 @@ export default function TFSAPortfolio() {
                                             <SortIcon column="name" />
                                         </div>
                                     </th>
-                                    <th 
+                                    <th
                                         onClick={() => handleSort('ticker')}
                                         className="text-left py-3 px-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
                                     >
@@ -522,7 +702,7 @@ export default function TFSAPortfolio() {
                                             <SortIcon column="ticker" />
                                         </div>
                                     </th>
-                                    <th 
+                                    <th
                                         onClick={() => handleSort('region')}
                                         className="text-left py-3 px-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
                                     >
@@ -531,7 +711,7 @@ export default function TFSAPortfolio() {
                                             <SortIcon column="region" />
                                         </div>
                                     </th>
-                                    <th 
+                                    <th
                                         onClick={() => handleSort('shares')}
                                         className="text-right py-3 px-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
                                     >
@@ -540,7 +720,7 @@ export default function TFSAPortfolio() {
                                             <SortIcon column="shares" />
                                         </div>
                                     </th>
-                                    <th 
+                                    <th
                                         onClick={() => handleSort('price')}
                                         className="text-right py-3 px-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
                                     >
@@ -549,7 +729,7 @@ export default function TFSAPortfolio() {
                                             <SortIcon column="price" />
                                         </div>
                                     </th>
-                                    <th 
+                                    <th
                                         onClick={() => handleSort('value')}
                                         className="text-right py-3 px-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
                                     >
@@ -558,7 +738,7 @@ export default function TFSAPortfolio() {
                                             <SortIcon column="value" />
                                         </div>
                                     </th>
-                                    <th 
+                                    <th
                                         onClick={() => handleSort('target')}
                                         className="text-right py-3 px-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
                                     >
@@ -567,7 +747,7 @@ export default function TFSAPortfolio() {
                                             <SortIcon column="target" />
                                         </div>
                                     </th>
-                                    <th 
+                                    <th
                                         onClick={() => handleSort('actual')}
                                         className="text-right py-3 px-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
                                     >
@@ -611,7 +791,7 @@ export default function TFSAPortfolio() {
                                             <td className="py-3 px-2 text-right font-semibold text-gray-900 dark:text-white">
                                                 R {(h.total_value || 0).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                             </td>
-                                            <td 
+                                            <td
                                                 onClick={() => handleEdit(h)}
                                                 className="py-3 px-2 text-right text-gray-600 dark:text-gray-400 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors group"
                                                 title="Click to edit target percentage"
@@ -621,13 +801,12 @@ export default function TFSAPortfolio() {
                                                 </span>
                                             </td>
                                             <td className="py-3 px-2 text-right">
-                                                <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
-                                                    Math.abs(deviation) <= threshold
-                                                        ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                                                        : deviation > 0
-                                                            ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
-                                                            : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
-                                                }`}>
+                                                <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${Math.abs(deviation) <= threshold
+                                                    ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                                                    : deviation > 0
+                                                        ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+                                                        : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
+                                                    }`}>
                                                     {actualPct.toFixed(1)}%
                                                 </span>
                                             </td>
@@ -707,183 +886,6 @@ export default function TFSAPortfolio() {
             {/* Transaction History */}
             <TransactionHistory refreshTrigger={transactionRefresh} />
 
-            {/* TFSA Contribution Tracking */}
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
-                <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                        <PiggyBank className="w-5 h-5 text-blue-500" />
-                        TFSA Contributions (FY {financialYear.start}/{financialYear.end})
-                    </h2>
-                    <span className="text-sm text-gray-500 dark:text-gray-400">
-                        {isSaving ? 'Saving...' : 'Auto-saved'}
-                    </span>
-                </div>
-
-                <div className="grid md:grid-cols-2 gap-6">
-                    {/* Annual Contributions */}
-                    <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Annual Limit</h3>
-                            <span className="text-sm font-bold text-gray-900 dark:text-white">R {TFSA_ANNUAL_LIMIT.toLocaleString()}</span>
-                        </div>
-
-                        <div className="flex gap-2 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                            <div className="flex items-center flex-1">
-                                <span className="mr-1 text-gray-500 dark:text-gray-400 text-sm">R</span>
-                                <input
-                                    type="number"
-                                    value={newDepositAmount}
-                                    onChange={(e) => setNewDepositAmount(e.target.value)}
-                                    placeholder="Amount"
-                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                                />
-                            </div>
-                            <input
-                                type="date"
-                                value={newDepositDate}
-                                onChange={(e) => setNewDepositDate(e.target.value)}
-                                className="px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                            />
-                            <button
-                                onClick={addDeposit}
-                                className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors flex items-center gap-1"
-                            >
-                                <Plus className="w-4 h-4" /> Add
-                            </button>
-                        </div>
-
-                        {deposits.length > 0 && (
-                            <div className="space-y-1.5">
-                                {deposits.sort((a, b) => new Date(a.date) - new Date(b.date)).map((deposit) => (
-                                    <div key={deposit.id} className="flex items-center justify-between p-2 bg-blue-50 dark:bg-blue-900/20 rounded text-sm">
-                                        <div className="flex items-center gap-2">
-                                            <span className="font-medium text-blue-700 dark:text-blue-400">
-                                                R {deposit.amount.toLocaleString()}
-                                            </span>
-                                            <span className="text-gray-500 dark:text-gray-400 text-xs">
-                                                {new Date(deposit.date).toLocaleDateString('en-ZA')}
-                                            </span>
-                                        </div>
-                                        <button
-                                            onClick={() => removeDeposit(deposit.id)}
-                                            className="text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
-                                        >
-                                            <Trash2 className="w-3.5 h-3.5" />
-                                        </button>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-
-                        <div>
-                            <div className="flex justify-between text-xs mb-1">
-                                <span className="text-gray-600 dark:text-gray-400">R {annualContributions.toLocaleString()}</span>
-                                <span className={`font-medium ${contributionsRemaining < 0 ? 'text-red-500' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                                    R {contributionsRemaining.toLocaleString()} left
-                                </span>
-                            </div>
-                            <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                                <div
-                                    className={`h-full rounded-full transition-all duration-500 ${
-                                        contributionPercentUsed >= 100 ? 'bg-red-500' :
-                                        contributionPercentUsed >= 80 ? 'bg-yellow-500' :
-                                        'bg-gradient-to-r from-blue-500 to-cyan-500'
-                                    }`}
-                                    style={{ width: `${Math.min(contributionPercentUsed, 100)}%` }}
-                                />
-                            </div>
-                            <div className="text-center mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                                {contributionPercentUsed.toFixed(1)}% used
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Lifetime Contributions */}
-                    <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Lifetime Limit</h3>
-                            <span className="text-sm font-bold text-gray-900 dark:text-white">R {TFSA_LIFETIME_LIMIT.toLocaleString()}</span>
-                        </div>
-
-                        <div className="flex gap-2 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                            <input
-                                type="text"
-                                value={newHistoricalYear}
-                                onChange={(e) => setNewHistoricalYear(e.target.value)}
-                                placeholder="2018/19"
-                                className="w-24 px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-purple-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                            />
-                            <div className="flex items-center flex-1">
-                                <span className="mr-1 text-gray-500 dark:text-gray-400 text-sm">R</span>
-                                <input
-                                    type="number"
-                                    value={newHistoricalAmount}
-                                    onChange={(e) => setNewHistoricalAmount(e.target.value)}
-                                    placeholder="Amount"
-                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-purple-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                                />
-                            </div>
-                            <button
-                                onClick={addHistoricalContribution}
-                                className="px-3 py-1.5 bg-purple-600 text-white text-sm rounded hover:bg-purple-700 transition-colors flex items-center gap-1"
-                            >
-                                <Plus className="w-4 h-4" /> Add
-                            </button>
-                        </div>
-
-                        {historicalContributions.length > 0 && (
-                            <div className="space-y-1.5">
-                                {historicalContributions.sort((a, b) => a.financial_year.localeCompare(b.financial_year)).map((hist) => (
-                                    <div key={hist.id} className="flex items-center justify-between p-2 bg-purple-50 dark:bg-purple-900/20 rounded text-sm">
-                                        <div className="flex items-center gap-2">
-                                            <span className="font-medium text-purple-700 dark:text-purple-400">FY {hist.financial_year}</span>
-                                            <span className="text-gray-500 dark:text-gray-400 text-xs">→</span>
-                                            <span className="font-medium text-gray-900 dark:text-white">R {hist.amount.toLocaleString()}</span>
-                                        </div>
-                                        <button
-                                            onClick={() => removeHistoricalContribution(hist.id)}
-                                            className="text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
-                                        >
-                                            <Trash2 className="w-3.5 h-3.5" />
-                                        </button>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-
-                        <div className="p-4 bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 rounded-lg">
-                            <div className="text-center mb-3">
-                                <p className="text-2xl font-bold text-purple-700 dark:text-purple-400">
-                                    R {totalLifetimeContributions.toLocaleString()}
-                                </p>
-                                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                                    Total (R {historicalTotal.toLocaleString()} + R {annualContributions.toLocaleString()})
-                                </p>
-                            </div>
-
-                            <div>
-                                <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden mb-1">
-                                    <div
-                                        className={`h-full rounded-full transition-all duration-500 ${
-                                            lifetimePercentUsed >= 100 ? 'bg-red-500' :
-                                            lifetimePercentUsed >= 80 ? 'bg-yellow-500' :
-                                            'bg-gradient-to-r from-purple-500 to-indigo-500'
-                                        }`}
-                                        style={{ width: `${Math.min(lifetimePercentUsed, 100)}%` }}
-                                    />
-                                </div>
-                                <div className="flex justify-between text-xs">
-                                    <span className="text-gray-600 dark:text-gray-400">{lifetimePercentUsed.toFixed(1)}% used</span>
-                                    <span className={`font-medium ${lifetimeRemaining < 0 ? 'text-red-500' : 'text-purple-600 dark:text-purple-400'}`}>
-                                        R {lifetimeRemaining.toLocaleString()} left
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
             {/* Target vs Actual Bar Chart */}
             {holdings.length > 0 && (
                 <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
@@ -909,13 +911,12 @@ export default function TFSAPortfolio() {
                         {targetVsActualData.map((etf, i) => (
                             <div
                                 key={i}
-                                className={`px-3 py-1 rounded-full text-xs font-medium ${
-                                    Math.abs(etf.deviation) <= threshold
-                                        ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                                        : etf.deviation > 0
-                                            ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
-                                            : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
-                                }`}
+                                className={`px-3 py-1 rounded-full text-xs font-medium ${Math.abs(etf.deviation) <= threshold
+                                    ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                                    : etf.deviation > 0
+                                        ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+                                        : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
+                                    }`}
                             >
                                 {etf.name}: {etf.deviation > 0 ? '+' : ''}{etf.deviation}%
                             </div>
@@ -1110,7 +1111,7 @@ export default function TFSAPortfolio() {
                 title={`Delete ${holdingToDelete?.type === 'BOND' ? 'Bond' : 'ETF'} Holding`}
                 message={holdingToDelete ? `Are you sure you want to delete ${holdingToDelete.etf_name}?` : ''}
                 details={
-                    holdingToDelete?.type === 'BOND' 
+                    holdingToDelete?.type === 'BOND'
                         ? ['Delete all associated transactions']
                         : ['Delete all associated transactions', 'Remove the ETF from Google Sheets']
                 }
@@ -1118,6 +1119,8 @@ export default function TFSAPortfolio() {
                 cancelText="Cancel"
                 variant="danger"
             />
+
+
         </div>
     )
 }

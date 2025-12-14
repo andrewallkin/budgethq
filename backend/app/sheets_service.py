@@ -3,6 +3,7 @@ Google Sheets Service for ETF price management.
 Handles reading prices and managing ETF entries in the Google Sheet.
 """
 
+import logging
 import os
 import json
 import base64
@@ -14,6 +15,9 @@ from googleapiclient.errors import HttpError
 
 # Scopes for read/write access to Google Sheets
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
+
+# Initialize logger
+logger = logging.getLogger(__name__)
 
 
 class GoogleSheetsService:
@@ -30,11 +34,11 @@ class GoogleSheetsService:
         credentials_b64 = os.getenv('GOOGLE_SHEETS_CREDENTIALS')
         
         if not credentials_b64:
-            print("Warning: GOOGLE_SHEETS_CREDENTIALS environment variable not set")
+            logger.warning("GOOGLE_SHEETS_CREDENTIALS environment variable not set")
             return
         
         if not self.spreadsheet_id:
-            print("Warning: GOOGLE_SPREADSHEET_ID environment variable not set")
+            logger.warning("GOOGLE_SPREADSHEET_ID environment variable not set")
             return
         
         try:
@@ -49,16 +53,44 @@ class GoogleSheetsService:
             
             # Build the Sheets API service
             self.service = build('sheets', 'v4', credentials=credentials)
-            print("Google Sheets service initialized successfully")
+            logger.info("Google Sheets service initialized successfully")
             
         except Exception as e:
-            print(f"Error initializing Google Sheets service: {e}")
+            logger.error(f"Error initializing Google Sheets service: {e}")
             self.service = None
     
     def is_available(self) -> bool:
         """Check if the Google Sheets service is available."""
         return self.service is not None
     
+
+    def _retry_on_connection_error(func):
+        """Decorator to retry operation once on connection errors."""
+        def wrapper(self, *args, **kwargs):
+            try:
+                return func(self, *args, **kwargs)
+            except (BrokenPipeError, ConnectionError) as e:
+                logger.warning(f"Connection error in {func.__name__}: {e}. Retrying...")
+                # Re-initialize service
+                self._initialize_service()
+                if not self.is_available():
+                    logger.error("Service unavailable after re-initialization")
+                    return [] if func.__name__ == 'get_all_etf_prices' else False
+                try:
+                    return func(self, *args, **kwargs)
+                except Exception as retry_err:
+                    logger.error(f"Retry failed for {func.__name__}: {retry_err}")
+                    return [] if func.__name__ == 'get_all_etf_prices' else False
+            except HttpError as err:
+                 # Check for 503 Service Unavailable or other transient errors if needed
+                logger.error(f"HTTP error in {func.__name__}: {err}")
+                return [] if func.__name__ == 'get_all_etf_prices' else False
+            except Exception as e:
+                logger.error(f"Error in {func.__name__}: {e}")
+                return [] if func.__name__ == 'get_all_etf_prices' else False
+        return wrapper
+
+    @_retry_on_connection_error
     def get_all_etf_prices(self) -> List[Dict]:
         """
         Read all ETF data from the Google Sheet.
@@ -77,43 +109,37 @@ class GoogleSheetsService:
         # Range A2:C to skip the header row (3 columns now)
         range_name = f'{self.sheet_name}!A2:C'
         
-        try:
-            result = self.service.spreadsheets().values().get(
-                spreadsheetId=self.spreadsheet_id,
-                range=range_name
-            ).execute()
-            
-            values = result.get('values', [])
-            
-            if not values:
-                return []
-            
-            etf_prices = []
-            for row in values:
-                if len(row) >= 3:
-                    ticker = row[0]
-                    name = row[1] if len(row) > 1 else ''
-                    
-                    # Parse price (column C)
-                    try:
-                        price = float(row[2]) if row[2] else None
-                    except (ValueError, IndexError):
-                        price = None
-                    
-                    etf_prices.append({
-                        'jse_ticker': ticker,
-                        'etf_name': name,
-                        'current_price': price
-                    })
-            
-            return etf_prices
-            
-        except HttpError as err:
-            print(f"HTTP error reading from Google Sheets: {err}")
+        result = self.service.spreadsheets().values().get(
+            spreadsheetId=self.spreadsheet_id,
+            range=range_name
+        ).execute()
+        
+        logger.info(f"Fetched ETF prices from range: {range_name}")
+        
+        values = result.get('values', [])
+        
+        if not values:
             return []
-        except Exception as e:
-            print(f"Error reading from Google Sheets: {e}")
-            return []
+        
+        etf_prices = []
+        for row in values:
+            if len(row) >= 3:
+                ticker = row[0]
+                name = row[1] if len(row) > 1 else ''
+                
+                # Parse price (column C)
+                try:
+                    price = float(row[2]) if row[2] else None
+                except (ValueError, IndexError):
+                    price = None
+                
+                etf_prices.append({
+                    'jse_ticker': ticker,
+                    'etf_name': name,
+                    'current_price': price
+                })
+        
+        return etf_prices
     
     def get_price_for_ticker(self, jse_ticker: str) -> Optional[float]:
         """
@@ -131,6 +157,7 @@ class GoogleSheetsService:
                 return etf['current_price']
         return None
     
+    @_retry_on_connection_error
     def add_etf_to_sheet(self, jse_ticker: str, etf_name: str) -> bool:
         """
         Add a new ETF row to the Google Sheet.
@@ -152,44 +179,38 @@ class GoogleSheetsService:
             return False
         
         # First, find the next row number
-        try:
-            # Get current data to find the last row
-            range_name = f'{self.sheet_name}!A:A'
-            result = self.service.spreadsheets().values().get(
-                spreadsheetId=self.spreadsheet_id,
-                range=range_name
-            ).execute()
-            
-            values = result.get('values', [])
-            next_row = len(values) + 1
-            
-            # Create the price formula for the new row
-            # =GOOGLEFINANCE(A{row}, "price")/100
-            price_formula = f'=GOOGLEFINANCE(A{next_row}, "price")/100'
-            
-            # Prepare the new row data (3 columns: ticker, name, price formula)
-            new_row = [[jse_ticker, etf_name, price_formula]]
-            
-            # Append the new row
-            body = {'values': new_row}
-            
-            self.service.spreadsheets().values().append(
-                spreadsheetId=self.spreadsheet_id,
-                range=f'{self.sheet_name}!A1',
-                valueInputOption='USER_ENTERED',
-                body=body
-            ).execute()
-            
-            print(f"Successfully added ETF {jse_ticker} to Google Sheet")
-            return True
-            
-        except HttpError as err:
-            print(f"HTTP error adding ETF to Google Sheets: {err}")
-            return False
-        except Exception as e:
-            print(f"Error adding ETF to Google Sheets: {e}")
-            return False
-    
+        # Get current data to find the last row
+        range_name = f'{self.sheet_name}!A:A'
+        result = self.service.spreadsheets().values().get(
+            spreadsheetId=self.spreadsheet_id,
+            range=range_name
+        ).execute()
+        
+        values = result.get('values', [])
+        next_row = len(values) + 1
+        
+        # Create the price formula for the new row
+        # =GOOGLEFINANCE(A{row}, "price")/100
+        price_formula = f'=GOOGLEFINANCE(A{next_row}, "price")/100'
+        
+        # Prepare the new row data (3 columns: ticker, name, price formula)
+        new_row = [[jse_ticker, etf_name, price_formula]]
+        
+        # Append the new row
+        body = {'values': new_row}
+        
+        self.service.spreadsheets().values().append(
+            spreadsheetId=self.spreadsheet_id,
+            range=f'{self.sheet_name}!A1',
+            valueInputOption='USER_ENTERED',
+            body=body
+
+        ).execute()
+        
+        logger.info(f"Successfully added ETF {jse_ticker} to Google Sheet")
+        return True
+
+    @_retry_on_connection_error
     def delete_etf_from_sheet(self, jse_ticker: str) -> bool:
         """
         Delete an ETF row from the Google Sheet by ticker.
@@ -203,69 +224,63 @@ class GoogleSheetsService:
         if not self.is_available():
             return False
         
-        try:
-            # First, get the sheet ID (GID)
-            spreadsheet_data = self.service.spreadsheets().get(
-                spreadsheetId=self.spreadsheet_id
-            ).execute()
-            
-            sheet_id = None
-            for sheet in spreadsheet_data.get('sheets', []):
-                if sheet['properties']['title'] == self.sheet_name:
-                    sheet_id = sheet['properties']['sheetId']
-                    break
-            
-            if sheet_id is None:
-                print(f"Could not find sheet: {self.sheet_name}")
-                return False
-            
-            # Find the row with the matching ticker
-            range_name = f'{self.sheet_name}!A:A'
-            result = self.service.spreadsheets().values().get(
-                spreadsheetId=self.spreadsheet_id,
-                range=range_name
-            ).execute()
-            
-            values = result.get('values', [])
-            row_to_delete = None
-            
-            for i, row in enumerate(values):
-                if row and row[0] == jse_ticker:
-                    row_to_delete = i
-                    break
-            
-            if row_to_delete is None:
-                print(f"Ticker {jse_ticker} not found in sheet")
-                return False
-            
-            # Delete the row (0-indexed for the API)
-            request_body = {
-                'requests': [{
-                    'deleteDimension': {
-                        'range': {
-                            'sheetId': sheet_id,
-                            'dimension': 'ROWS',
-                            'startIndex': row_to_delete,
-                            'endIndex': row_to_delete + 1
-                        }
+        # First, get the sheet ID (GID)
+        spreadsheet_data = self.service.spreadsheets().get(
+            spreadsheetId=self.spreadsheet_id
+        ).execute()
+        
+        sheet_id = None
+        for sheet in spreadsheet_data.get('sheets', []):
+            if sheet['properties']['title'] == self.sheet_name:
+                sheet_id = sheet['properties']['sheetId']
+                break
+        
+        if sheet_id is None:
+            logger.error(f"Could not find sheet: {self.sheet_name}")
+            return False
+        
+        # Find the row with the matching ticker
+        range_name = f'{self.sheet_name}!A:A'
+        result = self.service.spreadsheets().values().get(
+            spreadsheetId=self.spreadsheet_id,
+            range=range_name
+        ).execute()
+        
+        values = result.get('values', [])
+        row_to_delete = None
+        
+        for i, row in enumerate(values):
+            if row and row[0] == jse_ticker:
+                row_to_delete = i
+                break
+        
+        if row_to_delete is None:
+            logger.warning(f"Ticker {jse_ticker} not found in sheet")
+            return False
+        
+        # Delete the row (0-indexed for the API)
+        request_body = {
+            'requests': [{
+                'deleteDimension': {
+                    'range': {
+                        'sheetId': sheet_id,
+                        'dimension': 'ROWS',
+                        'startIndex': row_to_delete,
+                        'endIndex': row_to_delete + 1
                     }
-                }]
-            }
-            
-            self.service.spreadsheets().batchUpdate(
-                spreadsheetId=self.spreadsheet_id,
-                body=request_body
-            ).execute()
-            
-            print(f"Successfully deleted ETF {jse_ticker} from Google Sheet")
-            return True
-            
-        except HttpError as err:
-            print(f"HTTP error deleting ETF from Google Sheets: {err}")
-            return False
-        except Exception as e:
-            print(f"Error deleting ETF from Google Sheets: {e}")
-            return False
+                }
+            }]
+        }
+        
+        self.service.spreadsheets().batchUpdate(
+            spreadsheetId=self.spreadsheet_id,
+            body=request_body
+        ).execute()
+        
+
+        
+        logger.info(f"Successfully deleted ETF {jse_ticker} from Google Sheet")
+        return True
     
     def check_ticker_exists(self, jse_ticker: str) -> bool:
         """
