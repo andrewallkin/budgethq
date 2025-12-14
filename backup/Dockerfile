@@ -13,14 +13,16 @@ WORKDIR /app
 # Copy dependency files
 COPY pyproject.toml uv.lock ./
 
-# Install dependencies
-RUN uv export --no-dev --frozen > requirements.txt && \
-    uv pip install --system -r requirements.txt
+# Create virtual environment and install dependencies with uv
+RUN uv venv && \
+    uv export --no-dev --frozen > requirements.txt && \
+    uv pip install --python .venv/bin/python -r requirements.txt && \
+    rm requirements.txt
 
 # Copy backup scripts
 COPY backup ./backup
 
-# Run the backup scheduler
+# Run the backup scheduler using uv
 WORKDIR /app/backup
-CMD ["python", "backup_script.py"]
+CMD ["uv", "run", "backup_script.py"]
 

@@ -13,13 +13,10 @@ from zoneinfo import ZoneInfo
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 from gcs_service import GoogleCloudStorageService
+from logging_config import configure_logging
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)],
-)
+# Configure logging with same config as backend
+configure_logging()
 logger = logging.getLogger(__name__)
 
 # PostgreSQL connection details (from environment variables)
