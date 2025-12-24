@@ -69,6 +69,43 @@ export default function PortfolioChart() {
         return date.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })
     }
 
+    // Calculate dynamic y-axis domain based on total values (contributions + gain)
+    const calculateYAxisDomain = () => {
+        if (!chartData || chartData.length === 0) {
+            // Fallback to default domain if no data
+            return [0, 'auto']
+        }
+
+        // Calculate total values (contributions + gain) for each data point
+        const totalValues = chartData.map(d => {
+            const contributions = d.contributions || 0
+            const gain = d.gain || 0
+            return contributions + gain
+        })
+
+        const minValue = Math.min(...totalValues)
+        const maxValue = Math.max(...totalValues)
+
+        // Handle edge case: all values are the same
+        if (minValue === maxValue) {
+            // If all values are the same, add some padding around the single value
+            const padding = Math.max(minValue * 0.1, 1000) // 10% or at least R1000
+            return [Math.max(0, minValue - padding), maxValue + padding]
+        }
+
+        // Calculate padding (5% of the range)
+        const range = maxValue - minValue
+        const padding = range * 0.05
+
+        // Calculate domain with padding
+        const domainMin = Math.max(0, minValue - padding) // Don't go below zero
+        const domainMax = maxValue + padding
+
+        return [domainMin, domainMax]
+    }
+
+    const yAxisDomain = calculateYAxisDomain()
+
     const CustomTooltip = ({ active, payload, label }) => {
         if (!active || !payload || payload.length === 0) return null
 
@@ -257,6 +294,7 @@ export default function PortfolioChart() {
                                 axisLine={false}
                             />
                             <YAxis
+                                domain={yAxisDomain}
                                 tickFormatter={(value) => `R${(value / 1000).toFixed(0)}k`}
                                 stroke="#9CA3AF"
                                 fontSize={12}
