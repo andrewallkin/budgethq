@@ -62,6 +62,11 @@ class BudgetData(BaseModel):
     needs: List[CategoryBase]
     wants: List[CategoryBase]
     savings: List[CategoryBase]
+    current_emergency_fund: Optional[float] = 0
+    monthly_emergency_deposit: Optional[float] = 0
+    emergency_target_type: Optional[str] = None  # 'months' or 'target_value'
+    emergency_target_months: Optional[int] = None  # 3, 6, or 12
+    emergency_target_value: Optional[float] = None
 
 class ETFBase(BaseModel):
     ETF: str
@@ -278,7 +283,12 @@ async def get_budget(current_user: models.User = Depends(auth.get_current_user),
         "age": budget.age,
         "needs": [{"name": c.name, "amount": c.amount, "group": c.group} for c in needs],
         "wants": [{"name": c.name, "amount": c.amount, "group": c.group} for c in wants],
-        "savings": [{"name": c.name, "amount": c.amount, "group": c.group} for c in savings]
+        "savings": [{"name": c.name, "amount": c.amount, "group": c.group} for c in savings],
+        "current_emergency_fund": budget.current_emergency_fund or 0,
+        "monthly_emergency_deposit": budget.monthly_emergency_deposit or 0,
+        "emergency_target_type": budget.emergency_target_type,
+        "emergency_target_months": budget.emergency_target_months,
+        "emergency_target_value": budget.emergency_target_value
     }
 
 @app.post("/api/budget/default_user")
@@ -293,6 +303,13 @@ async def save_budget(data: BudgetData, current_user: models.User = Depends(auth
     
     budget.salary = data.salary
     budget.age = data.age
+    
+    # Save emergency fund fields
+    budget.current_emergency_fund = data.current_emergency_fund or 0
+    budget.monthly_emergency_deposit = data.monthly_emergency_deposit or 0
+    budget.emergency_target_type = data.emergency_target_type
+    budget.emergency_target_months = data.emergency_target_months
+    budget.emergency_target_value = data.emergency_target_value
     
     # Clear existing categories
     db.query(models.BudgetCategory).filter(models.BudgetCategory.budget_id == budget.id).delete()
