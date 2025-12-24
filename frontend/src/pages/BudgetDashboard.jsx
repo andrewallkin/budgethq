@@ -544,6 +544,7 @@ const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => 
     const renderGroupHeader = (groupName, groupItems) => {
         const total = getGroupTotal(groupItems)
         const isCollapsed = collapsedGroups.has(groupName)
+        const displayName = groupName === null ? 'Uncategorized' : groupName
         
         return (
             <div 
@@ -561,7 +562,7 @@ const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => 
                             <ChevronDown className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                         )}
                         <Folder className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                        <span className="font-semibold text-blue-900 dark:text-blue-100">{groupName}</span>
+                        <span className="font-semibold text-blue-900 dark:text-blue-100">{displayName}</span>
                         <span className="text-sm text-blue-700 dark:text-blue-300">
                             ({groupItems.length} {groupItems.length === 1 ? 'item' : 'items'})
                         </span>
@@ -713,25 +714,7 @@ const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => 
                         return a.localeCompare(b)
                     })
                     .map(([groupName, groupItems]) => {
-                        if (groupName === null) {
-                            // Render ungrouped items
-                            return (
-                                <div key="ungrouped">
-                                    {groupItems.length > 0 && (
-                                        <div className="mt-4 first:mt-0">
-                                            <div className="p-2 text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase">
-                                                Ungrouped
-                                            </div>
-                                            <div className="space-y-2">
-                                                {groupItems.map((item) => renderCategoryItem(item, item.originalIndex))}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            )
-                        } else {
-                            return renderGroupHeader(groupName, groupItems)
-                        }
+                        return renderGroupHeader(groupName, groupItems)
                     })}
                 {items.length === 0 && (
                     <p className="text-center text-gray-500 dark:text-gray-400 py-4">No categories yet</p>
