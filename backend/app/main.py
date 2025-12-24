@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 import csv
 import io
 from . import models, database, auth, history
@@ -922,6 +922,30 @@ async def delete_etf_transaction(
         # since the original calculation was proportional
         history.update_holding_cost_basis(db, holding.id)
 
+    # Delete transaction snapshots created when this transaction was made
+    # Snapshots are created at the same time as the transaction, so we match by timestamp
+    transaction_time = transaction.transaction_date
+    if transaction_time:
+        # Delete portfolio value history snapshots for this transaction (within 1 second window)
+        time_window_start = transaction_time - timedelta(seconds=1)
+        time_window_end = transaction_time + timedelta(seconds=1)
+        
+        db.query(models.PortfolioValueHistory).filter(
+            models.PortfolioValueHistory.user_id == current_user.id,
+            models.PortfolioValueHistory.snapshot_type == "transaction",
+            models.PortfolioValueHistory.recorded_at >= time_window_start,
+            models.PortfolioValueHistory.recorded_at <= time_window_end
+        ).delete(synchronize_session=False)
+        
+        # Delete holding value history snapshots for this holding (within 1 second window)
+        db.query(models.HoldingValueHistory).filter(
+            models.HoldingValueHistory.user_id == current_user.id,
+            models.HoldingValueHistory.holding_id == transaction.holding_id,
+            models.HoldingValueHistory.snapshot_type == "transaction",
+            models.HoldingValueHistory.recorded_at >= time_window_start,
+            models.HoldingValueHistory.recorded_at <= time_window_end
+        ).delete(synchronize_session=False)
+
     # Delete the transaction
     db.delete(transaction)
     db.commit()
@@ -1364,6 +1388,21 @@ async def delete_bond_transaction(
         holding.cost_basis = max(0, total_buy_value - total_sell_value)
 
     holding.updated_at = get_sast_now()
+
+    # Delete transaction snapshots created when this transaction was made
+    # Snapshots are created at the same time as the transaction, so we match by timestamp
+    transaction_time = transaction.transaction_date
+    if transaction_time:
+        # Delete portfolio value history snapshots for this transaction (within 1 second window)
+        time_window_start = transaction_time - timedelta(seconds=1)
+        time_window_end = transaction_time + timedelta(seconds=1)
+        
+        db.query(models.PortfolioValueHistory).filter(
+            models.PortfolioValueHistory.user_id == current_user.id,
+            models.PortfolioValueHistory.snapshot_type == "transaction",
+            models.PortfolioValueHistory.recorded_at >= time_window_start,
+            models.PortfolioValueHistory.recorded_at <= time_window_end
+        ).delete(synchronize_session=False)
 
     # Delete the transaction
     db.delete(transaction)

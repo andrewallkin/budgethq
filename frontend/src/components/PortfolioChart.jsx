@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import axios from 'axios'
 import {
     AreaChart,
@@ -69,15 +69,25 @@ export default function PortfolioChart() {
         return date.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })
     }
 
+    // Handle negative gains by adjusting the data
+    const processedData = chartData.map(d => ({
+        ...d,
+        // If gain is negative, show it as a negative area
+        gain: d.gain,
+        // Contributions stay positive
+        contributions: d.contributions
+    }))
+
     // Calculate dynamic y-axis domain based on total values (contributions + gain)
-    const calculateYAxisDomain = () => {
-        if (!chartData || chartData.length === 0) {
+    // Use useMemo to recalculate when processedData changes
+    const yAxisDomain = useMemo(() => {
+        if (!processedData || processedData.length === 0) {
             // Fallback to default domain if no data
             return [0, 'auto']
         }
 
         // Calculate total values (contributions + gain) for each data point
-        const totalValues = chartData.map(d => {
+        const totalValues = processedData.map(d => {
             const contributions = d.contributions || 0
             const gain = d.gain || 0
             return contributions + gain
@@ -102,9 +112,7 @@ export default function PortfolioChart() {
         const domainMax = maxValue + padding
 
         return [domainMin, domainMax]
-    }
-
-    const yAxisDomain = calculateYAxisDomain()
+    }, [processedData])
 
     const CustomTooltip = ({ active, payload, label }) => {
         if (!active || !payload || payload.length === 0) return null
@@ -141,15 +149,6 @@ export default function PortfolioChart() {
             </div>
         )
     }
-
-    // Handle negative gains by adjusting the data
-    const processedData = chartData.map(d => ({
-        ...d,
-        // If gain is negative, show it as a negative area
-        gain: d.gain,
-        // Contributions stay positive
-        contributions: d.contributions
-    }))
 
     const hasNegativeGains = chartData.some(d => d.gain < 0)
 
