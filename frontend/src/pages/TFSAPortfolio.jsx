@@ -245,9 +245,18 @@ export default function TFSAPortfolio() {
     }
 
     const getSortedHoldings = () => {
-        if (!sortColumn) return holdings
+        // Filter out zero holdings for table display
+        const activeHoldings = holdings.filter(h => {
+            if (h.type === 'BOND') {
+                return (h.current_value || 0) > 0
+            } else {
+                return (h.shares || 0) > 0
+            }
+        })
+        
+        if (!sortColumn) return activeHoldings
 
-        const sorted = [...holdings].sort((a, b) => {
+        const sorted = [...activeHoldings].sort((a, b) => {
             let aVal, bVal
 
             switch (sortColumn) {

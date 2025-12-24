@@ -3,6 +3,7 @@ from fastapi import FastAPI, HTTPException, Depends, status, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from typing import List, Optional
 from datetime import date, datetime, timedelta
 import csv
@@ -53,6 +54,7 @@ app.add_middleware(
 class CategoryBase(BaseModel):
     name: str
     amount: float
+    group: Optional[str] = None
 
 class BudgetData(BaseModel):
     salary: float
@@ -274,9 +276,9 @@ async def get_budget(current_user: models.User = Depends(auth.get_current_user),
     return {
         "salary": budget.salary,
         "age": budget.age,
-        "needs": [{"name": c.name, "amount": c.amount} for c in needs],
-        "wants": [{"name": c.name, "amount": c.amount} for c in wants],
-        "savings": [{"name": c.name, "amount": c.amount} for c in savings]
+        "needs": [{"name": c.name, "amount": c.amount, "group": c.group} for c in needs],
+        "wants": [{"name": c.name, "amount": c.amount, "group": c.group} for c in wants],
+        "savings": [{"name": c.name, "amount": c.amount, "group": c.group} for c in savings]
     }
 
 @app.post("/api/budget/default_user")
@@ -297,11 +299,11 @@ async def save_budget(data: BudgetData, current_user: models.User = Depends(auth
     
     # Add new categories
     for item in data.needs:
-        db.add(models.BudgetCategory(budget_id=budget.id, type='needs', name=item.name, amount=item.amount))
+        db.add(models.BudgetCategory(budget_id=budget.id, type='needs', name=item.name, amount=item.amount, group=item.group))
     for item in data.wants:
-        db.add(models.BudgetCategory(budget_id=budget.id, type='wants', name=item.name, amount=item.amount))
+        db.add(models.BudgetCategory(budget_id=budget.id, type='wants', name=item.name, amount=item.amount, group=item.group))
     for item in data.savings:
-        db.add(models.BudgetCategory(budget_id=budget.id, type='savings', name=item.name, amount=item.amount))
+        db.add(models.BudgetCategory(budget_id=budget.id, type='savings', name=item.name, amount=item.amount, group=item.group))
         
     db.commit()
     return {"status": "success"}
@@ -451,7 +453,8 @@ async def get_etf_holdings(
     """Get all ETF holdings for the current user with computed total values."""
     holdings = db.query(models.ETFHolding).filter(
         models.ETFHolding.user_id == current_user.id,
-        models.ETFHolding.shares > 0  # Only return holdings with shares > 0
+        # Include holdings with shares > 0 OR target_percentage > 0
+        or_(models.ETFHolding.shares > 0, models.ETFHolding.target_percentage > 0)
     ).all()
     
     result = []
@@ -1083,7 +1086,8 @@ async def get_bond_holdings(
     """Get all bond holdings for the current user."""
     holdings = db.query(models.BondHolding).filter(
         models.BondHolding.user_id == current_user.id,
-        models.BondHolding.current_value > 0  # Only return holdings with value > 0
+        # Include holdings with current_value > 0 OR target_percentage > 0
+        or_(models.BondHolding.current_value > 0, models.BondHolding.target_percentage > 0)
     ).all()
 
     result = []

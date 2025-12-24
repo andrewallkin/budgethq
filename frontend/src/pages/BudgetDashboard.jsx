@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts'
-import { Plus, Trash2, TrendingUp } from 'lucide-react'
+import { Plus, Trash2, TrendingUp, ChevronDown, ChevronRight, Folder, Calculator } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import SavingsCalculator from '../components/SavingsCalculator'
+import EmergencyFundCalculator from '../components/EmergencyFundCalculator'
 
 const COLORS = {
     Needs: '#B91C1C', // red-700
@@ -45,6 +47,9 @@ export default function BudgetDashboard() {
     const [portfolioTotal, setPortfolioTotal] = useState(0)
     const [portfolioEtfCount, setPortfolioEtfCount] = useState(0)
 
+    // Savings Calculator
+    const [showSavingsCalculator, setShowSavingsCalculator] = useState(false)
+
     // Load data on mount
     useEffect(() => {
         fetchData()
@@ -84,9 +89,10 @@ export default function BudgetDashboard() {
             if (budgetRes.data && Object.keys(budgetRes.data).length > 0) {
                 setSalary(budgetRes.data.salary || 0)
                 setAge(budgetRes.data.age || 30)
-                setNeeds(budgetRes.data.needs || [])
-                setWants(budgetRes.data.wants || [])
-                setSavings(budgetRes.data.savings || [])
+                // Ensure all categories have group field (backward compatibility)
+                setNeeds((budgetRes.data.needs || []).map(item => ({ ...item, group: item.group || null })))
+                setWants((budgetRes.data.wants || []).map(item => ({ ...item, group: item.group || null })))
+                setSavings((budgetRes.data.savings || []).map(item => ({ ...item, group: item.group || null })))
             }
 
             if (portfolioRes.data && Array.isArray(portfolioRes.data)) {
@@ -127,8 +133,8 @@ export default function BudgetDashboard() {
         }
     }
 
-    const addCategory = (type, name, amount = 0) => {
-        const newItem = { name, amount }
+    const addCategory = (type, name, amount = 0, group = null) => {
+        const newItem = { name, amount, group }
         if (type === 'needs') setNeeds([...needs, newItem])
         else if (type === 'wants') setWants([...wants, newItem])
         else setSavings([...savings, newItem])
@@ -162,12 +168,32 @@ export default function BudgetDashboard() {
     const totalSpent = totalNeeds + totalWants + totalSavings
     const remaining = netIncome - totalSpent
 
+    // Percentage calculation helper
+    const calculatePercentage = (amount, total = netIncome) => {
+        if (total === 0) return 0
+        return (amount / total) * 100
+    }
+
     const chartData = [
-        { name: 'Needs', value: totalNeeds },
-        { name: 'Wants', value: totalWants },
-        { name: 'Savings', value: totalSavings },
-        { name: 'Unallocated', value: Math.max(0, remaining) }
+        { name: 'Needs', value: totalNeeds, percentage: calculatePercentage(totalNeeds) },
+        { name: 'Wants', value: totalWants, percentage: calculatePercentage(totalWants) },
+        { name: 'Savings', value: totalSavings, percentage: calculatePercentage(totalSavings) },
+        { name: 'Unallocated', value: Math.max(0, remaining), percentage: calculatePercentage(Math.max(0, remaining)) }
     ].filter(d => d.value > 0)
+
+    // Calculate top spending categories for insights
+    const allCategories = [
+        ...needs.map(item => ({ ...item, type: 'Needs' })),
+        ...wants.map(item => ({ ...item, type: 'Wants' })),
+        ...savings.map(item => ({ ...item, type: 'Savings' }))
+    ]
+    const topCategories = allCategories
+        .map(item => ({
+            ...item,
+            percentage: calculatePercentage(item.amount)
+        }))
+        .sort((a, b) => b.percentage - a.percentage)
+        .slice(0, 5)
 
     if (loading) return <div>Loading...</div>
 
@@ -175,8 +201,17 @@ export default function BudgetDashboard() {
         <div className="space-y-8">
             <div className="flex justify-between items-center">
                 <h1 className="text-3xl font-bold text-gray-900 dark:text-white">💰 Budget Dashboard</h1>
-                <div className="text-sm text-gray-500 dark:text-gray-400">
-                    {isSaving ? 'Saving...' : 'All changes saved'}
+                <div className="flex items-center gap-4">
+                    <button
+                        onClick={() => setShowSavingsCalculator(true)}
+                        className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                    >
+                        <Calculator className="w-4 h-4" />
+                        Savings Calculator
+                    </button>
+                    <div className="text-sm text-gray-500 dark:text-gray-400">
+                        {isSaving ? 'Saving...' : 'All changes saved'}
+                    </div>
                 </div>
             </div>
 
@@ -231,18 +266,22 @@ export default function BudgetDashboard() {
                     <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
                         <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Summary</h2>
                         <div className="space-y-4">
-                            <SummaryItem label="Total Needs" value={totalNeeds} color="text-red-600 dark:text-red-400" />
-                            <SummaryItem label="Total Wants" value={totalWants} color="text-blue-600 dark:text-blue-400" />
-                            <SummaryItem label="Total Savings" value={totalSavings} color="text-green-600 dark:text-green-400" />
+                            <SummaryItem label="Total Needs" value={totalNeeds} color="text-red-600 dark:text-red-400" percentage={calculatePercentage(totalNeeds)} />
+                            <SummaryItem label="Total Wants" value={totalWants} color="text-blue-600 dark:text-blue-400" percentage={calculatePercentage(totalWants)} />
+                            <SummaryItem label="Total Savings" value={totalSavings} color="text-green-600 dark:text-green-400" percentage={calculatePercentage(totalSavings)} />
                             <div className="pt-4 border-t border-gray-100 dark:border-gray-700">
                                 <SummaryItem
                                     label="Remaining"
                                     value={remaining}
                                     color={remaining >= 0 ? "text-gray-900 dark:text-white" : "text-red-600 dark:text-red-400"}
+                                    percentage={calculatePercentage(Math.max(0, remaining))}
                                 />
                             </div>
                         </div>
                     </div>
+
+                    {/* Emergency Fund Calculator */}
+                    <EmergencyFundCalculator needsTotal={totalNeeds} />
 
                     {/* Overall Budget Breakdown Chart (Moved here) */}
                     {salary > 0 && (
@@ -265,11 +304,22 @@ export default function BudgetDashboard() {
                                             ))}
                                         </Pie>
                                         <Tooltip
-                                            formatter={(value) => `R ${value.toFixed(2)}`}
+                                            formatter={(value, name, props) => {
+                                                const percentage = props.payload.percentage || 0
+                                                return [`R ${value.toFixed(2)} (${percentage.toFixed(1)}%)`, name]
+                                            }}
                                             contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#f3f4f6' }}
                                             itemStyle={{ color: '#f3f4f6' }}
                                         />
-                                        <Legend verticalAlign="bottom" height={36} wrapperStyle={{ color: '#9ca3af' }} />
+                                        <Legend 
+                                            verticalAlign="bottom" 
+                                            height={36} 
+                                            wrapperStyle={{ color: '#9ca3af' }}
+                                            formatter={(value, entry) => {
+                                                const data = chartData.find(d => d.name === value)
+                                                return data ? `${value} (${data.percentage.toFixed(1)}%)` : value
+                                            }}
+                                        />
                                     </PieChart>
                                 </ResponsiveContainer>
                             </div>
@@ -300,7 +350,8 @@ export default function BudgetDashboard() {
                             <CategoryList
                                 type={activeTab}
                                 items={activeTab === 'needs' ? needs : activeTab === 'wants' ? wants : savings}
-                                onAdd={(name, amount) => addCategory(activeTab, name, amount)}
+                                netIncome={netIncome}
+                                onAdd={(name, amount, group) => addCategory(activeTab, name, amount, group)}
                                 onUpdate={(index, field, val) => updateCategory(activeTab, index, field, val)}
                                 onRemove={(index) => removeCategory(activeTab, index)}
                             />
@@ -314,7 +365,17 @@ export default function BudgetDashboard() {
                             <ResponsiveContainer width="100%" height="100%">
                                 <PieChart>
                                     <Pie
-                                        data={(activeTab === 'needs' ? needs : activeTab === 'wants' ? wants : savings).map(item => ({ name: item.name, value: item.amount })).filter(d => d.value > 0)}
+                                        data={(() => {
+                                            const categoryItems = activeTab === 'needs' ? needs : activeTab === 'wants' ? wants : savings
+                                            const categoryTotal = categoryItems.reduce((sum, item) => sum + item.amount, 0)
+                                            return categoryItems
+                                                .map(item => ({ 
+                                                    name: item.name, 
+                                                    value: item.amount,
+                                                    percentage: categoryTotal > 0 ? (item.amount / categoryTotal) * 100 : 0
+                                                }))
+                                                .filter(d => d.value > 0)
+                                        })()}
                                         cx="50%"
                                         cy="50%"
                                         innerRadius={60}
@@ -322,47 +383,139 @@ export default function BudgetDashboard() {
                                         paddingAngle={5}
                                         dataKey="value"
                                     >
-                                        {(activeTab === 'needs' ? needs : activeTab === 'wants' ? wants : savings)
-                                            .map(item => ({ name: item.name, value: item.amount }))
-                                            .filter(d => d.value > 0)
-                                            .map((entry, index) => (
-                                                <Cell key={`cell-${index}`} fill={CATEGORY_COLORS[index % CATEGORY_COLORS.length]} stroke="none" />
-                                            ))}
+                                        {(() => {
+                                            const categoryItems = activeTab === 'needs' ? needs : activeTab === 'wants' ? wants : savings
+                                            return categoryItems
+                                                .map(item => ({ name: item.name, value: item.amount }))
+                                                .filter(d => d.value > 0)
+                                                .map((entry, index) => (
+                                                    <Cell key={`cell-${index}`} fill={CATEGORY_COLORS[index % CATEGORY_COLORS.length]} stroke="none" />
+                                                ))
+                                        })()}
                                     </Pie>
                                     <Tooltip
-                                        formatter={(value) => `R ${value.toFixed(2)}`}
+                                        formatter={(value, name, props) => {
+                                            const percentage = props.payload.percentage || 0
+                                            return [`R ${value.toFixed(2)} (${percentage.toFixed(1)}%)`, name]
+                                        }}
                                         contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#f3f4f6' }}
                                         itemStyle={{ color: '#f3f4f6' }}
                                     />
-                                    <Legend layout="vertical" verticalAlign="middle" align="right" wrapperStyle={{ paddingLeft: "20px", color: '#9ca3af' }} />
+                                    <Legend 
+                                        layout="vertical" 
+                                        verticalAlign="middle" 
+                                        align="right" 
+                                        wrapperStyle={{ paddingLeft: "20px", color: '#9ca3af' }}
+                                        formatter={(value, entry, index) => {
+                                            const categoryItems = activeTab === 'needs' ? needs : activeTab === 'wants' ? wants : savings
+                                            const categoryTotal = categoryItems.reduce((sum, item) => sum + item.amount, 0)
+                                            const item = categoryItems.find(i => i.name === value)
+                                            if (item && categoryTotal > 0) {
+                                                const percentage = (item.amount / categoryTotal) * 100
+                                                return `${value} (${percentage.toFixed(1)}%)`
+                                            }
+                                            return value
+                                        }}
+                                    />
                                 </PieChart>
                             </ResponsiveContainer>
                         </div>
                     </div>
+
+                    {/* Percentage Insights Panel */}
+                    {salary > 0 && topCategories.length > 0 && (
+                        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
+                            <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Spending Insights</h2>
+                            <div className="space-y-3">
+                                <div className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                                    Top spending categories (% of net income)
+                                </div>
+                                {topCategories.map((item, index) => (
+                                    <div key={index} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-lg font-bold text-gray-400 dark:text-gray-500">#{index + 1}</span>
+                                            <div>
+                                                <div className="font-medium text-gray-900 dark:text-white">{item.name}</div>
+                                                <div className="text-xs text-gray-500 dark:text-gray-400">{item.type}</div>
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <div className="font-semibold text-gray-900 dark:text-white">
+                                                R {item.amount.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            </div>
+                                            <div className="text-sm text-blue-600 dark:text-blue-400">
+                                                {item.percentage.toFixed(1)}% of income
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                                {topCategories.length > 0 && (
+                                    <div className="pt-3 border-t border-gray-200 dark:border-gray-700 text-sm text-gray-600 dark:text-gray-400">
+                                        <strong>Insight:</strong> You're spending{' '}
+                                        <strong className="text-gray-900 dark:text-white">
+                                            {topCategories[0].percentage.toFixed(1)}%
+                                        </strong>{' '}
+                                        of your net income on <strong className="text-gray-900 dark:text-white">{topCategories[0].name}</strong>.
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
+
+            {/* Savings Calculator Modal */}
+            <SavingsCalculator 
+                isOpen={showSavingsCalculator} 
+                onClose={() => setShowSavingsCalculator(false)} 
+            />
         </div >
     )
 }
 
-function SummaryItem({ label, value, color }) {
+function SummaryItem({ label, value, color, percentage }) {
     return (
         <div className="flex justify-between items-center">
             <span className="text-gray-600 dark:text-gray-400">{label}</span>
-            <span className={`font-medium ${color}`}>R {value.toFixed(2)}</span>
+            <span className={`font-medium ${color}`}>
+                R {value.toFixed(2)}
+                {percentage !== undefined && <span className="text-sm ml-2 text-gray-500 dark:text-gray-400">({percentage.toFixed(1)}%)</span>}
+            </span>
         </div>
     )
 }
 
-const CategoryList = ({ type, items, onAdd, onUpdate, onRemove }) => {
+const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => {
     const [newName, setNewName] = useState('')
     const [newAmount, setNewAmount] = useState('')
+    const [newGroup, setNewGroup] = useState('')
+    const [collapsedGroups, setCollapsedGroups] = useState(new Set())
+
+    // Get all unique groups from items
+    const allGroups = Array.from(new Set(items.map(item => item.group).filter(Boolean)))
+
+    // Group items by their group field
+    const groupedItems = items.reduce((acc, item, index) => {
+        const group = item.group || null
+        if (!acc[group]) {
+            acc[group] = []
+        }
+        acc[group].push({ ...item, originalIndex: index })
+        return acc
+    }, {})
+
+    // Calculate percentage helper
+    const calculatePercentage = (amount) => {
+        if (netIncome === 0) return 0
+        return (amount / netIncome) * 100
+    }
 
     const handleAdd = () => {
         if (newName.trim()) {
-            onAdd(newName.trim(), parseFloat(newAmount) || 0)
+            onAdd(newName.trim(), parseFloat(newAmount) || 0, newGroup.trim() || null)
             setNewName('')
             setNewAmount('')
+            setNewGroup('')
         }
     }
 
@@ -372,16 +525,123 @@ const CategoryList = ({ type, items, onAdd, onUpdate, onRemove }) => {
         }
     }
 
+    const toggleGroup = (group) => {
+        const newCollapsed = new Set(collapsedGroups)
+        if (newCollapsed.has(group)) {
+            newCollapsed.delete(group)
+        } else {
+            newCollapsed.add(group)
+        }
+        setCollapsedGroups(newCollapsed)
+    }
+
+    const getGroupTotal = (groupItems) => {
+        return groupItems.reduce((sum, item) => sum + item.amount, 0)
+    }
+
+    // Render a group header
+    const renderGroupHeader = (groupName, groupItems) => {
+        const total = getGroupTotal(groupItems)
+        const isCollapsed = collapsedGroups.has(groupName)
+        
+        return (
+            <div 
+                key={groupName}
+                className="mt-4 first:mt-0"
+            >
+                <button
+                    onClick={() => toggleGroup(groupName)}
+                    className="w-full flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+                >
+                    <div className="flex items-center gap-2">
+                        {isCollapsed ? (
+                            <ChevronRight className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                        ) : (
+                            <ChevronDown className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                        )}
+                        <Folder className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                        <span className="font-semibold text-blue-900 dark:text-blue-100">{groupName}</span>
+                        <span className="text-sm text-blue-700 dark:text-blue-300">
+                            ({groupItems.length} {groupItems.length === 1 ? 'item' : 'items'})
+                        </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <span className="font-semibold text-blue-900 dark:text-blue-100">
+                            R {total.toFixed(2)}
+                        </span>
+                        <span className="text-sm text-blue-700 dark:text-blue-300">
+                            ({calculatePercentage(total).toFixed(1)}%)
+                        </span>
+                    </div>
+                </button>
+                {!isCollapsed && (
+                    <div className="mt-2 space-y-2 ml-4">
+                        {groupItems.map((item) => renderCategoryItem(item, item.originalIndex))}
+                    </div>
+                )}
+            </div>
+        )
+    }
+
+    // Render a single category item
+    const renderCategoryItem = (item, index) => {
+        const percentage = calculatePercentage(item.amount)
+        return (
+            <div key={index} className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors group">
+                <input
+                    type="text"
+                    value={item.name}
+                    onChange={(e) => onUpdate(index, 'name', e.target.value)}
+                    className="flex-1 bg-transparent border-none focus:ring-0 p-0 font-medium text-gray-900 dark:text-white"
+                />
+                <div className="relative">
+                    <input
+                        type="text"
+                        list={`group-edit-list-${type}-${index}`}
+                        placeholder="Group..."
+                        value={item.group || ''}
+                        onChange={(e) => onUpdate(index, 'group', e.target.value || null)}
+                        className="w-32 px-2 py-1 text-xs bg-white dark:bg-gray-600 border border-gray-200 dark:border-gray-500 rounded text-gray-900 dark:text-white"
+                    />
+                    <datalist id={`group-edit-list-${type}-${index}`}>
+                        {allGroups.map(group => (
+                            <option key={group} value={group} />
+                        ))}
+                    </datalist>
+                </div>
+                <div className="flex items-center gap-2">
+                    <span className="text-gray-500 dark:text-gray-400 text-sm">R</span>
+                    <input
+                        type="number"
+                        value={item.amount}
+                        onChange={(e) => onUpdate(index, 'amount', e.target.value)}
+                        onFocus={(e) => e.target.select()}
+                        className="w-24 bg-white dark:bg-gray-600 border border-gray-200 dark:border-gray-500 rounded px-2 py-1 text-right text-gray-900 dark:text-white"
+                    />
+                    <span className="text-xs text-gray-500 dark:text-gray-400 min-w-[50px] text-right">
+                        ({percentage.toFixed(1)}%)
+                    </span>
+                </div>
+                <button
+                    onClick={() => onRemove(index)}
+                    className="text-gray-400 hover:text-red-500 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                    <Trash2 className="w-4 h-4" />
+                </button>
+            </div>
+        )
+    }
+
     return (
         <div className="space-y-3">
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
                 <input
                     type="text"
                     placeholder="Category name..."
                     value={newName}
                     onChange={(e) => setNewName(e.target.value)}
                     onKeyPress={handleKeyPress}
-                    className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors"
+                    className="flex-1 min-w-[150px] px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors"
                 />
                 <div className="flex items-center gap-2 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700">
                     <span className="text-gray-500 dark:text-gray-400 text-sm">R</span>
@@ -395,6 +655,22 @@ const CategoryList = ({ type, items, onAdd, onUpdate, onRemove }) => {
                         className="w-24 bg-transparent border-none focus:ring-0 p-0 text-right text-gray-900 dark:text-white"
                     />
                 </div>
+                <div className="relative">
+                    <input
+                        type="text"
+                        list={`group-list-${type}`}
+                        placeholder="Group (optional)..."
+                        value={newGroup}
+                        onChange={(e) => setNewGroup(e.target.value)}
+                        onKeyPress={handleKeyPress}
+                        className="w-40 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors"
+                    />
+                    <datalist id={`group-list-${type}`}>
+                        {allGroups.map(group => (
+                            <option key={group} value={group} />
+                        ))}
+                    </datalist>
+                </div>
                 <button
                     onClick={handleAdd}
                     className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-1"
@@ -405,32 +681,34 @@ const CategoryList = ({ type, items, onAdd, onUpdate, onRemove }) => {
             </div>
 
             <div className="space-y-2">
-                {items.map((item, index) => (
-                    <div key={index} className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors group">
-                        <input
-                            type="text"
-                            value={item.name}
-                            onChange={(e) => onUpdate(index, 'name', e.target.value)}
-                            className="flex-1 bg-transparent border-none focus:ring-0 p-0 font-medium text-gray-900 dark:text-white"
-                        />
-                        <div className="flex items-center gap-2">
-                            <span className="text-gray-500 dark:text-gray-400 text-sm">R</span>
-                            <input
-                                type="number"
-                                value={item.amount}
-                                onChange={(e) => onUpdate(index, 'amount', e.target.value)}
-                                onFocus={(e) => e.target.select()}
-                                className="w-24 bg-white dark:bg-gray-600 border border-gray-200 dark:border-gray-500 rounded px-2 py-1 text-right text-gray-900 dark:text-white"
-                            />
-                        </div>
-                        <button
-                            onClick={() => onRemove(index)}
-                            className="text-gray-400 hover:text-red-500 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                            <Trash2 className="w-4 h-4" />
-                        </button>
-                    </div>
-                ))}
+                {Object.entries(groupedItems)
+                    .sort(([a], [b]) => {
+                        // Sort: null (ungrouped) last, then alphabetically
+                        if (a === null) return 1
+                        if (b === null) return -1
+                        return a.localeCompare(b)
+                    })
+                    .map(([groupName, groupItems]) => {
+                        if (groupName === null) {
+                            // Render ungrouped items
+                            return (
+                                <div key="ungrouped">
+                                    {groupItems.length > 0 && (
+                                        <div className="mt-4 first:mt-0">
+                                            <div className="p-2 text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase">
+                                                Ungrouped
+                                            </div>
+                                            <div className="space-y-2">
+                                                {groupItems.map((item) => renderCategoryItem(item, item.originalIndex))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )
+                        } else {
+                            return renderGroupHeader(groupName, groupItems)
+                        }
+                    })}
                 {items.length === 0 && (
                     <p className="text-center text-gray-500 dark:text-gray-400 py-4">No categories yet</p>
                 )}

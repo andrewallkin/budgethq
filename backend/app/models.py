@@ -43,6 +43,7 @@ class BudgetCategory(Base):
     type = Column(String)  # 'needs', 'wants', 'savings'
     name = Column(String)
     amount = Column(Float)
+    group = Column(String, nullable=True)  # Optional group for sub-categorization
 
     budget = relationship("Budget", back_populates="categories")
 
