@@ -490,6 +490,7 @@ const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => 
     const [newAmount, setNewAmount] = useState('')
     const [newGroup, setNewGroup] = useState('')
     const [collapsedGroups, setCollapsedGroups] = useState(new Set())
+    const [editingGroup, setEditingGroup] = useState({}) // Track local group values while editing
 
     // Get all unique groups from items
     const allGroups = Array.from(new Set(items.map(item => item.group).filter(Boolean)))
@@ -586,6 +587,9 @@ const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => 
     // Render a single category item
     const renderCategoryItem = (item, index) => {
         const percentage = calculatePercentage(item.amount)
+        // Use local editing state if available, otherwise use item.group
+        const groupValue = editingGroup[index] !== undefined ? editingGroup[index] : (item.group || '')
+        
         return (
             <div key={index} className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors group">
                 <input
@@ -599,8 +603,28 @@ const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => 
                         type="text"
                         list={`group-edit-list-${type}-${index}`}
                         placeholder="Group..."
-                        value={item.group || ''}
-                        onChange={(e) => onUpdate(index, 'group', e.target.value || null)}
+                        value={groupValue}
+                        onChange={(e) => {
+                            // Update local state only, don't trigger onUpdate yet
+                            setEditingGroup(prev => ({ ...prev, [index]: e.target.value }))
+                        }}
+                        onBlur={(e) => {
+                            // Save to parent state only when user leaves the field
+                            const finalValue = e.target.value.trim() || null
+                            onUpdate(index, 'group', finalValue)
+                            // Clear local editing state
+                            setEditingGroup(prev => {
+                                const newState = { ...prev }
+                                delete newState[index]
+                                return newState
+                            })
+                        }}
+                        onKeyDown={(e) => {
+                            // Save on Enter key as well
+                            if (e.key === 'Enter') {
+                                e.target.blur()
+                            }
+                        }}
                         className="w-32 px-2 py-1 text-xs bg-white dark:bg-gray-600 border border-gray-200 dark:border-gray-500 rounded text-gray-900 dark:text-white"
                     />
                     <datalist id={`group-edit-list-${type}-${index}`}>
