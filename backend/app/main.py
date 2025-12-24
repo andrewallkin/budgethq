@@ -450,7 +450,8 @@ async def get_etf_holdings(
 ):
     """Get all ETF holdings for the current user with computed total values."""
     holdings = db.query(models.ETFHolding).filter(
-        models.ETFHolding.user_id == current_user.id
+        models.ETFHolding.user_id == current_user.id,
+        models.ETFHolding.shares > 0  # Only return holdings with shares > 0
     ).all()
     
     result = []
@@ -1081,7 +1082,8 @@ async def get_bond_holdings(
 ):
     """Get all bond holdings for the current user."""
     holdings = db.query(models.BondHolding).filter(
-        models.BondHolding.user_id == current_user.id
+        models.BondHolding.user_id == current_user.id,
+        models.BondHolding.current_value > 0  # Only return holdings with value > 0
     ).all()
 
     result = []
