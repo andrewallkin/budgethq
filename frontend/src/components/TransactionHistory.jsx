@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react'
-import { TrendingUp, TrendingDown, ChevronDown, ChevronUp, History } from 'lucide-react'
+import { TrendingUp, TrendingDown, ChevronDown, ChevronUp, History, Trash2 } from 'lucide-react'
 import axios from 'axios'
+import ConfirmModal from './ConfirmModal'
 
-export default function TransactionHistory({ refreshTrigger }) {
+export default function TransactionHistory({ refreshTrigger, onTransactionDeleted }) {
     const [transactions, setTransactions] = useState([])
     const [loading, setLoading] = useState(true)
     const [expanded, setExpanded] = useState(false)
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+    const [transactionToDelete, setTransactionToDelete] = useState(null)
 
     useEffect(() => {
         fetchTransactions()
@@ -52,6 +55,36 @@ export default function TransactionHistory({ refreshTrigger }) {
         }
     }
 
+    const handleDeleteClick = (transaction) => {
+        setTransactionToDelete(transaction)
+        setShowDeleteConfirm(true)
+    }
+
+    const handleDeleteConfirm = async () => {
+        if (!transactionToDelete) return
+
+        try {
+            const endpoint = transactionToDelete.type === 'BOND'
+                ? `/api/bond/transactions/${transactionToDelete.id}`
+                : `/api/etf/transactions/${transactionToDelete.id}`
+            
+            await axios.delete(endpoint)
+            
+            // Refresh transactions list
+            await fetchTransactions()
+            
+            // Trigger parent refresh if callback provided
+            if (onTransactionDeleted) {
+                onTransactionDeleted()
+            }
+        } catch (err) {
+            console.error('Failed to delete transaction', err)
+            alert(err.response?.data?.detail || 'Failed to delete transaction')
+        } finally {
+            setTransactionToDelete(null)
+        }
+    }
+
     if (loading) {
         return (
             <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
@@ -94,6 +127,7 @@ export default function TransactionHistory({ refreshTrigger }) {
                             <th className="text-right py-3 px-2">Shares</th>
                             <th className="text-right py-3 px-2">Price</th>
                             <th className="text-right py-3 px-2">Amount</th>
+                            <th className="text-center py-3 px-2">Actions</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
@@ -152,6 +186,15 @@ export default function TransactionHistory({ refreshTrigger }) {
                                 }`}>
                                     {tx.transaction_type === 'BUY' ? '-' : '+'}R {tx.total_value.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </td>
+                                <td className="py-3 px-2">
+                                    <button
+                                        onClick={() => handleDeleteClick(tx)}
+                                        className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors"
+                                        title="Delete transaction"
+                                    >
+                                        <Trash2 className="w-4 h-4" />
+                                    </button>
+                                </td>
                             </tr>
                         ))}
                     </tbody>
@@ -176,6 +219,26 @@ export default function TransactionHistory({ refreshTrigger }) {
                     )}
                 </button>
             )}
+
+            {/* Delete Confirmation Modal */}
+            <ConfirmModal
+                isOpen={showDeleteConfirm}
+                onClose={() => {
+                    setShowDeleteConfirm(false)
+                    setTransactionToDelete(null)
+                }}
+                onConfirm={handleDeleteConfirm}
+                title={`Delete ${transactionToDelete?.type === 'BOND' ? 'Bond' : 'ETF'} Transaction`}
+                message={transactionToDelete ? `Are you sure you want to delete this ${transactionToDelete.transaction_type} transaction?` : ''}
+                details={transactionToDelete ? [
+                    `This will reverse the ${transactionToDelete.transaction_type === 'BUY' ? 'purchase' : 'sale'} of ${transactionToDelete.type === 'BOND' ? `R ${transactionToDelete.total_value.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `${transactionToDelete.shares.toFixed(4)} shares`}`,
+                    transactionToDelete.type === 'ETF' ? `Holding shares will be ${transactionToDelete.transaction_type === 'BUY' ? 'reduced' : 'increased'}` : `Holding value will be ${transactionToDelete.transaction_type === 'BUY' ? 'reduced' : 'increased'}`,
+                    'Cost basis will be recalculated'
+                ] : []}
+                confirmText="Delete"
+                cancelText="Cancel"
+                variant="danger"
+            />
         </div>
     )
 }

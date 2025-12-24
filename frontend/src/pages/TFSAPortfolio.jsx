@@ -884,7 +884,13 @@ export default function TFSAPortfolio() {
             )}
 
             {/* Transaction History */}
-            <TransactionHistory refreshTrigger={transactionRefresh} />
+            <TransactionHistory 
+                refreshTrigger={transactionRefresh} 
+                onTransactionDeleted={() => {
+                    fetchHoldings()
+                    setTransactionRefresh(prev => prev + 1)
+                }}
+            />
 
             {/* Target vs Actual Bar Chart */}
             {holdings.length > 0 && (

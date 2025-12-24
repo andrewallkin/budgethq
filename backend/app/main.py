@@ -877,6 +877,58 @@ async def create_etf_transaction(
     }
 
 
+@app.delete("/api/etf/transactions/{transaction_id}")
+async def delete_etf_transaction(
+    transaction_id: int,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """
+    Delete an ETF transaction and reverse its effects on the holding.
+    """
+    # Verify transaction exists and belongs to user
+    transaction = db.query(models.ETFTransaction).filter(
+        models.ETFTransaction.id == transaction_id,
+        models.ETFTransaction.user_id == current_user.id
+    ).first()
+
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    # Get the holding
+    holding = db.query(models.ETFHolding).filter(
+        models.ETFHolding.id == transaction.holding_id,
+        models.ETFHolding.user_id == current_user.id
+    ).first()
+
+    if not holding:
+        raise HTTPException(status_code=404, detail="Holding not found")
+
+    # Reverse the transaction effects
+    if transaction.transaction_type == "BUY":
+        # Reverse BUY: subtract shares
+        if holding.shares < transaction.shares:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot delete transaction: would result in negative shares"
+            )
+        holding.shares -= transaction.shares
+        # Reverse cost basis: subtract the transaction value
+        holding.cost_basis = max(0, (holding.cost_basis or 0) - (transaction.total_value or 0))
+    else:  # SELL
+        # Reverse SELL: add shares back
+        holding.shares += transaction.shares
+        # For SELL, we need to recalculate cost_basis from remaining transactions
+        # since the original calculation was proportional
+        history.update_holding_cost_basis(db, holding.id)
+
+    # Delete the transaction
+    db.delete(transaction)
+    db.commit()
+
+    return {"message": "Transaction deleted successfully", "updated_share_count": holding.shares}
+
+
 # =====================================================
 # Google Sheets Integration Endpoints
 # =====================================================
@@ -1256,6 +1308,68 @@ async def create_bond_transaction(
         "cost_basis": holding.cost_basis,
         "unrealized_gain": round(unrealized_gain, 2)
     }
+
+
+@app.delete("/api/bond/transactions/{transaction_id}")
+async def delete_bond_transaction(
+    transaction_id: int,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """
+    Delete a bond transaction and reverse its effects on the holding.
+    """
+    # Verify transaction exists and belongs to user
+    transaction = db.query(models.BondTransaction).filter(
+        models.BondTransaction.id == transaction_id,
+        models.BondTransaction.user_id == current_user.id
+    ).first()
+
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    # Get the holding
+    holding = db.query(models.BondHolding).filter(
+        models.BondHolding.id == transaction.holding_id,
+        models.BondHolding.user_id == current_user.id
+    ).first()
+
+    if not holding:
+        raise HTTPException(status_code=404, detail="Holding not found")
+
+    # Reverse the transaction effects
+    current_cost_basis = holding.cost_basis or 0
+
+    if transaction.transaction_type == "BUY":
+        # Reverse BUY: subtract amount from value and cost_basis
+        if holding.current_value < transaction.amount:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot delete transaction: would result in negative value"
+            )
+        holding.current_value -= transaction.amount
+        holding.cost_basis = max(0, current_cost_basis - transaction.amount)
+    else:  # SELL
+        # Reverse SELL: add amount back to value
+        # For SELL, we need to recalculate cost_basis from remaining transactions
+        # since the original calculation was proportional
+        holding.current_value += transaction.amount
+        # Recalculate cost_basis from all remaining transactions
+        transactions = db.query(models.BondTransaction).filter(
+            models.BondTransaction.holding_id == holding.id,
+            models.BondTransaction.id != transaction_id
+        ).all()
+        total_buy_value = sum(t.amount for t in transactions if t.transaction_type == "BUY")
+        total_sell_value = sum(t.amount for t in transactions if t.transaction_type == "SELL")
+        holding.cost_basis = max(0, total_buy_value - total_sell_value)
+
+    holding.updated_at = get_sast_now()
+
+    # Delete the transaction
+    db.delete(transaction)
+    db.commit()
+
+    return {"message": "Transaction deleted successfully", "updated_value": holding.current_value}
 
 
 # =====================================================
