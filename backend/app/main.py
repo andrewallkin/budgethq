@@ -3,8 +3,9 @@ from fastapi import FastAPI, HTTPException, Depends, status, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from typing import List, Optional
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 import csv
 import io
 from . import models, database, auth, history
@@ -53,6 +54,7 @@ app.add_middleware(
 class CategoryBase(BaseModel):
     name: str
     amount: float
+    group: Optional[str] = None
 
 class BudgetData(BaseModel):
     salary: float
@@ -60,6 +62,11 @@ class BudgetData(BaseModel):
     needs: List[CategoryBase]
     wants: List[CategoryBase]
     savings: List[CategoryBase]
+    current_emergency_fund: Optional[float] = 0
+    monthly_emergency_deposit: Optional[float] = 0
+    emergency_target_type: Optional[str] = None  # 'months' or 'target_value'
+    emergency_target_months: Optional[int] = None  # 3, 6, or 12
+    emergency_target_value: Optional[float] = None
 
 class ETFBase(BaseModel):
     ETF: str
@@ -274,9 +281,14 @@ async def get_budget(current_user: models.User = Depends(auth.get_current_user),
     return {
         "salary": budget.salary,
         "age": budget.age,
-        "needs": [{"name": c.name, "amount": c.amount} for c in needs],
-        "wants": [{"name": c.name, "amount": c.amount} for c in wants],
-        "savings": [{"name": c.name, "amount": c.amount} for c in savings]
+        "needs": [{"name": c.name, "amount": c.amount, "group": c.group} for c in needs],
+        "wants": [{"name": c.name, "amount": c.amount, "group": c.group} for c in wants],
+        "savings": [{"name": c.name, "amount": c.amount, "group": c.group} for c in savings],
+        "current_emergency_fund": budget.current_emergency_fund or 0,
+        "monthly_emergency_deposit": budget.monthly_emergency_deposit or 0,
+        "emergency_target_type": budget.emergency_target_type,
+        "emergency_target_months": budget.emergency_target_months,
+        "emergency_target_value": budget.emergency_target_value
     }
 
 @app.post("/api/budget/default_user")
@@ -292,16 +304,23 @@ async def save_budget(data: BudgetData, current_user: models.User = Depends(auth
     budget.salary = data.salary
     budget.age = data.age
     
+    # Save emergency fund fields
+    budget.current_emergency_fund = data.current_emergency_fund or 0
+    budget.monthly_emergency_deposit = data.monthly_emergency_deposit or 0
+    budget.emergency_target_type = data.emergency_target_type
+    budget.emergency_target_months = data.emergency_target_months
+    budget.emergency_target_value = data.emergency_target_value
+    
     # Clear existing categories
     db.query(models.BudgetCategory).filter(models.BudgetCategory.budget_id == budget.id).delete()
     
     # Add new categories
     for item in data.needs:
-        db.add(models.BudgetCategory(budget_id=budget.id, type='needs', name=item.name, amount=item.amount))
+        db.add(models.BudgetCategory(budget_id=budget.id, type='needs', name=item.name, amount=item.amount, group=item.group))
     for item in data.wants:
-        db.add(models.BudgetCategory(budget_id=budget.id, type='wants', name=item.name, amount=item.amount))
+        db.add(models.BudgetCategory(budget_id=budget.id, type='wants', name=item.name, amount=item.amount, group=item.group))
     for item in data.savings:
-        db.add(models.BudgetCategory(budget_id=budget.id, type='savings', name=item.name, amount=item.amount))
+        db.add(models.BudgetCategory(budget_id=budget.id, type='savings', name=item.name, amount=item.amount, group=item.group))
         
     db.commit()
     return {"status": "success"}
@@ -450,7 +469,9 @@ async def get_etf_holdings(
 ):
     """Get all ETF holdings for the current user with computed total values."""
     holdings = db.query(models.ETFHolding).filter(
-        models.ETFHolding.user_id == current_user.id
+        models.ETFHolding.user_id == current_user.id,
+        # Include holdings with shares > 0 OR target_percentage > 0
+        or_(models.ETFHolding.shares > 0, models.ETFHolding.target_percentage > 0)
     ).all()
     
     result = []
@@ -877,6 +898,82 @@ async def create_etf_transaction(
     }
 
 
+@app.delete("/api/etf/transactions/{transaction_id}")
+async def delete_etf_transaction(
+    transaction_id: int,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """
+    Delete an ETF transaction and reverse its effects on the holding.
+    """
+    # Verify transaction exists and belongs to user
+    transaction = db.query(models.ETFTransaction).filter(
+        models.ETFTransaction.id == transaction_id,
+        models.ETFTransaction.user_id == current_user.id
+    ).first()
+
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    # Get the holding
+    holding = db.query(models.ETFHolding).filter(
+        models.ETFHolding.id == transaction.holding_id,
+        models.ETFHolding.user_id == current_user.id
+    ).first()
+
+    if not holding:
+        raise HTTPException(status_code=404, detail="Holding not found")
+
+    # Reverse the transaction effects
+    if transaction.transaction_type == "BUY":
+        # Reverse BUY: subtract shares
+        if holding.shares < transaction.shares:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot delete transaction: would result in negative shares"
+            )
+        holding.shares -= transaction.shares
+        # Reverse cost basis: subtract the transaction value
+        holding.cost_basis = max(0, (holding.cost_basis or 0) - (transaction.total_value or 0))
+    else:  # SELL
+        # Reverse SELL: add shares back
+        holding.shares += transaction.shares
+        # For SELL, we need to recalculate cost_basis from remaining transactions
+        # since the original calculation was proportional
+        history.update_holding_cost_basis(db, holding.id)
+
+    # Delete transaction snapshots created when this transaction was made
+    # Snapshots are created at the same time as the transaction, so we match by timestamp
+    transaction_time = transaction.transaction_date
+    if transaction_time:
+        # Delete portfolio value history snapshots for this transaction (within 1 second window)
+        time_window_start = transaction_time - timedelta(seconds=1)
+        time_window_end = transaction_time + timedelta(seconds=1)
+        
+        db.query(models.PortfolioValueHistory).filter(
+            models.PortfolioValueHistory.user_id == current_user.id,
+            models.PortfolioValueHistory.snapshot_type == "transaction",
+            models.PortfolioValueHistory.recorded_at >= time_window_start,
+            models.PortfolioValueHistory.recorded_at <= time_window_end
+        ).delete(synchronize_session=False)
+        
+        # Delete holding value history snapshots for this holding (within 1 second window)
+        db.query(models.HoldingValueHistory).filter(
+            models.HoldingValueHistory.user_id == current_user.id,
+            models.HoldingValueHistory.holding_id == transaction.holding_id,
+            models.HoldingValueHistory.snapshot_type == "transaction",
+            models.HoldingValueHistory.recorded_at >= time_window_start,
+            models.HoldingValueHistory.recorded_at <= time_window_end
+        ).delete(synchronize_session=False)
+
+    # Delete the transaction
+    db.delete(transaction)
+    db.commit()
+
+    return {"message": "Transaction deleted successfully", "updated_share_count": holding.shares}
+
+
 # =====================================================
 # Google Sheets Integration Endpoints
 # =====================================================
@@ -1005,7 +1102,9 @@ async def get_bond_holdings(
 ):
     """Get all bond holdings for the current user."""
     holdings = db.query(models.BondHolding).filter(
-        models.BondHolding.user_id == current_user.id
+        models.BondHolding.user_id == current_user.id,
+        # Include holdings with current_value > 0 OR target_percentage > 0
+        or_(models.BondHolding.current_value > 0, models.BondHolding.target_percentage > 0)
     ).all()
 
     result = []
@@ -1256,6 +1355,83 @@ async def create_bond_transaction(
         "cost_basis": holding.cost_basis,
         "unrealized_gain": round(unrealized_gain, 2)
     }
+
+
+@app.delete("/api/bond/transactions/{transaction_id}")
+async def delete_bond_transaction(
+    transaction_id: int,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """
+    Delete a bond transaction and reverse its effects on the holding.
+    """
+    # Verify transaction exists and belongs to user
+    transaction = db.query(models.BondTransaction).filter(
+        models.BondTransaction.id == transaction_id,
+        models.BondTransaction.user_id == current_user.id
+    ).first()
+
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    # Get the holding
+    holding = db.query(models.BondHolding).filter(
+        models.BondHolding.id == transaction.holding_id,
+        models.BondHolding.user_id == current_user.id
+    ).first()
+
+    if not holding:
+        raise HTTPException(status_code=404, detail="Holding not found")
+
+    # Reverse the transaction effects
+    current_cost_basis = holding.cost_basis or 0
+
+    if transaction.transaction_type == "BUY":
+        # Reverse BUY: subtract amount from value and cost_basis
+        if holding.current_value < transaction.amount:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot delete transaction: would result in negative value"
+            )
+        holding.current_value -= transaction.amount
+        holding.cost_basis = max(0, current_cost_basis - transaction.amount)
+    else:  # SELL
+        # Reverse SELL: add amount back to value
+        # For SELL, we need to recalculate cost_basis from remaining transactions
+        # since the original calculation was proportional
+        holding.current_value += transaction.amount
+        # Recalculate cost_basis from all remaining transactions
+        transactions = db.query(models.BondTransaction).filter(
+            models.BondTransaction.holding_id == holding.id,
+            models.BondTransaction.id != transaction_id
+        ).all()
+        total_buy_value = sum(t.amount for t in transactions if t.transaction_type == "BUY")
+        total_sell_value = sum(t.amount for t in transactions if t.transaction_type == "SELL")
+        holding.cost_basis = max(0, total_buy_value - total_sell_value)
+
+    holding.updated_at = get_sast_now()
+
+    # Delete transaction snapshots created when this transaction was made
+    # Snapshots are created at the same time as the transaction, so we match by timestamp
+    transaction_time = transaction.transaction_date
+    if transaction_time:
+        # Delete portfolio value history snapshots for this transaction (within 1 second window)
+        time_window_start = transaction_time - timedelta(seconds=1)
+        time_window_end = transaction_time + timedelta(seconds=1)
+        
+        db.query(models.PortfolioValueHistory).filter(
+            models.PortfolioValueHistory.user_id == current_user.id,
+            models.PortfolioValueHistory.snapshot_type == "transaction",
+            models.PortfolioValueHistory.recorded_at >= time_window_start,
+            models.PortfolioValueHistory.recorded_at <= time_window_end
+        ).delete(synchronize_session=False)
+
+    # Delete the transaction
+    db.delete(transaction)
+    db.commit()
+
+    return {"message": "Transaction deleted successfully", "updated_value": holding.current_value}
 
 
 # =====================================================

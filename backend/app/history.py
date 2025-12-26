@@ -291,8 +291,12 @@ def record_transaction_snapshot(db: Session, user_id: int, transaction_id: int) 
     )
     db.add(portfolio_record)
     
-    # Record holding value history for each ETF
+    # Record holding value history for each ETF (skip bonds - they have negative IDs)
     for holding_id, data in holdings_breakdown.items():
+        # Skip bonds (negative IDs) - HoldingValueHistory only tracks ETFs
+        if holding_id < 0 or data.get('type') == 'BOND':
+            continue
+        
         holding_record = models.HoldingValueHistory(
             user_id=user_id,
             holding_id=holding_id,

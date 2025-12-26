@@ -31,6 +31,13 @@ class Budget(Base):
     user_id = Column(Integer, ForeignKey("users.id"))
     salary = Column(Float, default=0)
     age = Column(Integer, default=30)
+    
+    # Emergency fund fields
+    current_emergency_fund = Column(Float, default=0)
+    monthly_emergency_deposit = Column(Float, default=0)
+    emergency_target_type = Column(String, nullable=True)  # 'months' or 'target_value'
+    emergency_target_months = Column(Integer, nullable=True)  # 3, 6, or 12
+    emergency_target_value = Column(Float, nullable=True)  # Direct target value
 
     owner = relationship("User", back_populates="budget")
     categories = relationship("BudgetCategory", back_populates="budget")
@@ -43,6 +50,7 @@ class BudgetCategory(Base):
     type = Column(String)  # 'needs', 'wants', 'savings'
     name = Column(String)
     amount = Column(Float)
+    group = Column(String, nullable=True)  # Optional group for sub-categorization
 
     budget = relationship("Budget", back_populates="categories")
 

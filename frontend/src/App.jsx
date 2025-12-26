@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Routes, Route, Link, useLocation, Navigate } from 'react-router-dom'
-import { LayoutDashboard, PieChart, Home, Moon, Sun, LogOut, Settings as SettingsIcon } from 'lucide-react'
+import { LayoutDashboard, PieChart, Home, Moon, Sun, LogOut, Settings as SettingsIcon, ChevronLeft, ChevronRight } from 'lucide-react'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import BudgetDashboard from './pages/BudgetDashboard'
 import TFSAPortfolio from './pages/TFSAPortfolio'
@@ -25,6 +25,10 @@ function AppContent() {
         const saved = localStorage.getItem('darkMode')
         return saved ? JSON.parse(saved) : window.matchMedia('(prefers-color-scheme: dark)').matches
     })
+    const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
+        const saved = localStorage.getItem('sidebarCollapsed')
+        return saved ? JSON.parse(saved) : false
+    })
 
     useEffect(() => {
         if (darkMode) {
@@ -34,6 +38,10 @@ function AppContent() {
         }
         localStorage.setItem('darkMode', JSON.stringify(darkMode))
     }, [darkMode])
+
+    useEffect(() => {
+        localStorage.setItem('sidebarCollapsed', JSON.stringify(isSidebarCollapsed))
+    }, [isSidebarCollapsed])
 
     const navItems = [
         { path: '/', label: 'Home', icon: Home },
@@ -55,17 +63,29 @@ function AppContent() {
     return (
         <div className="flex h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
             {/* Sidebar */}
-            <div className="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col transition-colors duration-200">
-                <div className="p-6 flex justify-between items-center">
-                    <h1 className="text-xl font-bold text-gray-800 dark:text-white">💰 FinDash</h1>
-                    <button
-                        onClick={() => setDarkMode(!darkMode)}
-                        className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 transition-colors"
-                    >
-                        {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-                    </button>
+            <div className={`${isSidebarCollapsed ? 'w-16' : 'w-64'} bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col transition-all duration-300 ease-in-out overflow-hidden`}>
+                <div className={`p-6 flex ${isSidebarCollapsed ? 'justify-center' : 'justify-between'} items-center`}>
+                    {!isSidebarCollapsed && (
+                        <h1 className="text-xl font-bold text-gray-800 dark:text-white">💰 FinDash</h1>
+                    )}
+                    <div className={`flex items-center gap-2 ${isSidebarCollapsed ? 'flex-col' : ''}`}>
+                        <button
+                            onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+                            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 transition-colors"
+                            title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                        >
+                            {isSidebarCollapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
+                        </button>
+                        <button
+                            onClick={() => setDarkMode(!darkMode)}
+                            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 transition-colors"
+                            title={darkMode ? 'Light mode' : 'Dark mode'}
+                        >
+                            {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+                        </button>
+                    </div>
                 </div>
-                <nav className="flex-1 px-4 space-y-2">
+                <nav className={`flex-1 ${isSidebarCollapsed ? 'px-2' : 'px-4'} space-y-2`}>
                     {navItems.map((item) => {
                         const Icon = item.icon
                         const isActive = location.pathname === item.path
@@ -73,13 +93,16 @@ function AppContent() {
                             <Link
                                 key={item.path}
                                 to={item.path}
-                                className={`flex items-center px-4 py-3 rounded-lg transition-colors ${isActive
+                                className={`flex items-center ${isSidebarCollapsed ? 'justify-center px-2' : 'px-4'} py-3 rounded-lg transition-colors ${isActive
                                     ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
                                     : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
                                     }`}
+                                title={isSidebarCollapsed ? item.label : ''}
                             >
-                                <Icon className="w-5 h-5 mr-3" />
-                                <span className="font-medium">{item.label}</span>
+                                <Icon className={`w-5 h-5 ${isSidebarCollapsed ? '' : 'mr-3'}`} />
+                                {!isSidebarCollapsed && (
+                                    <span className="font-medium">{item.label}</span>
+                                )}
                             </Link>
                         )
                     })}
@@ -87,11 +110,13 @@ function AppContent() {
 
                 {/* User info and logout */}
                 {user && (
-                    <div className="p-4 border-t border-gray-200 dark:border-gray-700">
-                        <div className="flex items-center justify-between">
-                            <div className="text-sm">
-                                <p className="font-medium text-gray-900 dark:text-white">{user.username}</p>
-                            </div>
+                    <div className={`p-4 border-t border-gray-200 dark:border-gray-700 ${isSidebarCollapsed ? 'flex justify-center' : ''}`}>
+                        <div className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between'}`}>
+                            {!isSidebarCollapsed && (
+                                <div className="text-sm">
+                                    <p className="font-medium text-gray-900 dark:text-white">{user.username}</p>
+                                </div>
+                            )}
                             <button
                                 onClick={logout}
                                 className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 transition-colors"
