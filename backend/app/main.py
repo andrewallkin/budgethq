@@ -9,7 +9,7 @@ from datetime import date, datetime, timedelta
 import csv
 import io
 from . import models, database, auth, history
-from .logic import calculate_monthly_tax_with_age, calculate_uif, calculate_rebalancing
+from .logic import calculate_monthly_tax_with_age, calculate_uif, calculate_rebalancing, calculate_ra_tax_scenarios
 from .sheets_service import get_sheets_service
 from .scheduler import start_scheduler, stop_scheduler, sync_all_prices, get_last_sync_time, set_last_sync_time, record_hourly_snapshot
 from .utils import get_sast_now
@@ -77,6 +77,11 @@ class ETFBase(BaseModel):
 class TaxRequest(BaseModel):
     salary: float
     age: int
+
+class RATaxRequest(BaseModel):
+    salary: float
+    age: int
+    monthly_ra_contribution: float
 
 class RebalanceRequest(BaseModel):
     etfs: List[ETFBase]
@@ -446,6 +451,16 @@ async def calculate_tax_endpoint(req: TaxRequest):
         "monthly_tax": monthly_tax,
         "monthly_uif": monthly_uif
     }
+
+@app.post("/api/calculate/ra-tax")
+async def calculate_ra_tax_endpoint(req: RATaxRequest):
+    """Calculate RA tax scenarios for current, 10%, and 15% contribution rates."""
+    result = calculate_ra_tax_scenarios(
+        req.salary,
+        req.age,
+        req.monthly_ra_contribution
+    )
+    return result
 
 @app.post("/api/calculate/rebalance")
 async def calculate_rebalance_endpoint(req: RebalanceRequest):
