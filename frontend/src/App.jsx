@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
 import { Routes, Route, Link, useLocation, Navigate } from 'react-router-dom'
-import { LayoutDashboard, PieChart, Home, Moon, Sun, LogOut, Settings as SettingsIcon, ChevronLeft, ChevronRight, Calculator } from 'lucide-react'
+import { LayoutDashboard, PieChart, Home, Moon, Sun, LogOut, Settings as SettingsIcon, ChevronLeft, ChevronRight, Calculator, Shield } from 'lucide-react'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import BudgetDashboard from './pages/BudgetDashboard'
 import TFSAPortfolio from './pages/TFSAPortfolio'
 import RATaxCalculator from './pages/RATaxCalculator'
+import EmergencySavings from './pages/EmergencySavings'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import Settings from './pages/Settings'
@@ -48,6 +49,7 @@ function AppContent() {
         { path: '/', label: 'Home', icon: Home },
         { path: '/budget', label: 'Budget Dashboard', icon: LayoutDashboard },
         { path: '/portfolio', label: 'TFSA Portfolio', icon: PieChart },
+        { path: '/emergency-savings', label: 'Emergency Savings', icon: Shield },
         { path: '/ra-calculator', label: 'RA Tax Calculator', icon: Calculator },
         { path: '/settings', label: 'Settings', icon: SettingsIcon },
     ]
@@ -138,6 +140,7 @@ function AppContent() {
                         <Route path="/" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
                         <Route path="/budget" element={<ProtectedRoute><BudgetDashboard /></ProtectedRoute>} />
                         <Route path="/portfolio" element={<ProtectedRoute><TFSAPortfolio /></ProtectedRoute>} />
+                        <Route path="/emergency-savings" element={<ProtectedRoute><EmergencySavings /></ProtectedRoute>} />
                         <Route path="/ra-calculator" element={<ProtectedRoute><RATaxCalculator /></ProtectedRoute>} />
                         <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
                     </Routes>

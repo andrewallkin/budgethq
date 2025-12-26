@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { AlertCircle, CheckCircle } from 'lucide-react'
 
 export default function EmergencyFundCalculator({ needsTotal, emergencyFundData, onSave }) {
@@ -11,13 +11,17 @@ export default function EmergencyFundCalculator({ needsTotal, emergencyFundData,
     const [targetValue, setTargetValue] = useState(emergencyFundData?.emergency_target_value || 0)
 
     // Update state when props change (e.g., after loading from API)
+    // Use a ref to track if we've initialized to prevent overwriting user input
+    const hasInitialized = useRef(false)
     useEffect(() => {
-        if (emergencyFundData) {
-            setCurrentFund(emergencyFundData.current_emergency_fund || 0)
-            setMonthlyDeposit(emergencyFundData.monthly_emergency_deposit || 0)
+        // Only initialize once when we first get data
+        if (emergencyFundData && !hasInitialized.current) {
+            setCurrentFund(emergencyFundData.current_emergency_fund ?? 0)
+            setMonthlyDeposit(emergencyFundData.monthly_emergency_deposit ?? 0)
             setTargetType(emergencyFundData.emergency_target_type || 'months')
-            setTargetMonths(emergencyFundData.emergency_target_months || 6)
-            setTargetValue(emergencyFundData.emergency_target_value || 0)
+            setTargetMonths(emergencyFundData.emergency_target_months ?? 6)
+            setTargetValue(emergencyFundData.emergency_target_value ?? 0)
+            hasInitialized.current = true
         }
     }, [emergencyFundData])
 
@@ -29,8 +33,9 @@ export default function EmergencyFundCalculator({ needsTotal, emergencyFundData,
     }, [needsTotal])
 
     // Notify parent of changes for auto-save
+    // Only save after initialization is complete to prevent saving 0 values on mount
     useEffect(() => {
-        if (onSave) {
+        if (onSave && hasInitialized.current) {
             onSave({
                 current_emergency_fund: currentFund,
                 monthly_emergency_deposit: monthlyDeposit,
@@ -125,25 +130,27 @@ export default function EmergencyFundCalculator({ needsTotal, emergencyFundData,
                     </p>
                 </div>
 
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Monthly Expenses (R)
-                    </label>
-                    <input
-                        type="number"
-                        value={monthlyExpenses === 0 ? '' : monthlyExpenses}
-                        onChange={(e) => {
-                            const val = e.target.value === '' ? 0 : parseFloat(e.target.value) || 0
-                            setMonthlyExpenses(val)
-                        }}
-                        onFocus={(e) => e.target.select()}
-                        placeholder="0"
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                    />
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        Defaults to "Needs" total. Adjust if needed.
-                    </p>
-                </div>
+                {targetType === 'months' && (
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            Monthly Expenses (R)
+                        </label>
+                        <input
+                            type="number"
+                            value={monthlyExpenses === 0 ? '' : monthlyExpenses}
+                            onChange={(e) => {
+                                const val = e.target.value === '' ? 0 : parseFloat(e.target.value) || 0
+                                setMonthlyExpenses(val)
+                            }}
+                            onFocus={(e) => e.target.select()}
+                            placeholder="0"
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                        />
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            Defaults to "Needs" total. Adjust if needed.
+                        </p>
+                    </div>
+                )}
 
                 {/* Goal Type Selection */}
                 <div>

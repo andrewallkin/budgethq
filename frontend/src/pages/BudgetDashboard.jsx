@@ -4,7 +4,6 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recha
 import { Plus, Trash2, TrendingUp, ChevronDown, ChevronRight, Folder, Calculator } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import SavingsCalculator from '../components/SavingsCalculator'
-import EmergencyFundCalculator from '../components/EmergencyFundCalculator'
 
 const COLORS = {
     Needs: '#B91C1C', // red-700
@@ -50,15 +49,6 @@ export default function BudgetDashboard() {
     // Savings Calculator
     const [showSavingsCalculator, setShowSavingsCalculator] = useState(false)
 
-    // Emergency Fund data
-    const [emergencyFundData, setEmergencyFundData] = useState({
-        current_emergency_fund: 0,
-        monthly_emergency_deposit: 0,
-        emergency_target_type: null,
-        emergency_target_months: null,
-        emergency_target_value: null
-    })
-
     // Load data on mount
     useEffect(() => {
         fetchData()
@@ -86,7 +76,7 @@ export default function BudgetDashboard() {
         }, 1000)
 
         return () => clearTimeout(timer)
-    }, [salary, age, needs, wants, savings, emergencyFundData, loading])
+    }, [salary, age, needs, wants, savings, loading])
 
     const fetchData = async () => {
         try {
@@ -102,14 +92,6 @@ export default function BudgetDashboard() {
                 setNeeds((budgetRes.data.needs || []).map(item => ({ ...item, group: item.group || null })))
                 setWants((budgetRes.data.wants || []).map(item => ({ ...item, group: item.group || null })))
                 setSavings((budgetRes.data.savings || []).map(item => ({ ...item, group: item.group || null })))
-                // Load emergency fund data
-                setEmergencyFundData({
-                    current_emergency_fund: budgetRes.data.current_emergency_fund || 0,
-                    monthly_emergency_deposit: budgetRes.data.monthly_emergency_deposit || 0,
-                    emergency_target_type: budgetRes.data.emergency_target_type || null,
-                    emergency_target_months: budgetRes.data.emergency_target_months || null,
-                    emergency_target_value: budgetRes.data.emergency_target_value || null
-                })
             }
 
             if (portfolioRes.data && Array.isArray(portfolioRes.data)) {
@@ -141,22 +123,13 @@ export default function BudgetDashboard() {
                 age,
                 needs,
                 wants,
-                savings,
-                current_emergency_fund: emergencyFundData.current_emergency_fund,
-                monthly_emergency_deposit: emergencyFundData.monthly_emergency_deposit,
-                emergency_target_type: emergencyFundData.emergency_target_type,
-                emergency_target_months: emergencyFundData.emergency_target_months,
-                emergency_target_value: emergencyFundData.emergency_target_value
+                savings
             })
         } catch (err) {
             console.error("Failed to save data", err)
         } finally {
             setIsSaving(false)
         }
-    }
-
-    const handleEmergencyFundSave = (data) => {
-        setEmergencyFundData(data)
     }
 
     const addCategory = (type, name, amount = 0, group = null) => {
@@ -305,13 +278,6 @@ export default function BudgetDashboard() {
                             </div>
                         </div>
                     </div>
-
-                    {/* Emergency Fund Calculator */}
-                    <EmergencyFundCalculator 
-                        needsTotal={totalNeeds} 
-                        emergencyFundData={emergencyFundData}
-                        onSave={handleEmergencyFundSave}
-                    />
 
                     {/* Overall Budget Breakdown Chart (Moved here) */}
                     {salary > 0 && (
