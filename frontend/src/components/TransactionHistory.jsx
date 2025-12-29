@@ -21,7 +21,7 @@ export default function TransactionHistory({ refreshTrigger, onTransactionDelete
                 axios.get('/api/etf/transactions'),
                 axios.get('/api/bond/transactions')
             ])
-            
+
             // Add type indicator to each transaction
             const etfTransactions = (etfRes.data || []).map(tx => ({
                 ...tx,
@@ -29,7 +29,7 @@ export default function TransactionHistory({ refreshTrigger, onTransactionDelete
                 // For ETFs, use etf_name field
                 name: tx.etf_name
             }))
-            
+
             const bondTransactions = (bondRes.data || []).map(tx => ({
                 ...tx,
                 type: 'BOND',
@@ -41,12 +41,17 @@ export default function TransactionHistory({ refreshTrigger, onTransactionDelete
                 price_per_share: null,
                 total_value: tx.amount  // Bonds use 'amount' instead of 'total_value'
             }))
-            
-            // Combine and sort by date (newest first)
+
+            // Combine and sort by created_at (newest insertion first)
             const allTransactions = [...etfTransactions, ...bondTransactions].sort(
-                (a, b) => new Date(b.transaction_date) - new Date(a.transaction_date)
+                (a, b) => {
+                    // Use created_at if available (for precise insertion order), fallback to transaction_date
+                    const dateA = a.created_at ? new Date(a.created_at) : new Date(a.transaction_date)
+                    const dateB = b.created_at ? new Date(b.created_at) : new Date(b.transaction_date)
+                    return dateB - dateA
+                }
             )
-            
+
             setTransactions(allTransactions)
         } catch (err) {
             console.error('Failed to fetch transactions:', err)
@@ -67,12 +72,12 @@ export default function TransactionHistory({ refreshTrigger, onTransactionDelete
             const endpoint = transactionToDelete.type === 'BOND'
                 ? `/api/bond/transactions/${transactionToDelete.id}`
                 : `/api/etf/transactions/${transactionToDelete.id}`
-            
+
             await axios.delete(endpoint)
-            
+
             // Refresh transactions list
             await fetchTransactions()
-            
+
             // Trigger parent refresh if callback provided
             if (onTransactionDeleted) {
                 onTransactionDeleted()
@@ -141,11 +146,10 @@ export default function TransactionHistory({ refreshTrigger, onTransactionDelete
                                     })}
                                 </td>
                                 <td className="py-3 px-2">
-                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
-                                        tx.transaction_type === 'BUY'
+                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${tx.transaction_type === 'BUY'
                                             ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
                                             : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
-                                    }`}>
+                                        }`}>
                                         {tx.transaction_type === 'BUY' ? (
                                             <TrendingUp className="w-3 h-3" />
                                         ) : (
@@ -179,11 +183,10 @@ export default function TransactionHistory({ refreshTrigger, onTransactionDelete
                                 <td className="py-3 px-2 text-right text-gray-600 dark:text-gray-400">
                                     {tx.type === 'BOND' ? '—' : `R ${tx.price_per_share.toFixed(2)}`}
                                 </td>
-                                <td className={`py-3 px-2 text-right font-semibold ${
-                                    tx.transaction_type === 'BUY'
+                                <td className={`py-3 px-2 text-right font-semibold ${tx.transaction_type === 'BUY'
                                         ? 'text-green-600 dark:text-green-400'
                                         : 'text-red-600 dark:text-red-400'
-                                }`}>
+                                    }`}>
                                     {tx.transaction_type === 'BUY' ? '-' : '+'}R {tx.total_value.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </td>
                                 <td className="py-3 px-2">

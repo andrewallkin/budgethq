@@ -162,6 +162,7 @@ class ETFTransactionResponse(BaseModel):
     price_per_share: float
     total_value: float
     transaction_date: datetime
+    created_at: datetime
 
 class AddETFToSheetRequest(BaseModel):
     jse_ticker: str
@@ -205,6 +206,7 @@ class BondTransactionResponse(BaseModel):
     transaction_type: str
     amount: float
     transaction_date: datetime
+    created_at: datetime
 
 # Auth Endpoints
 @app.post("/api/auth/register", response_model=Token)
@@ -892,7 +894,7 @@ async def get_etf_transactions(
     if holding_id:
         query = query.filter(models.ETFTransaction.holding_id == holding_id)
 
-    transactions = query.order_by(models.ETFTransaction.transaction_date.desc()).all()
+    transactions = query.order_by(models.ETFTransaction.created_at.desc()).all()
 
     result = []
     for t in transactions:
@@ -909,7 +911,8 @@ async def get_etf_transactions(
             "shares": t.shares,
             "price_per_share": t.price_per_share,
             "total_value": t.total_value,
-            "transaction_date": (t.transaction_date.isoformat() + "Z") if t.transaction_date else None
+            "transaction_date": (t.transaction_date.isoformat() + "Z") if t.transaction_date else None,
+            "created_at": (t.created_at.isoformat() + "Z") if t.created_at else None
         })
 
     return result
@@ -1357,7 +1360,7 @@ async def get_bond_transactions(
     if holding_id:
         query = query.filter(models.BondTransaction.holding_id == holding_id)
 
-    transactions = query.order_by(models.BondTransaction.transaction_date.desc()).all()
+    transactions = query.order_by(models.BondTransaction.created_at.desc()).all()
 
     result = []
     for t in transactions:
@@ -1371,7 +1374,8 @@ async def get_bond_transactions(
             "bond_name": holding.bond_name if holding else "Unknown",
             "transaction_type": t.transaction_type,
             "amount": t.amount,
-            "transaction_date": (t.transaction_date.isoformat() + "Z") if t.transaction_date else None
+            "transaction_date": (t.transaction_date.isoformat() + "Z") if t.transaction_date else None,
+            "created_at": (t.created_at.isoformat() + "Z") if t.created_at else None
         })
 
     return result
