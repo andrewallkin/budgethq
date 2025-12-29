@@ -77,16 +77,16 @@ export default function TFSAPortfolio() {
         }
     }, [holdings, threshold])
 
-    // Track if contributions data has been loaded
+    // Track if contributions data has been loaded and if user has edited
     const hasLoadedContributions = useRef(false)
-    const isInitialContributionLoad = useRef(true)
+    const [hasUserEditedContributions, setHasUserEditedContributions] = useState(false)
 
-    // Auto-save contributions - only after data has been loaded and only for user changes
+    // Auto-save contributions - only after user has explicitly edited data
     useEffect(() => {
         // Don't save if we haven't loaded contributions yet
         if (!hasLoadedContributions.current) return
-        // Don't save during initial contribution load
-        if (isInitialContributionLoad.current) return
+        // Don't save if user hasn't edited contributions yet
+        if (!hasUserEditedContributions) return
         // Don't save while still loading
         if (loading) return
 
@@ -95,7 +95,7 @@ export default function TFSAPortfolio() {
         }, 1000)
 
         return () => clearTimeout(timer)
-    }, [deposits, historicalContributions, loading])
+    }, [deposits, historicalContributions, loading, hasUserEditedContributions])
 
     const fetchHoldings = async () => {
         try {
@@ -149,7 +149,7 @@ export default function TFSAPortfolio() {
                     date: d.date
                 }))
                 setDeposits(loadedDeposits)
-                
+
                 // Mark that we've successfully loaded contributions
                 hasLoadedContributions.current = true
             } else {
@@ -160,12 +160,8 @@ export default function TFSAPortfolio() {
             console.error("Failed to fetch contributions", err)
             // Mark as loaded even on error to prevent infinite blocking
             hasLoadedContributions.current = true
-        } finally {
-            // After a short delay, allow saves (this prevents saves triggered by initial data load)
-            setTimeout(() => {
-                isInitialContributionLoad.current = false
-            }, 100)
         }
+        // No timer needed - hasUserEditedContributions controls when saves are allowed
     }
 
     const calculateRebalance = async () => {
@@ -271,7 +267,7 @@ export default function TFSAPortfolio() {
                 return (h.shares || 0) > 0 || (h.target_percentage || 0) > 0
             }
         })
-        
+
         if (!sortColumn) return activeHoldings
 
         const sorted = [...activeHoldings].sort((a, b) => {
@@ -350,12 +346,14 @@ export default function TFSAPortfolio() {
             date: newDepositDate
         }
 
+        setHasUserEditedContributions(true)
         setDeposits([...deposits, newDeposit])
         setNewDepositAmount('')
         setNewDepositDate(new Date().toISOString().split('T')[0])
     }
 
     const removeDeposit = (id) => {
+        setHasUserEditedContributions(true)
         setDeposits(deposits.filter(d => d.id !== id))
     }
 
@@ -391,12 +389,14 @@ export default function TFSAPortfolio() {
             amount: amount
         }
 
+        setHasUserEditedContributions(true)
         setHistoricalContributions([...historicalContributions, newHistorical])
         setNewHistoricalYear('')
         setNewHistoricalAmount('')
     }
 
     const removeHistoricalContribution = (id) => {
+        setHasUserEditedContributions(true)
         setHistoricalContributions(historicalContributions.filter(h => h.id !== id))
     }
 
@@ -911,8 +911,8 @@ export default function TFSAPortfolio() {
             )}
 
             {/* Transaction History */}
-            <TransactionHistory 
-                refreshTrigger={transactionRefresh} 
+            <TransactionHistory
+                refreshTrigger={transactionRefresh}
                 onTransactionDeleted={() => {
                     fetchHoldings()
                     setTransactionRefresh(prev => prev + 1)

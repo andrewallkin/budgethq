@@ -62,13 +62,21 @@ class BudgetData(BaseModel):
     needs: List[CategoryBase]
     wants: List[CategoryBase]
     savings: List[CategoryBase]
-    current_emergency_fund: Optional[float] = 0
-    monthly_emergency_deposit: Optional[float] = 0
-    emergency_target_type: Optional[str] = None  # 'months' or 'target_value'
-    emergency_target_months: Optional[int] = None  # 3, 6, or 12
-    emergency_target_value: Optional[float] = None
-    current_ra_value: Optional[float] = 0
-    monthly_ra_contribution: Optional[float] = 0
+
+
+# EmergencySavings Pydantic Models
+class EmergencySavingsData(BaseModel):
+    current_fund: Optional[float] = 0
+    monthly_deposit: Optional[float] = 0
+    target_type: Optional[str] = None  # 'months' or 'target_value'
+    target_months: Optional[int] = None  # 3, 6, or 12
+    target_value: Optional[float] = None
+
+
+# RetirementAnnuity Pydantic Models
+class RetirementAnnuityData(BaseModel):
+    current_value: Optional[float] = 0
+    monthly_contribution: Optional[float] = 0
 
 class ETFBase(BaseModel):
     ETF: str
@@ -290,14 +298,7 @@ async def get_budget(current_user: models.User = Depends(auth.get_current_user),
         "age": budget.age,
         "needs": [{"name": c.name, "amount": c.amount, "group": c.group} for c in needs],
         "wants": [{"name": c.name, "amount": c.amount, "group": c.group} for c in wants],
-        "savings": [{"name": c.name, "amount": c.amount, "group": c.group} for c in savings],
-        "current_emergency_fund": budget.current_emergency_fund or 0,
-        "monthly_emergency_deposit": budget.monthly_emergency_deposit or 0,
-        "emergency_target_type": budget.emergency_target_type,
-        "emergency_target_months": budget.emergency_target_months,
-        "emergency_target_value": budget.emergency_target_value,
-        "current_ra_value": budget.current_ra_value or 0,
-        "monthly_ra_contribution": budget.monthly_ra_contribution or 0
+        "savings": [{"name": c.name, "amount": c.amount, "group": c.group} for c in savings]
     }
 
 @app.post("/api/budget/default_user")
@@ -313,17 +314,6 @@ async def save_budget(data: BudgetData, current_user: models.User = Depends(auth
     budget.salary = data.salary
     budget.age = data.age
     
-    # Save emergency fund fields
-    budget.current_emergency_fund = data.current_emergency_fund or 0
-    budget.monthly_emergency_deposit = data.monthly_emergency_deposit or 0
-    budget.emergency_target_type = data.emergency_target_type
-    budget.emergency_target_months = data.emergency_target_months
-    budget.emergency_target_value = data.emergency_target_value
-    
-    # Save RA fields
-    budget.current_ra_value = data.current_ra_value or 0
-    budget.monthly_ra_contribution = data.monthly_ra_contribution or 0
-    
     # Clear existing categories
     db.query(models.BudgetCategory).filter(models.BudgetCategory.budget_id == budget.id).delete()
     
@@ -335,6 +325,101 @@ async def save_budget(data: BudgetData, current_user: models.User = Depends(auth
     for item in data.savings:
         db.add(models.BudgetCategory(budget_id=budget.id, type='savings', name=item.name, amount=item.amount, group=item.group))
         
+    db.commit()
+    return {"status": "success"}
+
+
+# Emergency Savings Endpoints
+@app.get("/api/emergency-savings/default_user")
+async def get_emergency_savings(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    es = db.query(models.EmergencySavings).filter(
+        models.EmergencySavings.user_id == current_user.id
+    ).first()
+    
+    if not es:
+        return {
+            "current_fund": 0,
+            "monthly_deposit": 0,
+            "target_type": None,
+            "target_months": None,
+            "target_value": None
+        }
+    
+    return {
+        "current_fund": es.current_fund or 0,
+        "monthly_deposit": es.monthly_deposit or 0,
+        "target_type": es.target_type,
+        "target_months": es.target_months,
+        "target_value": es.target_value
+    }
+
+
+@app.post("/api/emergency-savings/default_user")
+async def save_emergency_savings(
+    data: EmergencySavingsData,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    es = db.query(models.EmergencySavings).filter(
+        models.EmergencySavings.user_id == current_user.id
+    ).first()
+    
+    if not es:
+        es = models.EmergencySavings(user_id=current_user.id)
+        db.add(es)
+    
+    es.current_fund = data.current_fund or 0
+    es.monthly_deposit = data.monthly_deposit or 0
+    es.target_type = data.target_type
+    es.target_months = data.target_months
+    es.target_value = data.target_value
+    
+    db.commit()
+    return {"status": "success"}
+
+
+# Retirement Annuity Endpoints
+@app.get("/api/ra/default_user")
+async def get_retirement_annuity(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    ra = db.query(models.RetirementAnnuity).filter(
+        models.RetirementAnnuity.user_id == current_user.id
+    ).first()
+    
+    if not ra:
+        return {
+            "current_value": 0,
+            "monthly_contribution": 0
+        }
+    
+    return {
+        "current_value": ra.current_value or 0,
+        "monthly_contribution": ra.monthly_contribution or 0
+    }
+
+
+@app.post("/api/ra/default_user")
+async def save_retirement_annuity(
+    data: RetirementAnnuityData,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    ra = db.query(models.RetirementAnnuity).filter(
+        models.RetirementAnnuity.user_id == current_user.id
+    ).first()
+    
+    if not ra:
+        ra = models.RetirementAnnuity(user_id=current_user.id)
+        db.add(ra)
+    
+    ra.current_value = data.current_value or 0
+    ra.monthly_contribution = data.monthly_contribution or 0
+    
     db.commit()
     return {"status": "success"}
 

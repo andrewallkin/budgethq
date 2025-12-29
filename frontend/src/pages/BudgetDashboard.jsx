@@ -41,7 +41,7 @@ export default function BudgetDashboard() {
 
     const [isSaving, setIsSaving] = useState(false)
     const hasLoadedData = useRef(false)
-    const isInitialLoad = useRef(true)
+    const [hasUserEdited, setHasUserEdited] = useState(false)
 
     // TFSA Portfolio data
     const [portfolioTotal, setPortfolioTotal] = useState(0)
@@ -64,13 +64,10 @@ export default function BudgetDashboard() {
         }
     }, [salary, age])
 
-    // Auto-save - only after data has been loaded and only for user changes
+    // Auto-save - only after user has explicitly edited data
     useEffect(() => {
-        // Don't save if we haven't loaded data yet
         if (!hasLoadedData.current) return
-        // Don't save during initial data load
-        if (isInitialLoad.current) return
-        // Don't save while still loading
+        if (!hasUserEdited) return
         if (loading) return
 
         const timer = setTimeout(() => {
@@ -78,7 +75,7 @@ export default function BudgetDashboard() {
         }, 1000)
 
         return () => clearTimeout(timer)
-    }, [salary, age, needs, wants, savings, loading])
+    }, [salary, age, needs, wants, savings, loading, hasUserEdited])
 
     const fetchData = async () => {
         try {
@@ -94,8 +91,7 @@ export default function BudgetDashboard() {
                 setNeeds((budgetRes.data.needs || []).map(item => ({ ...item, group: item.group || null })))
                 setWants((budgetRes.data.wants || []).map(item => ({ ...item, group: item.group || null })))
                 setSavings((budgetRes.data.savings || []).map(item => ({ ...item, group: item.group || null })))
-                
-                // Mark that we've successfully loaded data
+
                 hasLoadedData.current = true
             } else {
                 // Even if no data, mark as loaded so saves can happen for new users
@@ -113,10 +109,6 @@ export default function BudgetDashboard() {
             hasLoadedData.current = true
         } finally {
             setLoading(false)
-            // After a short delay, allow saves (this prevents saves triggered by initial data load)
-            setTimeout(() => {
-                isInitialLoad.current = false
-            }, 100)
         }
     }
 
@@ -132,6 +124,7 @@ export default function BudgetDashboard() {
     const saveData = async () => {
         setIsSaving(true)
         try {
+            // No need to inject emergency/RA fields anymore
             await axios.post('/api/budget/default_user', {
                 salary,
                 age,
@@ -147,6 +140,7 @@ export default function BudgetDashboard() {
     }
 
     const addCategory = (type, name, amount = 0, group = null) => {
+        setHasUserEdited(true)
         const newItem = { name, amount, group }
         if (type === 'needs') setNeeds([...needs, newItem])
         else if (type === 'wants') setWants([...wants, newItem])
@@ -154,6 +148,7 @@ export default function BudgetDashboard() {
     }
 
     const updateCategory = (type, index, field, value) => {
+        setHasUserEdited(true)
         const list = type === 'needs' ? needs : type === 'wants' ? wants : savings
         const newList = [...list]
         newList[index][field] = field === 'amount' ? parseFloat(value) || 0 : value
@@ -164,6 +159,7 @@ export default function BudgetDashboard() {
     }
 
     const removeCategory = (type, index) => {
+        setHasUserEdited(true)
         const list = type === 'needs' ? needs : type === 'wants' ? wants : savings
         const newList = list.filter((_, i) => i !== index)
 
@@ -239,7 +235,7 @@ export default function BudgetDashboard() {
                                 <input
                                     type="number"
                                     value={salary}
-                                    onChange={(e) => setSalary(parseFloat(e.target.value) || 0)}
+                                    onChange={(e) => { setHasUserEdited(true); setSalary(parseFloat(e.target.value) || 0) }}
                                     onFocus={(e) => e.target.select()}
                                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors"
                                 />
@@ -249,7 +245,7 @@ export default function BudgetDashboard() {
                                 <input
                                     type="number"
                                     value={age}
-                                    onChange={(e) => setAge(parseInt(e.target.value) || 30)}
+                                    onChange={(e) => { setHasUserEdited(true); setAge(parseInt(e.target.value) || 30) }}
                                     onFocus={(e) => e.target.select()}
                                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors"
                                 />
@@ -321,9 +317,9 @@ export default function BudgetDashboard() {
                                             contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#f3f4f6' }}
                                             itemStyle={{ color: '#f3f4f6' }}
                                         />
-                                        <Legend 
-                                            verticalAlign="bottom" 
-                                            height={36} 
+                                        <Legend
+                                            verticalAlign="bottom"
+                                            height={36}
                                             wrapperStyle={{ color: '#9ca3af' }}
                                             formatter={(value, entry) => {
                                                 const data = chartData.find(d => d.name === value)
@@ -379,8 +375,8 @@ export default function BudgetDashboard() {
                                             const categoryItems = activeTab === 'needs' ? needs : activeTab === 'wants' ? wants : savings
                                             const categoryTotal = categoryItems.reduce((sum, item) => sum + item.amount, 0)
                                             return categoryItems
-                                                .map(item => ({ 
-                                                    name: item.name, 
+                                                .map(item => ({
+                                                    name: item.name,
                                                     value: item.amount,
                                                     percentage: categoryTotal > 0 ? (item.amount / categoryTotal) * 100 : 0
                                                 }))
@@ -411,10 +407,10 @@ export default function BudgetDashboard() {
                                         contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#f3f4f6' }}
                                         itemStyle={{ color: '#f3f4f6' }}
                                     />
-                                    <Legend 
-                                        layout="vertical" 
-                                        verticalAlign="middle" 
-                                        align="right" 
+                                    <Legend
+                                        layout="vertical"
+                                        verticalAlign="middle"
+                                        align="right"
                                         wrapperStyle={{ paddingLeft: "20px", color: '#9ca3af' }}
                                         formatter={(value, entry, index) => {
                                             const categoryItems = activeTab === 'needs' ? needs : activeTab === 'wants' ? wants : savings
@@ -475,9 +471,9 @@ export default function BudgetDashboard() {
             </div>
 
             {/* Savings Calculator Modal */}
-            <SavingsCalculator 
-                isOpen={showSavingsCalculator} 
-                onClose={() => setShowSavingsCalculator(false)} 
+            <SavingsCalculator
+                isOpen={showSavingsCalculator}
+                onClose={() => setShowSavingsCalculator(false)}
             />
         </div >
     )
@@ -555,9 +551,9 @@ const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => 
         const total = getGroupTotal(groupItems)
         const isCollapsed = collapsedGroups.has(groupName)
         const displayName = groupName === null ? 'Uncategorized' : groupName
-        
+
         return (
-            <div 
+            <div
                 key={groupName}
                 className="mt-4 first:mt-0"
             >
@@ -600,7 +596,7 @@ const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => 
         const percentage = calculatePercentage(item.amount)
         // Use local editing state if available, otherwise use item.group
         const groupValue = editingGroup[index] !== undefined ? editingGroup[index] : (item.group || '')
-        
+
         return (
             <div key={index} className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors group">
                 <input

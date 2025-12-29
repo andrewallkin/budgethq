@@ -7,8 +7,7 @@ export default function RATaxCalculator() {
     const [loading, setLoading] = useState(true)
     const [isSaving, setIsSaving] = useState(false)
     const hasLoadedData = useRef(false)
-    const isInitialLoad = useRef(true)
-    
+    const [hasUserEdited, setHasUserEdited] = useState(false)
     const [salary, setSalary] = useState(0)
     const [age, setAge] = useState(30)
     const [monthlyRAContribution, setMonthlyRAContribution] = useState(0)
@@ -26,117 +25,60 @@ export default function RATaxCalculator() {
         monthlyRAContributionRef.current = monthlyRAContribution
     }, [monthlyRAContribution])
 
-    // Store full budget data to preserve it when saving
-    const [budgetData, setBudgetData] = useState({
-        salary: 0,
-        age: 30,
-        needs: [],
-        wants: [],
-        savings: []
-    })
-
-    // Store latest budget data in ref to avoid stale closures
-    const budgetDataRef = useRef(budgetData)
-    useEffect(() => {
-        budgetDataRef.current = budgetData
-    }, [budgetData])
-
     const fetchUserData = async () => {
         try {
-            const res = await axios.get('/api/budget/default_user')
-            if (res.data && Object.keys(res.data).length > 0) {
-                // Store full budget data to preserve it when saving
-                const loadedBudgetData = {
-                    salary: res.data.salary || 0,
-                    age: res.data.age || 30,
-                    needs: res.data.needs || [],
-                    wants: res.data.wants || [],
-                    savings: res.data.savings || []
-                }
-                setBudgetData(loadedBudgetData)
-                budgetDataRef.current = loadedBudgetData
-
-                setSalary(res.data.salary || 0)
-                setAge(res.data.age || 30)
-                
-                // Load RA values from budget
-                const loadedRAValue = res.data.current_ra_value ?? 0
-                const loadedRAContribution = res.data.monthly_ra_contribution ?? 0
-                setCurrentRAValue(loadedRAValue)
-                setMonthlyRAContribution(loadedRAContribution)
-                currentRAValueRef.current = loadedRAValue
-                monthlyRAContributionRef.current = loadedRAContribution
-                
-                // Mark that we've successfully loaded data
-                hasLoadedData.current = true
-            } else {
-                // Even if no data, mark as loaded so saves can happen for new users
-                hasLoadedData.current = true
+            // Fetch budget data (read-only for salary and age)
+            const budgetRes = await axios.get('/api/budget/default_user')
+            if (budgetRes.data && Object.keys(budgetRes.data).length > 0) {
+                setSalary(budgetRes.data.salary || 0)
+                setAge(budgetRes.data.age || 30)
             }
+
+            // Fetch RA data from dedicated endpoint
+            const raRes = await axios.get('/api/ra/default_user')
+
+            // Even if no data comes back (new user), we init with 0
+            const loadedRAValue = raRes.data?.current_value ?? 0
+            const loadedRAContribution = raRes.data?.monthly_contribution ?? 0
+
+            setCurrentRAValue(loadedRAValue)
+            setMonthlyRAContribution(loadedRAContribution)
+            currentRAValueRef.current = loadedRAValue
+            monthlyRAContributionRef.current = loadedRAContribution
+
+            hasLoadedData.current = true
         } catch (err) {
             console.error("Failed to fetch user data", err)
-            // On error, don't reset budgetData - preserve whatever we have
-            // Only mark as loaded if we don't have any data yet
-            // This prevents overwriting existing data if the fetch fails
-            if (budgetDataRef.current.salary === 0 && 
-                budgetDataRef.current.needs.length === 0 && 
-                budgetDataRef.current.wants.length === 0) {
-                // First load and fetch failed - mark as loaded anyway to allow saves
-                hasLoadedData.current = true
-            } else {
-                // We have existing data - mark as loaded but don't reset
-                hasLoadedData.current = true
-            }
+            hasLoadedData.current = true
         } finally {
             setLoading(false)
-            // After a short delay, allow saves (this prevents saves triggered by initial data load)
-            setTimeout(() => {
-                isInitialLoad.current = false
-            }, 100)
         }
     }
 
-    // Save function using useCallback to ensure it captures latest state via refs
+    // Save function - saves ONLY to RA endpoint
     const saveRAData = useCallback(async () => {
-        // Don't save if we haven't loaded data yet
         if (!hasLoadedData.current) {
             console.log('RA: Not saving - data not loaded yet')
             return
         }
-        // Don't save during initial load
-        if (isInitialLoad.current) {
-            console.log('RA: Not saving - still in initial load')
-            return
-        }
-        // Don't save while still loading
         if (loading) {
             console.log('RA: Not saving - still loading')
             return
         }
-        
-        // Get latest values from refs to avoid stale closures
+
         const latestRAValue = currentRAValueRef.current
         const latestRAContribution = monthlyRAContributionRef.current
-        const latestBudgetData = budgetDataRef.current
-        
+
         console.log('RA: Saving data', {
-            current_ra_value: latestRAValue,
-            monthly_ra_contribution: latestRAContribution,
-            budget: latestBudgetData
+            current_value: latestRAValue,
+            monthly_contribution: latestRAContribution
         })
-        
+
         setIsSaving(true)
         try {
-            // Save all budget data including RA fields
-            // This preserves existing budget data while updating RA values
-            await axios.post('/api/budget/default_user', {
-                salary: latestBudgetData.salary || 0,
-                age: latestBudgetData.age || 30,
-                needs: latestBudgetData.needs || [],
-                wants: latestBudgetData.wants || [],
-                savings: latestBudgetData.savings || [],
-                current_ra_value: latestRAValue ?? 0,
-                monthly_ra_contribution: latestRAContribution ?? 0
+            await axios.post('/api/ra/default_user', {
+                current_value: latestRAValue ?? 0,
+                monthly_contribution: latestRAContribution ?? 0
             })
             console.log('RA: Save successful')
         } catch (err) {
@@ -144,7 +86,7 @@ export default function RATaxCalculator() {
         } finally {
             setIsSaving(false)
         }
-    }, [loading]) // Only depend on loading, values come from refs
+    }, [loading])
 
     // Calculate maximum monthly RA contribution (27.5% of annual salary or R350,000 per year, whichever is lower)
     const maxMonthlyRAContribution = useMemo(() => {
@@ -156,7 +98,7 @@ export default function RATaxCalculator() {
 
     const calculateRATax = useCallback(async () => {
         if (salary <= 0) return
-        
+
         setCalculating(true)
         try {
             const res = await axios.post('/api/calculate/ra-tax', {
@@ -172,14 +114,16 @@ export default function RATaxCalculator() {
         }
     }, [salary, age, monthlyRAContribution])
 
-    // Wrapper functions to update both state and refs immediately
+    // Wrapper functions to update both state and refs immediately, and mark as edited
     const updateCurrentRAValue = useCallback((value) => {
+        setHasUserEdited(true)
         const numValue = parseFloat(value) || 0
         currentRAValueRef.current = numValue
         setCurrentRAValue(numValue)
     }, [])
 
     const updateMonthlyRAContribution = useCallback((value) => {
+        setHasUserEdited(true)
         const numValue = parseFloat(value) || 0
         monthlyRAContributionRef.current = numValue
         setMonthlyRAContribution(numValue)
@@ -190,13 +134,10 @@ export default function RATaxCalculator() {
         fetchUserData()
     }, [])
 
-    // Auto-save RA values - only after data has been loaded and only for user changes
+    // Auto-save RA values - only after user has explicitly edited data
     useEffect(() => {
-        // Don't save if we haven't loaded data yet
         if (!hasLoadedData.current) return
-        // Don't save during initial data load
-        if (isInitialLoad.current) return
-        // Don't save while still loading
+        if (!hasUserEdited) return
         if (loading) return
 
         const timer = setTimeout(() => {
@@ -204,14 +145,13 @@ export default function RATaxCalculator() {
         }, 1000)
 
         return () => clearTimeout(timer)
-    }, [currentRAValue, monthlyRAContribution, loading, saveRAData]) // Removed budgetData from deps
+    }, [currentRAValue, monthlyRAContribution, loading, saveRAData, hasUserEdited])
 
     // Calculate when RA contribution changes (only if valid)
     useEffect(() => {
         if (salary > 0 && monthlyRAContribution >= 0) {
-            // Only check max limit if we have a valid max (salary > 0)
             if (maxMonthlyRAContribution > 0 && monthlyRAContribution > maxMonthlyRAContribution) {
-                return // Don't calculate if over limit
+                return
             }
             calculateRATax()
         }
@@ -241,28 +181,23 @@ export default function RATaxCalculator() {
         const currentDay = now.getDate()
         const endYear = 2060
         const years = endYear - currentYear + 1
-        
+
         const data = []
         let value = currentValue
-        
+
         for (let i = 0; i < years; i++) {
             const year = currentYear + i
             let monthsToAdd = 12
-            
+
             // For the first year, only add contributions for remaining months
             if (i === 0) {
-                // Calculate remaining months (months where the 1st day hasn't passed yet)
-                // If we're past the 1st of the current month, that month doesn't count
-                // So remaining months = months after the current month
                 if (currentDay >= 1) {
-                    // Past the 1st, so current month doesn't count
                     monthsToAdd = 12 - currentMonth
                 } else {
-                    // Before the 1st (shouldn't happen, but handle it)
                     monthsToAdd = 12 - currentMonth + 1
                 }
             }
-            
+
             // Apply annual return, then add contributions for the calculated months
             value = value * (1 + annualReturn) + (monthlyContribution * monthsToAdd)
             data.push({
@@ -270,7 +205,7 @@ export default function RATaxCalculator() {
                 value: Math.round(value)
             })
         }
-        
+
         return data
     }
 
@@ -353,11 +288,10 @@ export default function RATaxCalculator() {
                             value={monthlyRAContribution}
                             onChange={(e) => updateMonthlyRAContribution(e.target.value)}
                             onFocus={(e) => e.target.select()}
-                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors ${
-                                monthlyRAContribution > 0 && !isRAContributionValid
-                                    ? 'border-red-500 dark:border-red-500 focus:ring-red-500'
-                                    : 'border-gray-300 dark:border-gray-600 focus:ring-blue-500'
-                            }`}
+                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors ${monthlyRAContribution > 0 && !isRAContributionValid
+                                ? 'border-red-500 dark:border-red-500 focus:ring-red-500'
+                                : 'border-gray-300 dark:border-gray-600 focus:ring-blue-500'
+                                }`}
                             placeholder="0"
                         />
                         {monthlyRAContribution > 0 && maxMonthlyRAContribution > 0 && !isRAContributionValid && (
@@ -511,7 +445,6 @@ export default function RATaxCalculator() {
                                             className="dark:stroke-gray-400"
                                             tick={{ fill: '#6b7280', fontSize: 12 }}
                                             tickFormatter={(value) => {
-                                                // Show every 5 years to avoid overcrowding
                                                 const year = value
                                                 const currentYear = new Date().getFullYear()
                                                 const yearsFromNow = year - currentYear
@@ -531,12 +464,12 @@ export default function RATaxCalculator() {
                                                 }
                                                 return `R${value}`
                                             }}
-                                            label={{ 
-                                                value: 'Portfolio Value (R)', 
-                                                angle: -90, 
-                                                position: 'left', 
-                                                offset: 10, 
-                                                style: { fill: '#6b7280', fontSize: 14, textAnchor: 'middle' } 
+                                            label={{
+                                                value: 'Portfolio Value (R)',
+                                                angle: -90,
+                                                position: 'left',
+                                                offset: 10,
+                                                style: { fill: '#6b7280', fontSize: 14, textAnchor: 'middle' }
                                             }}
                                         />
                                         <Tooltip
@@ -592,4 +525,3 @@ export default function RATaxCalculator() {
         </div>
     )
 }
-
