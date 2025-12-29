@@ -262,12 +262,13 @@ export default function TFSAPortfolio() {
     }
 
     const getSortedHoldings = () => {
-        // Filter out zero holdings for table display
+        // Filter out zero holdings for table display, but include ETFs with non-zero target percentage
         const activeHoldings = holdings.filter(h => {
             if (h.type === 'BOND') {
                 return (h.current_value || 0) > 0
             } else {
-                return (h.shares || 0) > 0
+                // Show ETFs if they have shares > 0 OR have a target percentage > 0
+                return (h.shares || 0) > 0 || (h.target_percentage || 0) > 0
             }
         })
         
