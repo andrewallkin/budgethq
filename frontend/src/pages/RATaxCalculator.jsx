@@ -1,10 +1,13 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import axios from 'axios'
 import { Calculator, Info } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 
 export default function RATaxCalculator() {
     const [loading, setLoading] = useState(true)
+    const [isSaving, setIsSaving] = useState(false)
+    const hasLoadedData = useRef(false)
+    const [hasUserEdited, setHasUserEdited] = useState(false)
     const [salary, setSalary] = useState(0)
     const [age, setAge] = useState(30)
     const [monthlyRAContribution, setMonthlyRAContribution] = useState(0)
@@ -12,19 +15,78 @@ export default function RATaxCalculator() {
     const [calculationResult, setCalculationResult] = useState(null)
     const [calculating, setCalculating] = useState(false)
 
+    // Store latest RA values in refs to avoid stale closures
+    const currentRAValueRef = useRef(currentRAValue)
+    const monthlyRAContributionRef = useRef(monthlyRAContribution)
+    useEffect(() => {
+        currentRAValueRef.current = currentRAValue
+    }, [currentRAValue])
+    useEffect(() => {
+        monthlyRAContributionRef.current = monthlyRAContribution
+    }, [monthlyRAContribution])
+
     const fetchUserData = async () => {
         try {
-            const res = await axios.get('/api/budget/default_user')
-            if (res.data && Object.keys(res.data).length > 0) {
-                setSalary(res.data.salary || 0)
-                setAge(res.data.age || 30)
+            // Fetch budget data (read-only for salary and age)
+            const budgetRes = await axios.get('/api/budget/default_user')
+            if (budgetRes.data && Object.keys(budgetRes.data).length > 0) {
+                setSalary(budgetRes.data.salary || 0)
+                setAge(budgetRes.data.age || 30)
             }
+
+            // Fetch RA data from dedicated endpoint
+            const raRes = await axios.get('/api/ra/default_user')
+
+            // Even if no data comes back (new user), we init with 0
+            const loadedRAValue = raRes.data?.current_value ?? 0
+            const loadedRAContribution = raRes.data?.monthly_contribution ?? 0
+
+            setCurrentRAValue(loadedRAValue)
+            setMonthlyRAContribution(loadedRAContribution)
+            currentRAValueRef.current = loadedRAValue
+            monthlyRAContributionRef.current = loadedRAContribution
+
+            hasLoadedData.current = true
         } catch (err) {
             console.error("Failed to fetch user data", err)
+            hasLoadedData.current = true
         } finally {
             setLoading(false)
         }
     }
+
+    // Save function - saves ONLY to RA endpoint
+    const saveRAData = useCallback(async () => {
+        if (!hasLoadedData.current) {
+            console.log('RA: Not saving - data not loaded yet')
+            return
+        }
+        if (loading) {
+            console.log('RA: Not saving - still loading')
+            return
+        }
+
+        const latestRAValue = currentRAValueRef.current
+        const latestRAContribution = monthlyRAContributionRef.current
+
+        console.log('RA: Saving data', {
+            current_value: latestRAValue,
+            monthly_contribution: latestRAContribution
+        })
+
+        setIsSaving(true)
+        try {
+            await axios.post('/api/ra/default_user', {
+                current_value: latestRAValue ?? 0,
+                monthly_contribution: latestRAContribution ?? 0
+            })
+            console.log('RA: Save successful')
+        } catch (err) {
+            console.error("Failed to save RA data", err)
+        } finally {
+            setIsSaving(false)
+        }
+    }, [loading])
 
     // Calculate maximum monthly RA contribution (27.5% of annual salary or R350,000 per year, whichever is lower)
     const maxMonthlyRAContribution = useMemo(() => {
@@ -36,7 +98,7 @@ export default function RATaxCalculator() {
 
     const calculateRATax = useCallback(async () => {
         if (salary <= 0) return
-        
+
         setCalculating(true)
         try {
             const res = await axios.post('/api/calculate/ra-tax', {
@@ -52,17 +114,44 @@ export default function RATaxCalculator() {
         }
     }, [salary, age, monthlyRAContribution])
 
+    // Wrapper functions to update both state and refs immediately, and mark as edited
+    const updateCurrentRAValue = useCallback((value) => {
+        setHasUserEdited(true)
+        const numValue = parseFloat(value) || 0
+        currentRAValueRef.current = numValue
+        setCurrentRAValue(numValue)
+    }, [])
+
+    const updateMonthlyRAContribution = useCallback((value) => {
+        setHasUserEdited(true)
+        const numValue = parseFloat(value) || 0
+        monthlyRAContributionRef.current = numValue
+        setMonthlyRAContribution(numValue)
+    }, [])
+
     // Load user data on mount
     useEffect(() => {
         fetchUserData()
     }, [])
 
+    // Auto-save RA values - only after user has explicitly edited data
+    useEffect(() => {
+        if (!hasLoadedData.current) return
+        if (!hasUserEdited) return
+        if (loading) return
+
+        const timer = setTimeout(() => {
+            saveRAData()
+        }, 1000)
+
+        return () => clearTimeout(timer)
+    }, [currentRAValue, monthlyRAContribution, loading, saveRAData, hasUserEdited])
+
     // Calculate when RA contribution changes (only if valid)
     useEffect(() => {
         if (salary > 0 && monthlyRAContribution >= 0) {
-            // Only check max limit if we have a valid max (salary > 0)
             if (maxMonthlyRAContribution > 0 && monthlyRAContribution > maxMonthlyRAContribution) {
-                return // Don't calculate if over limit
+                return
             }
             calculateRATax()
         }
@@ -92,28 +181,23 @@ export default function RATaxCalculator() {
         const currentDay = now.getDate()
         const endYear = 2060
         const years = endYear - currentYear + 1
-        
+
         const data = []
         let value = currentValue
-        
+
         for (let i = 0; i < years; i++) {
             const year = currentYear + i
             let monthsToAdd = 12
-            
+
             // For the first year, only add contributions for remaining months
             if (i === 0) {
-                // Calculate remaining months (months where the 1st day hasn't passed yet)
-                // If we're past the 1st of the current month, that month doesn't count
-                // So remaining months = months after the current month
                 if (currentDay >= 1) {
-                    // Past the 1st, so current month doesn't count
                     monthsToAdd = 12 - currentMonth
                 } else {
-                    // Before the 1st (shouldn't happen, but handle it)
                     monthsToAdd = 12 - currentMonth + 1
                 }
             }
-            
+
             // Apply annual return, then add contributions for the calculated months
             value = value * (1 + annualReturn) + (monthlyContribution * monthsToAdd)
             data.push({
@@ -121,7 +205,7 @@ export default function RATaxCalculator() {
                 value: Math.round(value)
             })
         }
-        
+
         return data
     }
 
@@ -148,6 +232,11 @@ export default function RATaxCalculator() {
         <div className="space-y-8">
             <div className="flex justify-between items-center">
                 <h1 className="text-3xl font-bold text-gray-900 dark:text-white">🏦 Retirement Annuity Tax Calculator</h1>
+                <div className="flex items-center gap-4">
+                    <div className="text-sm text-gray-500 dark:text-gray-400">
+                        {isSaving ? 'Saving...' : 'All changes saved'}
+                    </div>
+                </div>
             </div>
 
             <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
@@ -184,7 +273,7 @@ export default function RATaxCalculator() {
                         <input
                             type="number"
                             value={currentRAValue}
-                            onChange={(e) => setCurrentRAValue(parseFloat(e.target.value) || 0)}
+                            onChange={(e) => updateCurrentRAValue(e.target.value)}
                             onFocus={(e) => e.target.select()}
                             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors"
                             placeholder="0"
@@ -197,13 +286,12 @@ export default function RATaxCalculator() {
                         <input
                             type="number"
                             value={monthlyRAContribution}
-                            onChange={(e) => setMonthlyRAContribution(parseFloat(e.target.value) || 0)}
+                            onChange={(e) => updateMonthlyRAContribution(e.target.value)}
                             onFocus={(e) => e.target.select()}
-                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors ${
-                                monthlyRAContribution > 0 && !isRAContributionValid
-                                    ? 'border-red-500 dark:border-red-500 focus:ring-red-500'
-                                    : 'border-gray-300 dark:border-gray-600 focus:ring-blue-500'
-                            }`}
+                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors ${monthlyRAContribution > 0 && !isRAContributionValid
+                                ? 'border-red-500 dark:border-red-500 focus:ring-red-500'
+                                : 'border-gray-300 dark:border-gray-600 focus:ring-blue-500'
+                                }`}
                             placeholder="0"
                         />
                         {monthlyRAContribution > 0 && maxMonthlyRAContribution > 0 && !isRAContributionValid && (
@@ -357,7 +445,6 @@ export default function RATaxCalculator() {
                                             className="dark:stroke-gray-400"
                                             tick={{ fill: '#6b7280', fontSize: 12 }}
                                             tickFormatter={(value) => {
-                                                // Show every 5 years to avoid overcrowding
                                                 const year = value
                                                 const currentYear = new Date().getFullYear()
                                                 const yearsFromNow = year - currentYear
@@ -377,12 +464,12 @@ export default function RATaxCalculator() {
                                                 }
                                                 return `R${value}`
                                             }}
-                                            label={{ 
-                                                value: 'Portfolio Value (R)', 
-                                                angle: -90, 
-                                                position: 'left', 
-                                                offset: 10, 
-                                                style: { fill: '#6b7280', fontSize: 14, textAnchor: 'middle' } 
+                                            label={{
+                                                value: 'Portfolio Value (R)',
+                                                angle: -90,
+                                                position: 'left',
+                                                offset: 10,
+                                                style: { fill: '#6b7280', fontSize: 14, textAnchor: 'middle' }
                                             }}
                                         />
                                         <Tooltip
@@ -438,4 +525,3 @@ export default function RATaxCalculator() {
         </div>
     )
 }
-

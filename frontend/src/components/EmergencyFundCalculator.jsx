@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { AlertCircle, CheckCircle } from 'lucide-react'
 
 export default function EmergencyFundCalculator({ needsTotal, emergencyFundData, onSave }) {
@@ -10,14 +10,28 @@ export default function EmergencyFundCalculator({ needsTotal, emergencyFundData,
     const [targetMonths, setTargetMonths] = useState(emergencyFundData?.emergency_target_months || 6)
     const [targetValue, setTargetValue] = useState(emergencyFundData?.emergency_target_value || 0)
 
+    // Track if user has explicitly edited values (not just prop updates)
+    const [userHasEdited, setUserHasEdited] = useState(false)
+
     // Update state when props change (e.g., after loading from API)
+    // Track the last emergencyFundData we initialized from to detect prop changes
+    const lastInitializedDataRef = useRef(null)
+
     useEffect(() => {
-        if (emergencyFundData) {
-            setCurrentFund(emergencyFundData.current_emergency_fund || 0)
-            setMonthlyDeposit(emergencyFundData.monthly_emergency_deposit || 0)
+        // Check if emergencyFundData has actually changed from what we last initialized
+        const dataChanged = lastInitializedDataRef.current === null ||
+            JSON.stringify(lastInitializedDataRef.current) !== JSON.stringify(emergencyFundData)
+
+        // Initialize when we first get data, or when data actually changes (e.g., navigating back)
+        if (emergencyFundData && dataChanged) {
+            setCurrentFund(emergencyFundData.current_emergency_fund ?? 0)
+            setMonthlyDeposit(emergencyFundData.monthly_emergency_deposit ?? 0)
             setTargetType(emergencyFundData.emergency_target_type || 'months')
-            setTargetMonths(emergencyFundData.emergency_target_months || 6)
-            setTargetValue(emergencyFundData.emergency_target_value || 0)
+            setTargetMonths(emergencyFundData.emergency_target_months ?? 6)
+            setTargetValue(emergencyFundData.emergency_target_value ?? 0)
+            lastInitializedDataRef.current = emergencyFundData
+            // Reset userHasEdited when new data comes from parent
+            setUserHasEdited(false)
         }
     }, [emergencyFundData])
 
@@ -28,9 +42,9 @@ export default function EmergencyFundCalculator({ needsTotal, emergencyFundData,
         }
     }, [needsTotal])
 
-    // Notify parent of changes for auto-save
+    // Notify parent of changes for auto-save - ONLY when user has explicitly edited
     useEffect(() => {
-        if (onSave) {
+        if (onSave && userHasEdited) {
             onSave({
                 current_emergency_fund: currentFund,
                 monthly_emergency_deposit: monthlyDeposit,
@@ -40,7 +54,7 @@ export default function EmergencyFundCalculator({ needsTotal, emergencyFundData,
             })
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentFund, monthlyDeposit, targetType, targetMonths, targetValue])
+    }, [currentFund, monthlyDeposit, targetType, targetMonths, targetValue, userHasEdited])
 
     const monthsCovered = useMemo(() => {
         if (monthlyExpenses === 0) return 0
@@ -85,7 +99,7 @@ export default function EmergencyFundCalculator({ needsTotal, emergencyFundData,
     return (
         <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
             <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Emergency Fund</h2>
-            
+
             <div className="space-y-4">
                 {/* Input Fields */}
                 <div>
@@ -96,6 +110,7 @@ export default function EmergencyFundCalculator({ needsTotal, emergencyFundData,
                         type="number"
                         value={currentFund === 0 ? '' : currentFund}
                         onChange={(e) => {
+                            setUserHasEdited(true)
                             const val = e.target.value === '' ? 0 : parseFloat(e.target.value) || 0
                             setCurrentFund(val)
                         }}
@@ -113,6 +128,7 @@ export default function EmergencyFundCalculator({ needsTotal, emergencyFundData,
                         type="number"
                         value={monthlyDeposit === 0 ? '' : monthlyDeposit}
                         onChange={(e) => {
+                            setUserHasEdited(true)
                             const val = e.target.value === '' ? 0 : parseFloat(e.target.value) || 0
                             setMonthlyDeposit(val)
                         }}
@@ -125,25 +141,28 @@ export default function EmergencyFundCalculator({ needsTotal, emergencyFundData,
                     </p>
                 </div>
 
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Monthly Expenses (R)
-                    </label>
-                    <input
-                        type="number"
-                        value={monthlyExpenses === 0 ? '' : monthlyExpenses}
-                        onChange={(e) => {
-                            const val = e.target.value === '' ? 0 : parseFloat(e.target.value) || 0
-                            setMonthlyExpenses(val)
-                        }}
-                        onFocus={(e) => e.target.select()}
-                        placeholder="0"
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                    />
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        Defaults to "Needs" total. Adjust if needed.
-                    </p>
-                </div>
+                {targetType === 'months' && (
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            Monthly Expenses (R)
+                        </label>
+                        <input
+                            type="number"
+                            value={monthlyExpenses === 0 ? '' : monthlyExpenses}
+                            onChange={(e) => {
+                                setUserHasEdited(true)
+                                const val = e.target.value === '' ? 0 : parseFloat(e.target.value) || 0
+                                setMonthlyExpenses(val)
+                            }}
+                            onFocus={(e) => e.target.select()}
+                            placeholder="0"
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                        />
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            Defaults to "Needs" total. Adjust if needed.
+                        </p>
+                    </div>
+                )}
 
                 {/* Goal Type Selection */}
                 <div>
@@ -158,6 +177,7 @@ export default function EmergencyFundCalculator({ needsTotal, emergencyFundData,
                                 value="months"
                                 checked={targetType === 'months'}
                                 onChange={(e) => {
+                                    setUserHasEdited(true)
                                     setTargetType('months')
                                     if (!targetMonths) setTargetMonths(6)
                                 }}
@@ -172,6 +192,7 @@ export default function EmergencyFundCalculator({ needsTotal, emergencyFundData,
                                 value="target_value"
                                 checked={targetType === 'target_value'}
                                 onChange={(e) => {
+                                    setUserHasEdited(true)
                                     setTargetType('target_value')
                                     if (!targetValue) setTargetValue(0)
                                 }}
@@ -190,7 +211,7 @@ export default function EmergencyFundCalculator({ needsTotal, emergencyFundData,
                         </label>
                         <select
                             value={targetMonths}
-                            onChange={(e) => setTargetMonths(parseInt(e.target.value))}
+                            onChange={(e) => { setUserHasEdited(true); setTargetMonths(parseInt(e.target.value)) }}
                             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                         >
                             <option value={3}>3 months</option>
@@ -207,6 +228,7 @@ export default function EmergencyFundCalculator({ needsTotal, emergencyFundData,
                             type="number"
                             value={targetValue === 0 ? '' : targetValue}
                             onChange={(e) => {
+                                setUserHasEdited(true)
                                 const val = e.target.value === '' ? 0 : parseFloat(e.target.value) || 0
                                 setTargetValue(val)
                             }}
@@ -230,28 +252,25 @@ export default function EmergencyFundCalculator({ needsTotal, emergencyFundData,
                 )}
 
                 {/* Status Display */}
-                <div className={`p-4 rounded-lg ${
-                    status === 'adequate' ? 'bg-green-50 dark:bg-green-900/20' :
+                <div className={`p-4 rounded-lg ${status === 'adequate' ? 'bg-green-50 dark:bg-green-900/20' :
                     status === 'good' ? 'bg-yellow-50 dark:bg-yellow-900/20' :
-                    'bg-red-50 dark:bg-red-900/20'
-                }`}>
+                        'bg-red-50 dark:bg-red-900/20'
+                    }`}>
                     <div className="flex items-center gap-2 mb-2">
                         {status === 'adequate' ? (
                             <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
                         ) : (
-                            <AlertCircle className={`w-5 h-5 ${
-                                status === 'good' ? 'text-yellow-600 dark:text-yellow-400' :
+                            <AlertCircle className={`w-5 h-5 ${status === 'good' ? 'text-yellow-600 dark:text-yellow-400' :
                                 'text-red-600 dark:text-red-400'
-                            }`} />
+                                }`} />
                         )}
-                        <span className={`font-semibold ${
-                            status === 'adequate' ? 'text-green-900 dark:text-green-100' :
+                        <span className={`font-semibold ${status === 'adequate' ? 'text-green-900 dark:text-green-100' :
                             status === 'good' ? 'text-yellow-900 dark:text-yellow-100' :
-                            'text-red-900 dark:text-red-100'
-                        }`}>
+                                'text-red-900 dark:text-red-100'
+                            }`}>
                             {status === 'adequate' ? 'Adequate Coverage' :
-                             status === 'good' ? 'Good Progress' :
-                             'Insufficient Coverage'}
+                                status === 'good' ? 'Good Progress' :
+                                    'Insufficient Coverage'}
                         </span>
                     </div>
                     {targetType === 'months' && (
@@ -269,11 +288,10 @@ export default function EmergencyFundCalculator({ needsTotal, emergencyFundData,
                     </div>
                     <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
                         <div
-                            className={`h-3 rounded-full transition-all ${
-                                progress >= 100 ? 'bg-green-600' :
+                            className={`h-3 rounded-full transition-all ${progress >= 100 ? 'bg-green-600' :
                                 progress >= 75 ? 'bg-yellow-500' :
-                                'bg-blue-600'
-                            }`}
+                                    'bg-blue-600'
+                                }`}
                             style={{ width: `${progress}%` }}
                         />
                     </div>

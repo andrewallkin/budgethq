@@ -4,7 +4,6 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recha
 import { Plus, Trash2, TrendingUp, ChevronDown, ChevronRight, Folder, Calculator } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import SavingsCalculator from '../components/SavingsCalculator'
-import EmergencyFundCalculator from '../components/EmergencyFundCalculator'
 
 const COLORS = {
     Needs: '#B91C1C', // red-700
@@ -41,7 +40,8 @@ export default function BudgetDashboard() {
     const [activeTab, setActiveTab] = useState('needs')
 
     const [isSaving, setIsSaving] = useState(false)
-    const firstRender = useRef(true)
+    const hasLoadedData = useRef(false)
+    const [hasUserEdited, setHasUserEdited] = useState(false)
 
     // TFSA Portfolio data
     const [portfolioTotal, setPortfolioTotal] = useState(0)
@@ -49,15 +49,6 @@ export default function BudgetDashboard() {
 
     // Savings Calculator
     const [showSavingsCalculator, setShowSavingsCalculator] = useState(false)
-
-    // Emergency Fund data
-    const [emergencyFundData, setEmergencyFundData] = useState({
-        current_emergency_fund: 0,
-        monthly_emergency_deposit: 0,
-        emergency_target_type: null,
-        emergency_target_months: null,
-        emergency_target_value: null
-    })
 
     // Load data on mount
     useEffect(() => {
@@ -73,12 +64,10 @@ export default function BudgetDashboard() {
         }
     }, [salary, age])
 
-    // Auto-save
+    // Auto-save - only after user has explicitly edited data
     useEffect(() => {
-        if (firstRender.current) {
-            firstRender.current = false
-            return
-        }
+        if (!hasLoadedData.current) return
+        if (!hasUserEdited) return
         if (loading) return
 
         const timer = setTimeout(() => {
@@ -86,7 +75,7 @@ export default function BudgetDashboard() {
         }, 1000)
 
         return () => clearTimeout(timer)
-    }, [salary, age, needs, wants, savings, emergencyFundData, loading])
+    }, [salary, age, needs, wants, savings, loading, hasUserEdited])
 
     const fetchData = async () => {
         try {
@@ -102,14 +91,11 @@ export default function BudgetDashboard() {
                 setNeeds((budgetRes.data.needs || []).map(item => ({ ...item, group: item.group || null })))
                 setWants((budgetRes.data.wants || []).map(item => ({ ...item, group: item.group || null })))
                 setSavings((budgetRes.data.savings || []).map(item => ({ ...item, group: item.group || null })))
-                // Load emergency fund data
-                setEmergencyFundData({
-                    current_emergency_fund: budgetRes.data.current_emergency_fund || 0,
-                    monthly_emergency_deposit: budgetRes.data.monthly_emergency_deposit || 0,
-                    emergency_target_type: budgetRes.data.emergency_target_type || null,
-                    emergency_target_months: budgetRes.data.emergency_target_months || null,
-                    emergency_target_value: budgetRes.data.emergency_target_value || null
-                })
+
+                hasLoadedData.current = true
+            } else {
+                // Even if no data, mark as loaded so saves can happen for new users
+                hasLoadedData.current = true
             }
 
             if (portfolioRes.data && Array.isArray(portfolioRes.data)) {
@@ -119,6 +105,8 @@ export default function BudgetDashboard() {
             }
         } catch (err) {
             console.error("Failed to fetch data", err)
+            // Mark as loaded even on error to prevent infinite blocking
+            hasLoadedData.current = true
         } finally {
             setLoading(false)
         }
@@ -136,17 +124,13 @@ export default function BudgetDashboard() {
     const saveData = async () => {
         setIsSaving(true)
         try {
+            // No need to inject emergency/RA fields anymore
             await axios.post('/api/budget/default_user', {
                 salary,
                 age,
                 needs,
                 wants,
-                savings,
-                current_emergency_fund: emergencyFundData.current_emergency_fund,
-                monthly_emergency_deposit: emergencyFundData.monthly_emergency_deposit,
-                emergency_target_type: emergencyFundData.emergency_target_type,
-                emergency_target_months: emergencyFundData.emergency_target_months,
-                emergency_target_value: emergencyFundData.emergency_target_value
+                savings
             })
         } catch (err) {
             console.error("Failed to save data", err)
@@ -155,11 +139,8 @@ export default function BudgetDashboard() {
         }
     }
 
-    const handleEmergencyFundSave = (data) => {
-        setEmergencyFundData(data)
-    }
-
     const addCategory = (type, name, amount = 0, group = null) => {
+        setHasUserEdited(true)
         const newItem = { name, amount, group }
         if (type === 'needs') setNeeds([...needs, newItem])
         else if (type === 'wants') setWants([...wants, newItem])
@@ -167,6 +148,7 @@ export default function BudgetDashboard() {
     }
 
     const updateCategory = (type, index, field, value) => {
+        setHasUserEdited(true)
         const list = type === 'needs' ? needs : type === 'wants' ? wants : savings
         const newList = [...list]
         newList[index][field] = field === 'amount' ? parseFloat(value) || 0 : value
@@ -177,6 +159,7 @@ export default function BudgetDashboard() {
     }
 
     const removeCategory = (type, index) => {
+        setHasUserEdited(true)
         const list = type === 'needs' ? needs : type === 'wants' ? wants : savings
         const newList = list.filter((_, i) => i !== index)
 
@@ -252,7 +235,7 @@ export default function BudgetDashboard() {
                                 <input
                                     type="number"
                                     value={salary}
-                                    onChange={(e) => setSalary(parseFloat(e.target.value) || 0)}
+                                    onChange={(e) => { setHasUserEdited(true); setSalary(parseFloat(e.target.value) || 0) }}
                                     onFocus={(e) => e.target.select()}
                                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors"
                                 />
@@ -262,7 +245,7 @@ export default function BudgetDashboard() {
                                 <input
                                     type="number"
                                     value={age}
-                                    onChange={(e) => setAge(parseInt(e.target.value) || 30)}
+                                    onChange={(e) => { setHasUserEdited(true); setAge(parseInt(e.target.value) || 30) }}
                                     onFocus={(e) => e.target.select()}
                                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors"
                                 />
@@ -306,13 +289,6 @@ export default function BudgetDashboard() {
                         </div>
                     </div>
 
-                    {/* Emergency Fund Calculator */}
-                    <EmergencyFundCalculator 
-                        needsTotal={totalNeeds} 
-                        emergencyFundData={emergencyFundData}
-                        onSave={handleEmergencyFundSave}
-                    />
-
                     {/* Overall Budget Breakdown Chart (Moved here) */}
                     {salary > 0 && (
                         <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
@@ -341,9 +317,9 @@ export default function BudgetDashboard() {
                                             contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#f3f4f6' }}
                                             itemStyle={{ color: '#f3f4f6' }}
                                         />
-                                        <Legend 
-                                            verticalAlign="bottom" 
-                                            height={36} 
+                                        <Legend
+                                            verticalAlign="bottom"
+                                            height={36}
                                             wrapperStyle={{ color: '#9ca3af' }}
                                             formatter={(value, entry) => {
                                                 const data = chartData.find(d => d.name === value)
@@ -399,8 +375,8 @@ export default function BudgetDashboard() {
                                             const categoryItems = activeTab === 'needs' ? needs : activeTab === 'wants' ? wants : savings
                                             const categoryTotal = categoryItems.reduce((sum, item) => sum + item.amount, 0)
                                             return categoryItems
-                                                .map(item => ({ 
-                                                    name: item.name, 
+                                                .map(item => ({
+                                                    name: item.name,
                                                     value: item.amount,
                                                     percentage: categoryTotal > 0 ? (item.amount / categoryTotal) * 100 : 0
                                                 }))
@@ -431,10 +407,10 @@ export default function BudgetDashboard() {
                                         contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#f3f4f6' }}
                                         itemStyle={{ color: '#f3f4f6' }}
                                     />
-                                    <Legend 
-                                        layout="vertical" 
-                                        verticalAlign="middle" 
-                                        align="right" 
+                                    <Legend
+                                        layout="vertical"
+                                        verticalAlign="middle"
+                                        align="right"
                                         wrapperStyle={{ paddingLeft: "20px", color: '#9ca3af' }}
                                         formatter={(value, entry, index) => {
                                             const categoryItems = activeTab === 'needs' ? needs : activeTab === 'wants' ? wants : savings
@@ -495,9 +471,9 @@ export default function BudgetDashboard() {
             </div>
 
             {/* Savings Calculator Modal */}
-            <SavingsCalculator 
-                isOpen={showSavingsCalculator} 
-                onClose={() => setShowSavingsCalculator(false)} 
+            <SavingsCalculator
+                isOpen={showSavingsCalculator}
+                onClose={() => setShowSavingsCalculator(false)}
             />
         </div >
     )
@@ -575,9 +551,9 @@ const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => 
         const total = getGroupTotal(groupItems)
         const isCollapsed = collapsedGroups.has(groupName)
         const displayName = groupName === null ? 'Uncategorized' : groupName
-        
+
         return (
-            <div 
+            <div
                 key={groupName}
                 className="mt-4 first:mt-0"
             >
@@ -620,7 +596,7 @@ const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => 
         const percentage = calculatePercentage(item.amount)
         // Use local editing state if available, otherwise use item.group
         const groupValue = editingGroup[index] !== undefined ? editingGroup[index] : (item.group || '')
-        
+
         return (
             <div key={index} className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors group">
                 <input

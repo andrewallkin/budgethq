@@ -12,6 +12,8 @@ class User(Base):
     hashed_password = Column(String)
 
     budget = relationship("Budget", back_populates="owner", uselist=False)
+    emergency_savings = relationship("EmergencySavings", back_populates="owner", uselist=False)
+    retirement_annuity = relationship("RetirementAnnuity", back_populates="owner", uselist=False)
     etfs = relationship("ETF", back_populates="owner")
     etf_holdings = relationship("ETFHolding", back_populates="owner")
     etf_transactions = relationship("ETFTransaction", back_populates="owner")
@@ -31,16 +33,35 @@ class Budget(Base):
     user_id = Column(Integer, ForeignKey("users.id"))
     salary = Column(Float, default=0)
     age = Column(Integer, default=30)
-    
-    # Emergency fund fields
-    current_emergency_fund = Column(Float, default=0)
-    monthly_emergency_deposit = Column(Float, default=0)
-    emergency_target_type = Column(String, nullable=True)  # 'months' or 'target_value'
-    emergency_target_months = Column(Integer, nullable=True)  # 3, 6, or 12
-    emergency_target_value = Column(Float, nullable=True)  # Direct target value
 
     owner = relationship("User", back_populates="budget")
     categories = relationship("BudgetCategory", back_populates="budget")
+
+
+class EmergencySavings(Base):
+    __tablename__ = "emergency_savings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), unique=True)
+    current_fund = Column(Float, default=0)
+    monthly_deposit = Column(Float, default=0)
+    target_type = Column(String, nullable=True)  # 'months' or 'target_value'
+    target_months = Column(Integer, nullable=True)  # 3, 6, or 12
+    target_value = Column(Float, nullable=True)  # Direct target value
+
+    owner = relationship("User", back_populates="emergency_savings")
+
+
+class RetirementAnnuity(Base):
+    __tablename__ = "retirement_annuities"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), unique=True)
+    current_value = Column(Float, default=0)
+    monthly_contribution = Column(Float, default=0)
+
+    owner = relationship("User", back_populates="retirement_annuity")
+
 
 class BudgetCategory(Base):
     __tablename__ = "budget_categories"
