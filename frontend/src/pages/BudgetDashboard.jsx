@@ -40,7 +40,8 @@ export default function BudgetDashboard() {
     const [activeTab, setActiveTab] = useState('needs')
 
     const [isSaving, setIsSaving] = useState(false)
-    const firstRender = useRef(true)
+    const hasLoadedData = useRef(false)
+    const isInitialLoad = useRef(true)
 
     // TFSA Portfolio data
     const [portfolioTotal, setPortfolioTotal] = useState(0)
@@ -63,12 +64,13 @@ export default function BudgetDashboard() {
         }
     }, [salary, age])
 
-    // Auto-save
+    // Auto-save - only after data has been loaded and only for user changes
     useEffect(() => {
-        if (firstRender.current) {
-            firstRender.current = false
-            return
-        }
+        // Don't save if we haven't loaded data yet
+        if (!hasLoadedData.current) return
+        // Don't save during initial data load
+        if (isInitialLoad.current) return
+        // Don't save while still loading
         if (loading) return
 
         const timer = setTimeout(() => {
@@ -92,6 +94,12 @@ export default function BudgetDashboard() {
                 setNeeds((budgetRes.data.needs || []).map(item => ({ ...item, group: item.group || null })))
                 setWants((budgetRes.data.wants || []).map(item => ({ ...item, group: item.group || null })))
                 setSavings((budgetRes.data.savings || []).map(item => ({ ...item, group: item.group || null })))
+                
+                // Mark that we've successfully loaded data
+                hasLoadedData.current = true
+            } else {
+                // Even if no data, mark as loaded so saves can happen for new users
+                hasLoadedData.current = true
             }
 
             if (portfolioRes.data && Array.isArray(portfolioRes.data)) {
@@ -101,8 +109,14 @@ export default function BudgetDashboard() {
             }
         } catch (err) {
             console.error("Failed to fetch data", err)
+            // Mark as loaded even on error to prevent infinite blocking
+            hasLoadedData.current = true
         } finally {
             setLoading(false)
+            // After a short delay, allow saves (this prevents saves triggered by initial data load)
+            setTimeout(() => {
+                isInitialLoad.current = false
+            }, 100)
         }
     }
 

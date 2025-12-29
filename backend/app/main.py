@@ -67,6 +67,8 @@ class BudgetData(BaseModel):
     emergency_target_type: Optional[str] = None  # 'months' or 'target_value'
     emergency_target_months: Optional[int] = None  # 3, 6, or 12
     emergency_target_value: Optional[float] = None
+    current_ra_value: Optional[float] = 0
+    monthly_ra_contribution: Optional[float] = 0
 
 class ETFBase(BaseModel):
     ETF: str
@@ -293,7 +295,9 @@ async def get_budget(current_user: models.User = Depends(auth.get_current_user),
         "monthly_emergency_deposit": budget.monthly_emergency_deposit or 0,
         "emergency_target_type": budget.emergency_target_type,
         "emergency_target_months": budget.emergency_target_months,
-        "emergency_target_value": budget.emergency_target_value
+        "emergency_target_value": budget.emergency_target_value,
+        "current_ra_value": budget.current_ra_value or 0,
+        "monthly_ra_contribution": budget.monthly_ra_contribution or 0
     }
 
 @app.post("/api/budget/default_user")
@@ -315,6 +319,10 @@ async def save_budget(data: BudgetData, current_user: models.User = Depends(auth
     budget.emergency_target_type = data.emergency_target_type
     budget.emergency_target_months = data.emergency_target_months
     budget.emergency_target_value = data.emergency_target_value
+    
+    # Save RA fields
+    budget.current_ra_value = data.current_ra_value or 0
+    budget.monthly_ra_contribution = data.monthly_ra_contribution or 0
     
     # Clear existing categories
     db.query(models.BudgetCategory).filter(models.BudgetCategory.budget_id == budget.id).delete()

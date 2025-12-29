@@ -39,6 +39,10 @@ class Budget(Base):
     emergency_target_months = Column(Integer, nullable=True)  # 3, 6, or 12
     emergency_target_value = Column(Float, nullable=True)  # Direct target value
 
+    # RA (Retirement Annuity) fields
+    current_ra_value = Column(Float, default=0)
+    monthly_ra_contribution = Column(Float, default=0)
+
     owner = relationship("User", back_populates="budget")
     categories = relationship("BudgetCategory", back_populates="budget")
 

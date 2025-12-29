@@ -77,13 +77,17 @@ export default function TFSAPortfolio() {
         }
     }, [holdings, threshold])
 
-    // Auto-save contributions
-    const contributionFirstRender = useRef(true)
+    // Track if contributions data has been loaded
+    const hasLoadedContributions = useRef(false)
+    const isInitialContributionLoad = useRef(true)
+
+    // Auto-save contributions - only after data has been loaded and only for user changes
     useEffect(() => {
-        if (contributionFirstRender.current) {
-            contributionFirstRender.current = false
-            return
-        }
+        // Don't save if we haven't loaded contributions yet
+        if (!hasLoadedContributions.current) return
+        // Don't save during initial contribution load
+        if (isInitialContributionLoad.current) return
+        // Don't save while still loading
         if (loading) return
 
         const timer = setTimeout(() => {
@@ -145,9 +149,22 @@ export default function TFSAPortfolio() {
                     date: d.date
                 }))
                 setDeposits(loadedDeposits)
+                
+                // Mark that we've successfully loaded contributions
+                hasLoadedContributions.current = true
+            } else {
+                // Even if no data, mark as loaded so saves can happen for new users
+                hasLoadedContributions.current = true
             }
         } catch (err) {
             console.error("Failed to fetch contributions", err)
+            // Mark as loaded even on error to prevent infinite blocking
+            hasLoadedContributions.current = true
+        } finally {
+            // After a short delay, allow saves (this prevents saves triggered by initial data load)
+            setTimeout(() => {
+                isInitialContributionLoad.current = false
+            }, 100)
         }
     }
 

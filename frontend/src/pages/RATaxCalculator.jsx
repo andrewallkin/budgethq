@@ -1,10 +1,14 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import axios from 'axios'
 import { Calculator, Info } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 
 export default function RATaxCalculator() {
     const [loading, setLoading] = useState(true)
+    const [isSaving, setIsSaving] = useState(false)
+    const hasLoadedData = useRef(false)
+    const isInitialLoad = useRef(true)
+    
     const [salary, setSalary] = useState(0)
     const [age, setAge] = useState(30)
     const [monthlyRAContribution, setMonthlyRAContribution] = useState(0)
@@ -12,19 +16,135 @@ export default function RATaxCalculator() {
     const [calculationResult, setCalculationResult] = useState(null)
     const [calculating, setCalculating] = useState(false)
 
+    // Store latest RA values in refs to avoid stale closures
+    const currentRAValueRef = useRef(currentRAValue)
+    const monthlyRAContributionRef = useRef(monthlyRAContribution)
+    useEffect(() => {
+        currentRAValueRef.current = currentRAValue
+    }, [currentRAValue])
+    useEffect(() => {
+        monthlyRAContributionRef.current = monthlyRAContribution
+    }, [monthlyRAContribution])
+
+    // Store full budget data to preserve it when saving
+    const [budgetData, setBudgetData] = useState({
+        salary: 0,
+        age: 30,
+        needs: [],
+        wants: [],
+        savings: []
+    })
+
+    // Store latest budget data in ref to avoid stale closures
+    const budgetDataRef = useRef(budgetData)
+    useEffect(() => {
+        budgetDataRef.current = budgetData
+    }, [budgetData])
+
     const fetchUserData = async () => {
         try {
             const res = await axios.get('/api/budget/default_user')
             if (res.data && Object.keys(res.data).length > 0) {
+                // Store full budget data to preserve it when saving
+                const loadedBudgetData = {
+                    salary: res.data.salary || 0,
+                    age: res.data.age || 30,
+                    needs: res.data.needs || [],
+                    wants: res.data.wants || [],
+                    savings: res.data.savings || []
+                }
+                setBudgetData(loadedBudgetData)
+                budgetDataRef.current = loadedBudgetData
+
                 setSalary(res.data.salary || 0)
                 setAge(res.data.age || 30)
+                
+                // Load RA values from budget
+                const loadedRAValue = res.data.current_ra_value ?? 0
+                const loadedRAContribution = res.data.monthly_ra_contribution ?? 0
+                setCurrentRAValue(loadedRAValue)
+                setMonthlyRAContribution(loadedRAContribution)
+                currentRAValueRef.current = loadedRAValue
+                monthlyRAContributionRef.current = loadedRAContribution
+                
+                // Mark that we've successfully loaded data
+                hasLoadedData.current = true
+            } else {
+                // Even if no data, mark as loaded so saves can happen for new users
+                hasLoadedData.current = true
             }
         } catch (err) {
             console.error("Failed to fetch user data", err)
+            // On error, don't reset budgetData - preserve whatever we have
+            // Only mark as loaded if we don't have any data yet
+            // This prevents overwriting existing data if the fetch fails
+            if (budgetDataRef.current.salary === 0 && 
+                budgetDataRef.current.needs.length === 0 && 
+                budgetDataRef.current.wants.length === 0) {
+                // First load and fetch failed - mark as loaded anyway to allow saves
+                hasLoadedData.current = true
+            } else {
+                // We have existing data - mark as loaded but don't reset
+                hasLoadedData.current = true
+            }
         } finally {
             setLoading(false)
+            // After a short delay, allow saves (this prevents saves triggered by initial data load)
+            setTimeout(() => {
+                isInitialLoad.current = false
+            }, 100)
         }
     }
+
+    // Save function using useCallback to ensure it captures latest state via refs
+    const saveRAData = useCallback(async () => {
+        // Don't save if we haven't loaded data yet
+        if (!hasLoadedData.current) {
+            console.log('RA: Not saving - data not loaded yet')
+            return
+        }
+        // Don't save during initial load
+        if (isInitialLoad.current) {
+            console.log('RA: Not saving - still in initial load')
+            return
+        }
+        // Don't save while still loading
+        if (loading) {
+            console.log('RA: Not saving - still loading')
+            return
+        }
+        
+        // Get latest values from refs to avoid stale closures
+        const latestRAValue = currentRAValueRef.current
+        const latestRAContribution = monthlyRAContributionRef.current
+        const latestBudgetData = budgetDataRef.current
+        
+        console.log('RA: Saving data', {
+            current_ra_value: latestRAValue,
+            monthly_ra_contribution: latestRAContribution,
+            budget: latestBudgetData
+        })
+        
+        setIsSaving(true)
+        try {
+            // Save all budget data including RA fields
+            // This preserves existing budget data while updating RA values
+            await axios.post('/api/budget/default_user', {
+                salary: latestBudgetData.salary || 0,
+                age: latestBudgetData.age || 30,
+                needs: latestBudgetData.needs || [],
+                wants: latestBudgetData.wants || [],
+                savings: latestBudgetData.savings || [],
+                current_ra_value: latestRAValue ?? 0,
+                monthly_ra_contribution: latestRAContribution ?? 0
+            })
+            console.log('RA: Save successful')
+        } catch (err) {
+            console.error("Failed to save RA data", err)
+        } finally {
+            setIsSaving(false)
+        }
+    }, [loading]) // Only depend on loading, values come from refs
 
     // Calculate maximum monthly RA contribution (27.5% of annual salary or R350,000 per year, whichever is lower)
     const maxMonthlyRAContribution = useMemo(() => {
@@ -52,10 +172,39 @@ export default function RATaxCalculator() {
         }
     }, [salary, age, monthlyRAContribution])
 
+    // Wrapper functions to update both state and refs immediately
+    const updateCurrentRAValue = useCallback((value) => {
+        const numValue = parseFloat(value) || 0
+        currentRAValueRef.current = numValue
+        setCurrentRAValue(numValue)
+    }, [])
+
+    const updateMonthlyRAContribution = useCallback((value) => {
+        const numValue = parseFloat(value) || 0
+        monthlyRAContributionRef.current = numValue
+        setMonthlyRAContribution(numValue)
+    }, [])
+
     // Load user data on mount
     useEffect(() => {
         fetchUserData()
     }, [])
+
+    // Auto-save RA values - only after data has been loaded and only for user changes
+    useEffect(() => {
+        // Don't save if we haven't loaded data yet
+        if (!hasLoadedData.current) return
+        // Don't save during initial data load
+        if (isInitialLoad.current) return
+        // Don't save while still loading
+        if (loading) return
+
+        const timer = setTimeout(() => {
+            saveRAData()
+        }, 1000)
+
+        return () => clearTimeout(timer)
+    }, [currentRAValue, monthlyRAContribution, loading, saveRAData]) // Removed budgetData from deps
 
     // Calculate when RA contribution changes (only if valid)
     useEffect(() => {
@@ -148,6 +297,11 @@ export default function RATaxCalculator() {
         <div className="space-y-8">
             <div className="flex justify-between items-center">
                 <h1 className="text-3xl font-bold text-gray-900 dark:text-white">🏦 Retirement Annuity Tax Calculator</h1>
+                <div className="flex items-center gap-4">
+                    <div className="text-sm text-gray-500 dark:text-gray-400">
+                        {isSaving ? 'Saving...' : 'All changes saved'}
+                    </div>
+                </div>
             </div>
 
             <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
@@ -184,7 +338,7 @@ export default function RATaxCalculator() {
                         <input
                             type="number"
                             value={currentRAValue}
-                            onChange={(e) => setCurrentRAValue(parseFloat(e.target.value) || 0)}
+                            onChange={(e) => updateCurrentRAValue(e.target.value)}
                             onFocus={(e) => e.target.select()}
                             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors"
                             placeholder="0"
@@ -197,7 +351,7 @@ export default function RATaxCalculator() {
                         <input
                             type="number"
                             value={monthlyRAContribution}
-                            onChange={(e) => setMonthlyRAContribution(parseFloat(e.target.value) || 0)}
+                            onChange={(e) => updateMonthlyRAContribution(e.target.value)}
                             onFocus={(e) => e.target.select()}
                             className={`w-full px-3 py-2 border rounded-lg focus:ring-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors ${
                                 monthlyRAContribution > 0 && !isRAContributionValid

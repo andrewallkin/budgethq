@@ -12,16 +12,24 @@ export default function EmergencyFundCalculator({ needsTotal, emergencyFundData,
 
     // Update state when props change (e.g., after loading from API)
     // Use a ref to track if we've initialized to prevent overwriting user input
+    // Also track the last emergencyFundData we initialized from to detect prop changes
     const hasInitialized = useRef(false)
+    const lastInitializedDataRef = useRef(null)
+    
     useEffect(() => {
-        // Only initialize once when we first get data
-        if (emergencyFundData && !hasInitialized.current) {
+        // Check if emergencyFundData has actually changed from what we last initialized
+        const dataChanged = lastInitializedDataRef.current === null || 
+            JSON.stringify(lastInitializedDataRef.current) !== JSON.stringify(emergencyFundData)
+        
+        // Initialize when we first get data, or when data actually changes (e.g., navigating back)
+        if (emergencyFundData && (!hasInitialized.current || dataChanged)) {
             setCurrentFund(emergencyFundData.current_emergency_fund ?? 0)
             setMonthlyDeposit(emergencyFundData.monthly_emergency_deposit ?? 0)
             setTargetType(emergencyFundData.emergency_target_type || 'months')
             setTargetMonths(emergencyFundData.emergency_target_months ?? 6)
             setTargetValue(emergencyFundData.emergency_target_value ?? 0)
             hasInitialized.current = true
+            lastInitializedDataRef.current = emergencyFundData
         }
     }, [emergencyFundData])
 
