@@ -55,6 +55,67 @@ def wait_for_postgres(db_config, max_attempts=30):
     return False
 
 
+def update_password_for_local_dev(db_config):
+    """Update password for local development user from environment variables."""
+    import bcrypt
+    
+    username = os.environ.get("LOCAL_USERNAME")
+    new_password = os.environ.get("LOCAL_PASSWORD")
+    
+    # Skip if environment variables are not set
+    if not username or not new_password:
+        return
+    
+    try:
+        # Hash the new password using bcrypt
+        hashed_password = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        
+        # Use psql with -c flag and proper escaping
+        # Escape single quotes by doubling them for SQL
+        escaped_password = hashed_password.replace("'", "''")
+        escaped_username = username.replace("'", "''")
+        
+        # Update the password in the database using psql
+        update_cmd = [
+            "psql",
+            "-h", db_config["host"],
+            "-p", db_config["port"],
+            "-U", db_config["user"],
+            "-d", db_config["database"],
+            "-t", "-c", f"UPDATE users SET hashed_password = '{escaped_password}' WHERE username = '{escaped_username}';"
+        ]
+        
+        result = subprocess.run(update_cmd, check=True, capture_output=True, text=True)
+        
+        # Check if user was found and updated by looking at the output
+        # psql with -t flag outputs just the number of rows affected
+        output = result.stdout.strip() + result.stderr.strip()
+        
+        # Try to get the UPDATE count from the output
+        if "UPDATE 1" in output or output == "1":
+            logger.info(f"Successfully updated password for {username} for local development")
+        elif "UPDATE 0" in output or output == "0":
+            logger.warning(f"User {username} not found - password not updated")
+        else:
+            # If we can't determine, try a SELECT to verify
+            verify_cmd = [
+                "psql",
+                "-h", db_config["host"],
+                "-p", db_config["port"],
+                "-U", db_config["user"],
+                "-d", db_config["database"],
+                "-t", "-c", f"SELECT COUNT(*) FROM users WHERE username = '{escaped_username}';"
+            ]
+            verify_result = subprocess.run(verify_cmd, check=True, capture_output=True, text=True)
+            if verify_result.stdout.strip() == "1":
+                logger.info(f"Password update completed for {username} (verification: user exists)")
+            else:
+                logger.warning(f"Could not verify password update for {username}")
+            
+    except Exception as e:
+        logger.warning(f"Could not update password for local development: {e}")
+
+
 def download_and_restore_backup(backup_filename, gcs_client, db_config):
     """Download the backup from GCS and restore it to PostgreSQL."""
     if not gcs_client.is_available():
@@ -141,18 +202,15 @@ def download_and_restore_backup(backup_filename, gcs_client, db_config):
         
         # Read and filter the backup file
         filtered_sql = []
-        all_lines = []
         create_table_count = 0
         insert_count = 0
         
         try:
             with gzip.open(temp_backup_file, 'rt', encoding='utf-8') as f:
                 for line in f:
-                    all_lines.append(line)
                     # Filter out problematic SET commands
                     # Skip SET commands for transaction_timeout and other unsupported parameters
                     if re.match(r'^\s*SET\s+transaction_timeout', line, re.IGNORECASE):
-                        logger.debug(f"Filtering out unsupported SET command: {line.strip()}")
                         continue
                     # Keep all other lines
                     filtered_sql.append(line)
@@ -171,21 +229,7 @@ def download_and_restore_backup(backup_filename, gcs_client, db_config):
             logger.error("Backup file appears to be empty after filtering")
             return False
 
-        logger.info(f"Filtered backup contains {len(filtered_sql)} lines")
-        logger.info(f"Backup analysis: {create_table_count} CREATE TABLE statements, {insert_count} INSERT statements")
-        
-        # Log first few lines for debugging
-        if len(all_lines) <= 50:
-            logger.info("Backup file contents (first 20 lines):")
-            for i, line in enumerate(all_lines[:20], 1):
-                logger.info(f"  {i}: {line.rstrip()}")
-        else:
-            logger.info("Backup file contents (first 10 and last 10 lines):")
-            for i, line in enumerate(all_lines[:10], 1):
-                logger.info(f"  {i}: {line.rstrip()}")
-            logger.info("  ...")
-            for i, line in enumerate(all_lines[-10:], len(all_lines) - 9):
-                logger.info(f"  {i}: {line.rstrip()}")
+        logger.info(f"Processing backup: {len(filtered_sql)} lines, {create_table_count} tables, {insert_count} data rows")
         
         if create_table_count == 0 and insert_count == 0:
             logger.warning("Backup file contains no CREATE TABLE or INSERT statements - database may be empty")
@@ -213,22 +257,12 @@ def download_and_restore_backup(backup_filename, gcs_client, db_config):
 
         if psql_process.returncode != 0:
             logger.error(f"Database restore failed with return code {psql_process.returncode}")
-            if stdout:
-                logger.error(f"psql stdout: {stdout}")
             if stderr:
-                logger.error(f"psql stderr: {stderr}")
+                # Only log stderr if it contains actual errors
+                stderr_lower = stderr.lower()
+                if any(keyword in stderr_lower for keyword in ['error', 'fatal', 'failed']):
+                    logger.error(f"Restore error: {stderr}")
             return False
-        
-        # Log success output if any (psql writes notices to stderr even on success)
-        if stdout:
-            logger.debug(f"psql output: {stdout}")
-        if stderr:
-            # Check if stderr contains actual errors or just notices
-            stderr_lower = stderr.lower()
-            if any(keyword in stderr_lower for keyword in ['error', 'fatal', 'failed']):
-                logger.warning(f"psql stderr (may contain errors): {stderr}")
-            else:
-                logger.debug(f"psql notices: {stderr}")
 
         logger.info("Database restore completed successfully")
         
@@ -249,6 +283,9 @@ def download_and_restore_backup(backup_filename, gcs_client, db_config):
                 logger.warning("No tables found after restore - restore may have failed silently")
         except Exception as e:
             logger.warning(f"Could not verify table count: {e}")
+        
+        # Update password for local development user
+        update_password_for_local_dev(db_config)
         
         return True
 
