@@ -8,6 +8,7 @@ from typing import List, Optional
 from datetime import date, datetime, timedelta
 import csv
 import io
+import os
 from . import models, database, auth, history
 from .logic import calculate_monthly_tax_with_age, calculate_uif, calculate_rebalancing, calculate_ra_tax_scenarios
 from .sheets_service import get_sheets_service
@@ -212,7 +213,8 @@ class BondTransactionResponse(BaseModel):
 @app.post("/api/auth/register", response_model=Token)
 def register(user: UserCreate, db: Session = Depends(database.get_db)):
     # Restrict registration to authorized email only
-    if user.username != "andrewallkin@gmail.com":
+    authorized_email = os.environ.get("AUTHORIZED_EMAIL", "andrewallkin@gmail.com")
+    if user.username != authorized_email:
         raise HTTPException(
             status_code=403, 
             detail="Registration is currently restricted. Only authorized users can create accounts."
@@ -242,7 +244,8 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
         )
     
     # Restrict login to authorized email only
-    if user.username != "andrewallkin@gmail.com":
+    authorized_email = os.environ.get("AUTHORIZED_EMAIL", "andrewallkin@gmail.com")
+    if user.username != authorized_email:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access restricted. This account is not authorized to login.",
