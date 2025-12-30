@@ -1,13 +1,28 @@
 services:
-  db-init:
+  # Persistent database (default development mode)
+  postgres:
+    image: postgres:15
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432" # Expose for local DB access
+    env_file:
+      - .env
+    restart: unless-stopped
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # Database restoration service (runs only when profile activated)
+  db_restore:
     build:
       context: .
       dockerfile: db_init/Dockerfile
+    profiles: ["restore"]
     depends_on:
       - postgres
     env_file:
       - .env
     restart: "no" # Run once and exit
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
 
   backend:
     build:
@@ -20,22 +35,15 @@ services:
       - ./backend/alembic/versions:/app/alembic/versions # Migration files appear locally
       - ./backend/app:/app/app # Hot reload for code changes
     depends_on:
-      db-init:
-        condition: service_completed_successfully
       postgres:
         condition: service_started
+      db_restore:
+        condition: service_completed_successfully
+        required: false  # Only required when db_restore profile is active
     env_file:
       - .env
     restart: unless-stopped
     command: uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload # Enable hot reload
-
-  postgres:
-    image: postgres:15
-    ports:
-      - "${POSTGRES_PORT:-5432}:5432" # Expose for local DB access
-    env_file:
-      - .env
-    restart: unless-stopped
 
   frontend:
     build: ./frontend
@@ -46,12 +54,6 @@ services:
     depends_on:
       - backend
     restart: unless-stopped
-  # backup:
-  #   build:
-  #     context: .
-  #     dockerfile: backup/Dockerfile
-  #   depends_on:
-  #     - postgres
-  #   env_file:
-  #     - .env
-  #   restart: unless-stopped
+
+volumes:
+  postgres_data:
