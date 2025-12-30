@@ -171,6 +171,31 @@ When running in development mode (`make dev-up`), the stack includes a `db-init`
 
 This ensures your local environment always has realistic data to test with, mirrored from production.
 
+### Database Persistence Control
+
+The development environment now supports two database modes:
+
+- **Persistent Mode** (`make dev-up`): Database state persists between container restarts. Schema changes and test data are maintained, making iterative development seamless.
+
+- **Restore Mode** (`make dev-up-restore`): Downloads and restores the latest production backup fresh each time, ensuring you always have current production data for testing.
+
+**Usage Examples:**
+
+```bash
+# Start with persistent database (default - preserves your work)
+make dev-up
+
+# Make schema changes and run migrations
+make migrate-create MSG="add_feature"
+make migrate
+
+# Continue development (database persists)
+make dev-up
+
+# Need fresh data again? Use restore mode
+make dev-up-restore
+```
+
 ### Start the stack
 
 **For Development (Recommended):**
@@ -206,10 +231,13 @@ docker-compose up -d
 
 ```bash
 # Container Management
-make dev-up          # Start development environment
+make dev-up          # Start with persistent database (default)
+make dev-build       # Rebuild and start with persistent database
+make dev-up-restore  # Start with fresh database from backup
+make dev-build-restore # Rebuild and start with fresh database from backup
 make dev-down        # Stop development environment
-make dev-build       # Rebuild containers
-make dev-logs        # View live logs
+make dev-logs        # View all development logs
+make dev-logs-restore# View restore-specific logs
 make dev-shell       # Access backend shell
 
 # Database Migrations (see section below)
