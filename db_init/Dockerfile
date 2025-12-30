@@ -15,7 +15,7 @@ COPY pyproject.toml uv.lock ./
 
 # Create virtual environment and install dependencies with uv
 RUN uv venv && \
-    uv export --no-dev --frozen > requirements.txt && \
+    uv export --extra db-init --no-dev --frozen > requirements.txt && \
     uv pip install --python .venv/bin/python -r requirements.txt && \
     rm requirements.txt
 

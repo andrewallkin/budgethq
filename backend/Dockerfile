@@ -9,7 +9,7 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 
 # Export dependencies to requirements.txt and install them
-RUN uv export --no-dev --frozen > requirements.txt && \
+RUN uv export --extra backend --no-dev --frozen > requirements.txt && \
     uv pip install --system -r requirements.txt
 
 # Copy application code from backend directory
