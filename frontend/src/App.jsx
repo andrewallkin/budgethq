@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Routes, Route, Link, useLocation, Navigate } from 'react-router-dom'
-import { LayoutDashboard, PieChart, Home, Moon, Sun, LogOut, Settings as SettingsIcon, ChevronLeft, ChevronRight, Calculator, Shield } from 'lucide-react'
+import { LayoutDashboard, PieChart, Home, Moon, Sun, LogOut, Settings as SettingsIcon, ChevronLeft, ChevronRight, Calculator, Shield, Database } from 'lucide-react'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import BudgetDashboard from './pages/BudgetDashboard'
 import TFSAPortfolio from './pages/TFSAPortfolio'
@@ -9,6 +9,7 @@ import EmergencySavings from './pages/EmergencySavings'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import Settings from './pages/Settings'
+import DailySummaryTrigger from './pages/DailySummaryTrigger'
 
 function ProtectedRoute({ children }) {
     const { user } = useAuth()
@@ -51,6 +52,7 @@ function AppContent() {
         { path: '/portfolio', label: 'TFSA Portfolio', icon: PieChart },
         { path: '/emergency-savings', label: 'Emergency Savings', icon: Shield },
         { path: '/ra-calculator', label: 'RA Tax Calculator', icon: Calculator },
+        { path: '/daily-summary-trigger', label: 'Daily Summary Tool', icon: Database },
         { path: '/settings', label: 'Settings', icon: SettingsIcon },
     ]
 
@@ -142,6 +144,7 @@ function AppContent() {
                         <Route path="/portfolio" element={<ProtectedRoute><TFSAPortfolio /></ProtectedRoute>} />
                         <Route path="/emergency-savings" element={<ProtectedRoute><EmergencySavings /></ProtectedRoute>} />
                         <Route path="/ra-calculator" element={<ProtectedRoute><RATaxCalculator /></ProtectedRoute>} />
+                        <Route path="/daily-summary-trigger" element={<ProtectedRoute><DailySummaryTrigger /></ProtectedRoute>} />
                         <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
                     </Routes>
                 </div>
