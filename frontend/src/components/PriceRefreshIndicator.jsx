@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { RefreshCw, Clock, CheckCircle, AlertCircle } from 'lucide-react'
 import axios from 'axios'
 
@@ -6,12 +6,20 @@ export default function PriceRefreshIndicator({ onRefresh }) {
     const [lastSync, setLastSync] = useState(null)
     const [syncing, setSyncing] = useState(false)
     const [error, setError] = useState(null)
+    const intervalRef = useRef(null)
 
     useEffect(() => {
         fetchLastSync()
-        // Poll for updates every minute
-        const interval = setInterval(fetchLastSync, 60000)
-        return () => clearInterval(interval)
+
+        // Poll every minute for time progression display
+        // This is still better than the original 60 seconds since backend updates every 5 minutes
+        intervalRef.current = setInterval(fetchLastSync, 60000) // 1 minute
+
+        return () => {
+            if (intervalRef.current) {
+                clearInterval(intervalRef.current)
+            }
+        }
     }, [])
 
     const fetchLastSync = async () => {
@@ -41,15 +49,16 @@ export default function PriceRefreshIndicator({ onRefresh }) {
 
     const getTimeAgo = (isoString) => {
         if (!isoString) return 'Never'
-        
+
         const date = new Date(isoString)
         const now = new Date()
         const diffMs = now - date
+        const diffSeconds = Math.floor(diffMs / 1000)
         const diffMins = Math.floor(diffMs / 60000)
         const diffHours = Math.floor(diffMins / 60)
         const diffDays = Math.floor(diffHours / 24)
 
-        if (diffMins < 1) return 'Just now'
+        if (diffSeconds < 60) return `${diffSeconds}s ago`
         if (diffMins < 60) return `${diffMins}m ago`
         if (diffHours < 24) return `${diffHours}h ago`
         return `${diffDays}d ago`

@@ -33,8 +33,6 @@ async def lifespan(app: FastAPI):
     start_scheduler()
     # Run initial sync on startup
     await sync_all_prices()
-    # Run initial snapshot on startup so we have data immediately
-    await record_hourly_snapshot()
     yield
     # Shutdown: Stop the scheduler
     stop_scheduler()
@@ -1199,8 +1197,15 @@ async def get_last_price_sync(
 ):
     """Get the timestamp of the last price sync."""
     last_sync = get_last_sync_time()
+    if last_sync:
+        # Convert SAST time to UTC for API response
+        utc_time = last_sync - timedelta(hours=2)  # SAST is UTC+2
+        return {
+            "last_sync": utc_time.isoformat() + "Z",
+            "sync_interval_minutes": 5
+        }
     return {
-        "last_sync": last_sync.isoformat() + "Z" if last_sync else None,
+        "last_sync": None,
         "sync_interval_minutes": 5
     }
 
