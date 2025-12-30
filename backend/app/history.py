@@ -328,20 +328,20 @@ def create_daily_summary(db: Session, target_date: Optional[date] = None) -> dic
     """
     if target_date is None:
         target_date = date.today()
-    
+
     start_of_day = datetime.combine(target_date, datetime.min.time())
     end_of_day = datetime.combine(target_date, datetime.max.time())
-    
+
     STATS = {'summaries_created': 0}
-    
+
     # Get all users with portfolio history for this day
     users_with_data = db.query(models.PortfolioValueHistory.user_id).filter(
         models.PortfolioValueHistory.recorded_at >= start_of_day,
         models.PortfolioValueHistory.recorded_at <= end_of_day
     ).distinct().all()
-    
+
     logger.info(f"Creating daily summaries for {len(users_with_data)} users for {target_date}")
-    
+
     for (user_id,) in users_with_data:
         # Check if summary already exists
         existing = db.query(models.DailyPortfolioSummary).filter(
@@ -529,24 +529,14 @@ def get_portfolio_history(
     Get portfolio history data for charting.
     Automatically selects the right granularity based on range.
     
-    range_param options: "1d", "7d", "1m", "3m", "6m", "1y", "all"
+    range_param options: "1m", "3m", "6m", "1y", "all"
     
     Returns list of {date, contributions, gain, total} for stacked area chart.
     """
     now = get_sast_now()
     
     # Determine date range and data source
-    if range_param == "1d":
-        # Use hourly data, no aggregation
-        start_date = now - timedelta(hours=24)
-        return _get_hourly_history(db, user_id, start_date, now)
-        
-    elif range_param == "7d":
-        # Use hourly data for 7 days
-        start_date = now - timedelta(days=7)
-        return _get_hourly_history(db, user_id, start_date, now)
-
-    elif range_param == "1m":
+    if range_param == "1m":
         # Use hourly data, aggregate to daily
         start_date = now - timedelta(days=30)
         return _get_daily_from_hourly(db, user_id, start_date, now)
@@ -800,21 +790,4 @@ def get_etf_price_history(db: Session, jse_ticker: str, range_param: str = "1m")
 
 
 
-def _get_hourly_history(db: Session, user_id: int, start_date: datetime, end_date: datetime) -> List[Dict]:
-    """Get raw hourly data points."""
-    results = db.query(models.PortfolioValueHistory).filter(
-        models.PortfolioValueHistory.user_id == user_id,
-        models.PortfolioValueHistory.recorded_at >= start_date,
-        models.PortfolioValueHistory.recorded_at <= end_date,
-        models.PortfolioValueHistory.snapshot_type == 'hourly'
-    ).order_by(models.PortfolioValueHistory.recorded_at).all()
-    
-    return [
-        {
-            'date': r.recorded_at.isoformat(),
-            'contributions': round(r.total_contributions or 0, 2),
-            'gain': round(r.total_growth or 0, 2),
-            'total': round(r.total_value or 0, 2)
-        }
-        for r in results
-    ]
+

@@ -1700,10 +1700,10 @@ async def get_portfolio_history(
     Get portfolio value history for charting.
     Returns data formatted for stacked area chart (contributions vs gains).
     
-    Range options: "1d", "7d", "1m", "3m", "6m", "1y", "all"
+    Range options: "1m", "3m", "6m", "1y", "all"
     """
-    if range not in ["1d", "7d", "1m", "3m", "6m", "1y", "all"]:
-        raise HTTPException(status_code=400, detail="Invalid range. Use: 1d, 7d, 1m, 3m, 6m, 1y, all")
+    if range not in ["1m", "3m", "6m", "1y", "all"]:
+        raise HTTPException(status_code=400, detail="Invalid range. Use: 1m, 3m, 6m, 1y, all")
     
     data = history.get_portfolio_history(db, current_user.id, range)
     

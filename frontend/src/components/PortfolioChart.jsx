@@ -13,8 +13,6 @@ import {
 import { TrendingUp, TrendingDown, Calendar, RefreshCw, Layers } from 'lucide-react'
 
 const TIME_RANGES = [
-    { key: '1d', label: '1D' },
-    { key: '7d', label: '7D' },
     { key: '1m', label: '1M' },
     { key: '3m', label: '3M' },
     { key: '6m', label: '6M' },
@@ -60,12 +58,6 @@ export default function PortfolioChart() {
         const date = new Date(dateStr)
         if (selectedRange === 'all' || selectedRange === '1y') {
             return date.toLocaleDateString('en-ZA', { month: 'short', year: '2-digit' })
-        }
-        if (selectedRange === '1d') {
-            return date.toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' })
-        }
-        if (selectedRange === '7d') {
-            return date.toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric' })
         }
         return date.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })
     }
@@ -254,11 +246,10 @@ export default function PortfolioChart() {
                     {/* View toggle */}
                     <button
                         onClick={() => setShowContributions(!showContributions)}
-                        className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${
-                            showContributions
+                        className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${showContributions
                                 ? 'bg-blue-500 text-white'
                                 : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-                        }`}
+                            }`}
                         title={showContributions ? 'Show portfolio value only' : 'Show contributions and portfolio value'}
                     >
                         <Layers className="w-4 h-4" />
