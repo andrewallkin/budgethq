@@ -399,8 +399,8 @@ def create_daily_summary(db: Session, target_date: Optional[date] = None) -> dic
             daily_change_percent=daily_change_percent
         )
         db.add(summary)
-        stats['summaries_created'] += 1
-    
+        STATS['summaries_created'] += 1
+
     db.commit()
     logger.info(f"Daily summary complete. Stats: {STATS}")
     return STATS
