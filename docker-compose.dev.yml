@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   db-init:
     build:
@@ -9,7 +7,7 @@ services:
       - postgres
     env_file:
       - .env
-    restart: "no"  # Run once and exit
+    restart: "no" # Run once and exit
 
   backend:
     build:
@@ -19,8 +17,8 @@ services:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
       - ./data:/app/data
-      - ./backend/alembic/versions:/app/alembic/versions  # Migration files appear locally
-      - ./backend/app:/app/app  # Hot reload for code changes
+      - ./backend/alembic/versions:/app/alembic/versions # Migration files appear locally
+      - ./backend/app:/app/app # Hot reload for code changes
     depends_on:
       db-init:
         condition: service_completed_successfully
@@ -29,12 +27,12 @@ services:
     env_file:
       - .env
     restart: unless-stopped
-    command: uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload  # Enable hot reload
+    command: uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload # Enable hot reload
 
   postgres:
     image: postgres:15
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"  # Expose for local DB access
+      - "${POSTGRES_PORT:-5432}:5432" # Expose for local DB access
     env_file:
       - .env
     restart: unless-stopped
@@ -44,18 +42,16 @@ services:
     ports:
       - "${FRONTEND_PORT:-3000}:80"
     volumes:
-      - ./frontend/src:/app/src  # Hot reload for frontend changes
+      - ./frontend/src:/app/src # Hot reload for frontend changes
     depends_on:
       - backend
     restart: unless-stopped
-
-  backup:
-    build:
-      context: .
-      dockerfile: backup/Dockerfile
-    depends_on:
-      - postgres
-    env_file:
-      - .env
-    restart: unless-stopped
-
+  # backup:
+  #   build:
+  #     context: .
+  #     dockerfile: backup/Dockerfile
+  #   depends_on:
+  #     - postgres
+  #   env_file:
+  #     - .env
+  #   restart: unless-stopped

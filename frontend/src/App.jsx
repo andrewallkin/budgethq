@@ -70,7 +70,7 @@ function AppContent() {
             <div className={`${isSidebarCollapsed ? 'w-16' : 'w-64'} bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col transition-all duration-300 ease-in-out overflow-hidden`}>
                 <div className={`p-6 flex ${isSidebarCollapsed ? 'justify-center' : 'justify-between'} items-center`}>
                     {!isSidebarCollapsed && (
-                        <h1 className="text-xl font-bold text-gray-800 dark:text-white">💰 FinDash</h1>
+                        <h1 className="text-xl font-bold text-gray-800 dark:text-white">📊 BudgetHQ</h1>
                     )}
                     <div className={`flex items-center gap-2 ${isSidebarCollapsed ? 'flex-col' : ''}`}>
                         <button
@@ -162,8 +162,8 @@ function HomePage() {
 
             <div className="grid lg:grid-cols-2 gap-8">
                 {/* Budget Dashboard Card */}
-                <div className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 rounded-2xl shadow-lg border border-blue-200 dark:border-blue-800 overflow-hidden hover:shadow-xl transition-all">
-                    <div className="p-8">
+                <div className="flex flex-col h-full bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 rounded-2xl shadow-lg border border-blue-200 dark:border-blue-800 overflow-hidden hover:shadow-xl transition-all">
+                    <div className="p-8 flex-1 flex flex-col">
                         <div className="flex items-center mb-6">
                             <div className="p-4 bg-blue-600 rounded-xl">
                                 <LayoutDashboard className="w-8 h-8 text-white" />
@@ -176,7 +176,7 @@ function HomePage() {
                             Needs, Wants, and Savings to maintain a healthy financial balance.
                         </p>
 
-                        <div className="space-y-3 mb-6">
+                        <div className="space-y-3 mb-8">
                             <div className="flex items-start">
                                 <span className="text-blue-600 dark:text-blue-400 mr-3 mt-1">✓</span>
                                 <div>
@@ -209,7 +209,7 @@ function HomePage() {
 
                         <Link
                             to="/budget"
-                            className="block w-full text-center px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors"
+                            className="mt-auto block w-full text-center px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors"
                         >
                             Open Budget Dashboard →
                         </Link>
@@ -217,44 +217,44 @@ function HomePage() {
                 </div>
 
                 {/* TFSA Portfolio Card */}
-                <div className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 rounded-2xl shadow-lg border border-green-200 dark:border-green-800 overflow-hidden hover:shadow-xl transition-all">
-                    <div className="p-8">
+                <div className="flex flex-col h-full bg-gradient-to-br from-emerald-50 to-emerald-100 dark:from-emerald-900/20 dark:to-emerald-800/20 rounded-2xl shadow-lg border border-emerald-200 dark:border-emerald-800 overflow-hidden hover:shadow-xl transition-all">
+                    <div className="p-8 flex-1 flex flex-col">
                         <div className="flex items-center mb-6">
-                            <div className="p-4 bg-green-600 rounded-xl">
+                            <div className="p-4 bg-emerald-600 rounded-xl">
                                 <PieChart className="w-8 h-8 text-white" />
                             </div>
                             <h2 className="text-2xl font-bold text-gray-900 dark:text-white ml-4">TFSA Portfolio</h2>
                         </div>
 
                         <p className="text-gray-700 dark:text-gray-300 mb-6 text-base leading-relaxed">
-                            Complete TFSA portfolio management with ETFs and government bonds. Live price tracking, 
+                            Complete TFSA portfolio management with ETFs and government bonds. Live price tracking,
                             transaction history, intelligent rebalancing, and powerful tools to optimize your tax-free investments.
                         </p>
 
-                        <div className="space-y-3 mb-6">
+                        <div className="space-y-3 mb-8">
                             <div className="flex items-start">
-                                <span className="text-green-600 dark:text-green-400 mr-3 mt-1">✓</span>
+                                <span className="text-emerald-600 dark:text-emerald-400 mr-3 mt-1">✓</span>
                                 <div>
                                     <p className="font-semibold text-gray-900 dark:text-white">ETFs & Government Bonds</p>
                                     <p className="text-sm text-gray-600 dark:text-gray-400">Track both ETFs with live prices and manually-managed government bonds</p>
                                 </div>
                             </div>
                             <div className="flex items-start">
-                                <span className="text-green-600 dark:text-green-400 mr-3 mt-1">✓</span>
+                                <span className="text-emerald-600 dark:text-emerald-400 mr-3 mt-1">✓</span>
                                 <div>
                                     <p className="font-semibold text-gray-900 dark:text-white">Live Price Sync & Transaction History</p>
                                     <p className="text-sm text-gray-600 dark:text-gray-400">Google Sheets integration for ETF prices, full buy/sell transaction tracking</p>
                                 </div>
                             </div>
                             <div className="flex items-start">
-                                <span className="text-green-600 dark:text-green-400 mr-3 mt-1">✓</span>
+                                <span className="text-emerald-600 dark:text-emerald-400 mr-3 mt-1">✓</span>
                                 <div>
                                     <p className="font-semibold text-gray-900 dark:text-white">Smart Rebalancing & Analytics</p>
                                     <p className="text-sm text-gray-600 dark:text-gray-400">Automated rebalancing plans, target allocation tracking, profit/loss analysis</p>
                                 </div>
                             </div>
                             <div className="flex items-start">
-                                <span className="text-green-600 dark:text-green-400 mr-3 mt-1">✓</span>
+                                <span className="text-emerald-600 dark:text-emerald-400 mr-3 mt-1">✓</span>
                                 <div>
                                     <p className="font-semibold text-gray-900 dark:text-white">CSV Import & Sortable Views</p>
                                     <p className="text-sm text-gray-600 dark:text-gray-400">Bulk import holdings, sort by any column, edit targets with one click</p>
@@ -264,9 +264,119 @@ function HomePage() {
 
                         <Link
                             to="/portfolio"
-                            className="block w-full text-center px-6 py-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition-colors"
+                            className="mt-auto block w-full text-center px-6 py-3 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-700 transition-colors"
                         >
                             Open TFSA Portfolio →
+                        </Link>
+                    </div>
+                </div>
+
+                {/* Emergency Savings Card */}
+                <div className="flex flex-col h-full bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-800/20 rounded-2xl shadow-lg border border-orange-200 dark:border-orange-800 overflow-hidden hover:shadow-xl transition-all">
+                    <div className="p-8 flex-1 flex flex-col">
+                        <div className="flex items-center mb-6">
+                            <div className="p-4 bg-orange-600 rounded-xl">
+                                <Shield className="w-8 h-8 text-white" />
+                            </div>
+                            <h2 className="text-2xl font-bold text-gray-900 dark:text-white ml-4">Emergency Savings</h2>
+                        </div>
+
+                        <p className="text-gray-700 dark:text-gray-300 mb-6 text-base leading-relaxed">
+                            Build a robust financial safety net with an intelligent emergency fund calculator.
+                            Define your goals based on your actual monthly expenses and track your progress.
+                        </p>
+
+                        <div className="space-y-3 mb-8">
+                            <div className="flex items-start">
+                                <span className="text-orange-600 dark:text-orange-400 mr-3 mt-1">✓</span>
+                                <div>
+                                    <p className="font-semibold text-gray-900 dark:text-white">Contextual Target Setting</p>
+                                    <p className="text-sm text-gray-600 dark:text-gray-400">Set goals for 3, 6, 9, or 12 months of survival expenses</p>
+                                </div>
+                            </div>
+                            <div className="flex items-start">
+                                <span className="text-orange-600 dark:text-orange-400 mr-3 mt-1">✓</span>
+                                <div>
+                                    <p className="font-semibold text-gray-900 dark:text-white">Auto-Synced from Budget</p>
+                                    <p className="text-sm text-gray-600 dark:text-gray-400">Uses your "Needs" total from the budget dashboard automatically</p>
+                                </div>
+                            </div>
+                            <div className="flex items-start">
+                                <span className="text-orange-600 dark:text-orange-400 mr-3 mt-1">✓</span>
+                                <div>
+                                    <p className="font-semibold text-gray-900 dark:text-white">Progress Tracking</p>
+                                    <p className="text-sm text-gray-600 dark:text-gray-400">Visual indicators of how close you are to your financial safety goal</p>
+                                </div>
+                            </div>
+                            <div className="flex items-start">
+                                <span className="text-orange-600 dark:text-orange-400 mr-3 mt-1">✓</span>
+                                <div>
+                                    <p className="font-semibold text-gray-900 dark:text-white">Milestone Planning</p>
+                                    <p className="text-sm text-gray-600 dark:text-gray-400">Calculate how long it will take to reach your target with monthly deposits</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <Link
+                            to="/emergency-savings"
+                            className="mt-auto block w-full text-center px-6 py-3 bg-orange-600 text-white font-semibold rounded-lg hover:bg-orange-700 transition-colors"
+                        >
+                            Open Emergency Savings →
+                        </Link>
+                    </div>
+                </div>
+
+                {/* RA Tax Calculator Card */}
+                <div className="flex flex-col h-full bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20 rounded-2xl shadow-lg border border-purple-200 dark:border-purple-800 overflow-hidden hover:shadow-xl transition-all">
+                    <div className="p-8 flex-1 flex flex-col">
+                        <div className="flex items-center mb-6">
+                            <div className="p-4 bg-purple-600 rounded-xl">
+                                <Calculator className="w-8 h-8 text-white" />
+                            </div>
+                            <h2 className="text-2xl font-bold text-gray-900 dark:text-white ml-4">RA Tax Calculator</h2>
+                        </div>
+
+                        <p className="text-gray-700 dark:text-gray-300 mb-6 text-base leading-relaxed">
+                            Optimize your retirement contributions to maximize tax benefits. See real-time
+                            impact on your SARS tax refund and project long-term portfolio growth.
+                        </p>
+
+                        <div className="space-y-3 mb-8">
+                            <div className="flex items-start">
+                                <span className="text-purple-600 dark:text-purple-400 mr-3 mt-1">✓</span>
+                                <div>
+                                    <p className="font-semibold text-gray-900 dark:text-white">Tax Refund Maximizer</p>
+                                    <p className="text-sm text-gray-600 dark:text-gray-400">Real-time SARS-compliant calculation of potential tax savings</p>
+                                </div>
+                            </div>
+                            <div className="flex items-start">
+                                <span className="text-purple-600 dark:text-purple-400 mr-3 mt-1">✓</span>
+                                <div>
+                                    <p className="font-semibold text-gray-900 dark:text-white">Scenario Comparison</p>
+                                    <p className="text-sm text-gray-600 dark:text-gray-400">Compare no contribution vs current vs max tax-deductible contribution</p>
+                                </div>
+                            </div>
+                            <div className="flex items-start">
+                                <span className="text-purple-600 dark:text-purple-400 mr-3 mt-1">✓</span>
+                                <div>
+                                    <p className="font-semibold text-gray-900 dark:text-white">Long-term Projections</p>
+                                    <p className="text-sm text-gray-600 dark:text-gray-400">Interactive growth charts projecting your RA value up to year 2060</p>
+                                </div>
+                            </div>
+                            <div className="flex items-start">
+                                <span className="text-purple-600 dark:text-purple-400 mr-3 mt-1">✓</span>
+                                <div>
+                                    <p className="font-semibold text-gray-900 dark:text-white">Smart Deduction Tracking</p>
+                                    <p className="text-sm text-gray-600 dark:text-gray-400">Stay within the 27.5% annual limit for optimal tax efficiency</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <Link
+                            to="/ra-calculator"
+                            className="mt-auto block w-full text-center px-6 py-3 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 transition-colors"
+                        >
+                            Open RA Tax Calculator →
                         </Link>
                     </div>
                 </div>
