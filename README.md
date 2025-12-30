@@ -4,12 +4,15 @@ A personal finance dashboard for South African users, built with **React** and *
 
 **🌟 Key Highlights:**
 - 🔄 **Live ETF Price Sync** via Google Sheets integration with background scheduler
+- 🛡️ **Emergency Savings Tracking** with automated expense coverage calculation
+- 👴 **RA Tax Calculator** to optimize retirement annuity contributions
 - 🏦 **Multi-Asset Support** for ETFs and Government Bonds in TFSA tracking
 - 📊 **Smart Rebalancing Engine** with automated buy/sell recommendations
 - 🔐 **Secure Authentication** with JWT tokens and restricted registration
+- 🗃️ **Automated Local DB Restore** from GCS production backups
 - 🐳 **Full Docker Support** with separate dev and production environments
-- 🗃️ **Database Migrations** via Alembic for safe schema updates
-- 🎨 **Modern UI** with dark mode, sortable tables, and interactive modals
+- �️ **Database Migrations** via Alembic for safe schema updates
+- �🎨 **Modern UI** with dark mode, sortable tables, and interactive modals
 - 📈 **TFSA Limit Tracking** for annual and lifetime contributions
 - 🔄 **CI/CD Pipeline** with automated deployments and health checks
 
@@ -28,6 +31,19 @@ A personal finance dashboard for South African users, built with **React** and *
     - Overall pie chart showing Needs/Wants/Savings/Unallocated net income.
     - Per‑tab pie chart showing the breakdown within the currently selected category.
   - **Summary Stats**: Net income, total Needs/Wants/Savings, and remaining amount.
+
+- **🛡️ Emergency Savings**
+  - **Expense-Linked Goals**: Set targets based on 3, 6, or 12 months of "Needs" from your budget.
+  - **Flexible Targets**: Choose between "Months of Expenses" or a specific "Target Value".
+  - **Progress Tracking**: Visual status indicators (Adequate, Good, Insufficient) with progress bars.
+  - **Time-to-Goal Calculator**: Automatically estimates how many months of saving are required to reach your target.
+  - **Auto-Save**: Seamless persistence of savings progress and goals.
+
+- **👴 RA Tax Calculator**
+  - **Tax Benefit Optimization**: See real-time PAYE savings based on different Retirement Annuity (RA) contribution levels.
+  - **Scenario Comparison**: Compare your current contribution against 10% and 15% salary contribution scenarios.
+  - **Unified Tracking**: Store your current RA valuation and monthly contributions.
+  - **Smart Integration**: Uses the same SARS tax engine as the main budget dashboard.
 
 - **📈 TFSA Portfolio**
   - **Multi-Asset Support**: 
@@ -139,7 +155,21 @@ GOOGLE_SHEET_NAME=ETF Holdings
 
 # Authentication & Security
 AUTHORIZED_EMAIL=your_authorized_email@example.com  # Only this email can register
+
+# Local Development DB Restore (GCS)
+LOCAL_USERNAME=your_authorized_email@example.com
+LOCAL_PASSWORD=your_local_dev_login_password
 ```
+
+### Local Database Initialization (`db-init`)
+
+When running in development mode (`make dev-up`), the stack includes a `db-init` container that automatically:
+1. **Connects to Google Cloud Storage** using your service account credentials.
+2. **Downloads the latest production backup**.
+3. **Restores the data** to your local PostgreSQL instance.
+4. **Updates your local password**: Uses `LOCAL_USERNAME` and `LOCAL_PASSWORD` to update the restored user's password so you can log in locally with your preferred development credentials.
+
+This ensures your local environment always has realistic data to test with, mirrored from production.
 
 ### Start the stack
 
@@ -272,7 +302,14 @@ The FastAPI app exposes:
 
 **Calculations:**
 - `/api/calculate/tax` – SARS PAYE + UIF calculation endpoint
+- `/api/calculate/ra-tax` - RA tax benefit scenario calculator
 - `/api/calculate/rebalance` – portfolio rebalancing engine (ETFs + bonds)
+
+**Emergency Savings:**
+- `/api/emergency-savings/default_user` - manage emergency fund goals and progress
+
+**Retirement Annuity:**
+- `/api/ra/default_user` - manage RA valuation and contributions
 
 **Authentication:**
 - `/api/auth/*` – register, login, change password endpoints
