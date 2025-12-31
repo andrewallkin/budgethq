@@ -25,6 +25,38 @@ class User(Base):
     holding_value_history = relationship("HoldingValueHistory", back_populates="owner")
     daily_portfolio_summaries = relationship("DailyPortfolioSummary", back_populates="owner")
     monthly_portfolio_summaries = relationship("MonthlyPortfolioSummary", back_populates="owner")
+    salary = relationship("Salary", back_populates="owner", uselist=False)
+
+class Salary(Base):
+    __tablename__ = "salaries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), unique=True)
+    medical_aid_members = Column(Integer, default=0) # Main member + dependents
+
+    # New Fields
+    basic_salary = Column(Float, default=0.0)
+    age = Column(Integer, default=30)
+    net_salary = Column(Float, default=0.0)  # Calculated net take-home pay
+
+    owner = relationship("User", back_populates="salary")
+    items = relationship("SalaryItem", back_populates="salary", cascade="all, delete-orphan")
+
+class SalaryItem(Base):
+    __tablename__ = "salary_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    salary_id = Column(Integer, ForeignKey("salaries.id"))
+
+    name = Column(String)
+    amount = Column(Float)
+    # Types: "earning", "deduction_pre", "deduction_post" (Fringe is now a property of post-tax/earning usually, let's keep types simple)
+    # Actually user wants "Separate Pre and Post Tax". 
+    # And "Select whether it is a fringe benefit or not".
+    item_type = Column(String) 
+    is_fringe = Column(Integer, default=0) # 0=False, 1=True (Boolean)
+
+    salary = relationship("Salary", back_populates="items")
 
 class Budget(Base):
     __tablename__ = "budgets"
@@ -32,7 +64,6 @@ class Budget(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
     salary = Column(Float, default=0)
-    age = Column(Integer, default=30)
 
     owner = relationship("User", back_populates="budget")
     categories = relationship("BudgetCategory", back_populates="budget")

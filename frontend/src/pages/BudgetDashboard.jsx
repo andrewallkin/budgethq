@@ -31,7 +31,6 @@ const CATEGORY_COLORS = [
 export default function BudgetDashboard() {
     const [loading, setLoading] = useState(true)
     const [salary, setSalary] = useState(0)
-    const [age, setAge] = useState(30)
     const [needs, setNeeds] = useState([])
     const [wants, setWants] = useState([])
     const [savings, setSavings] = useState([])
@@ -55,14 +54,11 @@ export default function BudgetDashboard() {
         fetchData()
     }, [])
 
-    // Recalculate tax when salary or age changes
+    // Tax is now calculated on the salary page only
     useEffect(() => {
-        if (salary > 0) {
-            calculateTax()
-        } else {
-            setTaxInfo({ monthly_tax: 0, monthly_uif: 0 })
-        }
-    }, [salary, age])
+        // Set default tax info since tax is calculated on salary page
+        setTaxInfo({ monthly_tax: 0, monthly_uif: 0 })
+    }, [])
 
     // Auto-save - only after user has explicitly edited data
     useEffect(() => {
@@ -75,7 +71,7 @@ export default function BudgetDashboard() {
         }, 1000)
 
         return () => clearTimeout(timer)
-    }, [salary, age, needs, wants, savings, loading, hasUserEdited])
+    }, [needs, wants, savings, loading, hasUserEdited])
 
     const fetchData = async () => {
         try {
@@ -86,7 +82,6 @@ export default function BudgetDashboard() {
 
             if (budgetRes.data && Object.keys(budgetRes.data).length > 0) {
                 setSalary(budgetRes.data.salary || 0)
-                setAge(budgetRes.data.age || 30)
                 // Ensure all categories have group field (backward compatibility)
                 setNeeds((budgetRes.data.needs || []).map(item => ({ ...item, group: item.group || null })))
                 setWants((budgetRes.data.wants || []).map(item => ({ ...item, group: item.group || null })))
@@ -112,14 +107,6 @@ export default function BudgetDashboard() {
         }
     }
 
-    const calculateTax = async () => {
-        try {
-            const res = await axios.post('/api/calculate/tax', { salary, age })
-            setTaxInfo(res.data)
-        } catch (err) {
-            console.error("Failed to calculate tax", err)
-        }
-    }
 
     const saveData = async () => {
         setIsSaving(true)
@@ -127,7 +114,6 @@ export default function BudgetDashboard() {
             // No need to inject emergency/RA fields anymore
             await axios.post('/api/budget/default_user', {
                 salary,
-                age,
                 needs,
                 wants,
                 savings
@@ -173,7 +159,7 @@ export default function BudgetDashboard() {
     const totalWants = wants.reduce((sum, item) => sum + item.amount, 0)
     const totalSavings = savings.reduce((sum, item) => sum + item.amount, 0)
 
-    const netIncome = salary - taxInfo.monthly_tax - taxInfo.monthly_uif
+    const netIncome = salary // salary is now already the net income
     const totalSpent = totalNeeds + totalWants + totalSavings
     const remaining = netIncome - totalSpent
 
@@ -190,19 +176,6 @@ export default function BudgetDashboard() {
         { name: 'Unallocated', value: Math.max(0, remaining), percentage: calculatePercentage(Math.max(0, remaining)) }
     ].filter(d => d.value > 0)
 
-    // Calculate top spending categories for insights
-    const allCategories = [
-        ...needs.map(item => ({ ...item, type: 'Needs' })),
-        ...wants.map(item => ({ ...item, type: 'Wants' })),
-        ...savings.map(item => ({ ...item, type: 'Savings' }))
-    ]
-    const topCategories = allCategories
-        .map(item => ({
-            ...item,
-            percentage: calculatePercentage(item.amount)
-        }))
-        .sort((a, b) => b.percentage - a.percentage)
-        .slice(0, 5)
 
     if (loading) return <div>Loading...</div>
 
@@ -225,53 +198,30 @@ export default function BudgetDashboard() {
             </div>
 
             <div className="grid md:grid-cols-3 gap-6">
-                {/* Income Settings */}
+                {/* Column 1: Income, Summary, and Budget Breakdown */}
                 <div className="md:col-span-1 space-y-6">
+                    {/* Income Card */}
                     <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
                         <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Income Details</h2>
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Monthly Gross Salary (R)</label>
+                                <div className="flex justify-between items-center mb-1">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Net Monthly Income (R)</label>
+                                    <Link to="/salary" className="text-xs text-blue-600 hover:text-blue-700 font-medium">
+                                        Edit Salary Details →
+                                    </Link>
+                                </div>
                                 <input
                                     type="number"
-                                    value={salary}
-                                    onChange={(e) => { setHasUserEdited(true); setSalary(parseFloat(e.target.value) || 0) }}
-                                    onFocus={(e) => e.target.select()}
-                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors"
+                                    value={parseFloat(salary).toFixed(2)}
+                                    readOnly
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 cursor-not-allowed"
                                 />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Age</label>
-                                <input
-                                    type="number"
-                                    value={age}
-                                    onChange={(e) => { setHasUserEdited(true); setAge(parseInt(e.target.value) || 30) }}
-                                    onFocus={(e) => e.target.select()}
-                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors"
-                                />
-                            </div>
-                        </div>
-
-                        <div className="mt-6 pt-6 border-t border-gray-100 dark:border-gray-700">
-                            <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Calculated Deductions</h3>
-                            <div className="space-y-2">
-                                <div className="flex justify-between text-sm">
-                                    <span className="text-gray-600 dark:text-gray-400">Tax (PAYE)</span>
-                                    <span className="font-medium text-gray-900 dark:text-white">R {taxInfo.monthly_tax.toFixed(2)}</span>
-                                </div>
-                                <div className="flex justify-between text-sm">
-                                    <span className="text-gray-600 dark:text-gray-400">UIF</span>
-                                    <span className="font-medium text-gray-900 dark:text-white">R {taxInfo.monthly_uif.toFixed(2)}</span>
-                                </div>
-                                <div className="flex justify-between text-sm pt-2 border-t border-gray-100 dark:border-gray-700 font-semibold text-blue-600 dark:text-blue-400">
-                                    <span>Net Income</span>
-                                    <span>R {netIncome.toFixed(2)}</span>
-                                </div>
                             </div>
                         </div>
                     </div>
 
-                    {/* Summary Stats */}
+                    {/* Summary Stats Card */}
                     <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
                         <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Summary</h2>
                         <div className="space-y-4">
@@ -289,7 +239,7 @@ export default function BudgetDashboard() {
                         </div>
                     </div>
 
-                    {/* Overall Budget Breakdown Chart (Moved here) */}
+                    {/* Overall Budget Breakdown Chart */}
                     {salary > 0 && (
                         <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
                             <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Budget Breakdown</h2>
@@ -333,9 +283,9 @@ export default function BudgetDashboard() {
                     )}
                 </div>
 
-                {/* Categories & Chart */}
+                {/* Column 2 & 3: Categories and Insights */}
                 <div className="md:col-span-2 space-y-6">
-                    {/* Tabs */}
+                    {/* Tabs & Category List */}
                     <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden transition-colors">
                         <div className="flex border-b border-gray-100 dark:border-gray-700">
                             {['needs', 'wants', 'savings'].map((tab) => (
@@ -364,7 +314,7 @@ export default function BudgetDashboard() {
                         </div>
                     </div>
 
-                    {/* Category Specific Chart (New) */}
+                    {/* Category Specific Chart */}
                     <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
                         <h2 className="text-lg font-semibold mb-4 capitalize text-gray-900 dark:text-white">{activeTab} Breakdown</h2>
                         <div className="h-80">
@@ -428,45 +378,6 @@ export default function BudgetDashboard() {
                         </div>
                     </div>
 
-                    {/* Percentage Insights Panel */}
-                    {salary > 0 && topCategories.length > 0 && (
-                        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
-                            <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Spending Insights</h2>
-                            <div className="space-y-3">
-                                <div className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                                    Top spending categories (% of net income)
-                                </div>
-                                {topCategories.map((item, index) => (
-                                    <div key={index} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                                        <div className="flex items-center gap-3">
-                                            <span className="text-lg font-bold text-gray-400 dark:text-gray-500">#{index + 1}</span>
-                                            <div>
-                                                <div className="font-medium text-gray-900 dark:text-white">{item.name}</div>
-                                                <div className="text-xs text-gray-500 dark:text-gray-400">{item.type}</div>
-                                            </div>
-                                        </div>
-                                        <div className="text-right">
-                                            <div className="font-semibold text-gray-900 dark:text-white">
-                                                R {item.amount.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                            </div>
-                                            <div className="text-sm text-blue-600 dark:text-blue-400">
-                                                {item.percentage.toFixed(1)}% of income
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
-                                {topCategories.length > 0 && (
-                                    <div className="pt-3 border-t border-gray-200 dark:border-gray-700 text-sm text-gray-600 dark:text-gray-400">
-                                        <strong>Insight:</strong> You're spending{' '}
-                                        <strong className="text-gray-900 dark:text-white">
-                                            {topCategories[0].percentage.toFixed(1)}%
-                                        </strong>{' '}
-                                        of your net income on <strong className="text-gray-900 dark:text-white">{topCategories[0].name}</strong>.
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    )}
                 </div>
             </div>
 
@@ -475,7 +386,7 @@ export default function BudgetDashboard() {
                 isOpen={showSavingsCalculator}
                 onClose={() => setShowSavingsCalculator(false)}
             />
-        </div >
+        </div>
     )
 }
 
