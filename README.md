@@ -23,6 +23,14 @@ A personal finance dashboard for South African users, built with **React** and *
   - Per-user storage of budget and TFSA portfolio in the database.
   - **Restricted Registration**: Registration limited to authorized email addresses for security.
 
+- **💸 Payslip & Tax**
+  - **Detailed Salary Management**: Input your complete payslip with earnings, deductions, and fringe benefits.
+  - **Fringe Benefit Tracking**: Account for non-cash benefits that affect your taxable income (Medical Aid, Group Life, etc.).
+  - **Accurate Tax Calculations**: SARS-compliant PAYE calculations that include fringe benefits in taxable income.
+  - **Net Income Focus**: All budgeting is based on your actual take-home pay after all deductions.
+  - **Flexible Deduction Management**: Add any custom deductions or contributions without predefined placeholders.
+  - **Real-time Updates**: Automatic recalculation of taxes and net income as you modify your salary structure.
+
 - **💰 Budget Dashboard**
   - **Income & Tax**: Capture monthly gross salary and age and get automatic SARS 2025/2026 PAYE and UIF calculations.
   - **50/30/20 Style Categories**: Organise spending into **Needs**, **Wants**, and **Savings** with fully editable sub‑categories.

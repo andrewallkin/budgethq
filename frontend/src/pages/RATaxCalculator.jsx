@@ -9,9 +9,9 @@ export default function RATaxCalculator() {
     const hasLoadedData = useRef(false)
     const [hasUserEdited, setHasUserEdited] = useState(false)
     const [salary, setSalary] = useState(0)
-    const [age, setAge] = useState(30)
     const [monthlyRAContribution, setMonthlyRAContribution] = useState(0)
     const [currentRAValue, setCurrentRAValue] = useState(0)
+    const [age, setAge] = useState(30)
     const [calculationResult, setCalculationResult] = useState(null)
     const [calculating, setCalculating] = useState(false)
 
@@ -27,11 +27,19 @@ export default function RATaxCalculator() {
 
     const fetchUserData = async () => {
         try {
-            // Fetch budget data (read-only for salary and age)
-            const budgetRes = await axios.get('/api/budget/default_user')
-            if (budgetRes.data && Object.keys(budgetRes.data).length > 0) {
-                setSalary(budgetRes.data.salary || 0)
-                setAge(budgetRes.data.age || 30)
+            // Fetch salary data for gross income
+            const salaryRes = await axios.get('/api/salary')
+            if (salaryRes.data) {
+                if (salaryRes.data.gross_income !== undefined) {
+                    setSalary(parseFloat(salaryRes.data.gross_income) || 0)
+                }
+                if (salaryRes.data.age !== undefined) {
+                    setAge(parseInt(salaryRes.data.age) || 30)
+                }
+            } else {
+                // Fallback if data not available
+                setSalary(0)
+                setAge(30)
             }
 
             // Fetch RA data from dedicated endpoint
@@ -102,8 +110,8 @@ export default function RATaxCalculator() {
         setCalculating(true)
         try {
             const res = await axios.post('/api/calculate/ra-tax', {
-                salary,
-                age,
+                salary: parseFloat(salary || 0).toFixed(2),
+                age: age || 30,
                 monthly_ra_contribution: monthlyRAContribution || 0
             })
             setCalculationResult(res.data)
@@ -112,7 +120,7 @@ export default function RATaxCalculator() {
         } finally {
             setCalculating(false)
         }
-    }, [salary, age, monthlyRAContribution])
+    }, [salary, monthlyRAContribution])
 
     // Wrapper functions to update both state and refs immediately, and mark as edited
     const updateCurrentRAValue = useCallback((value) => {
@@ -249,18 +257,6 @@ export default function RATaxCalculator() {
                         <input
                             type="number"
                             value={salary}
-                            readOnly
-                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white cursor-not-allowed"
-                        />
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">From your budget settings</p>
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                            Age
-                        </label>
-                        <input
-                            type="number"
-                            value={age}
                             readOnly
                             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white cursor-not-allowed"
                         />
