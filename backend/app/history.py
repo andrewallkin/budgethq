@@ -116,11 +116,12 @@ def calculate_portfolio_value(db: Session, user_id: int) -> Tuple[float, Dict[in
     Calculate current portfolio value for a user.
     Returns (total_value, holdings_breakdown) where holdings_breakdown is:
     {holding_id: {shares, price, value, cost_basis, unrealized_gain, jse_ticker, type}}
-    
+
     Note: ETF holding_ids are positive, Bond holding_ids use negative offset to avoid collision.
     """
     etf_holdings = db.query(models.ETFHolding).filter(
-        models.ETFHolding.user_id == user_id
+        models.ETFHolding.user_id == user_id,
+        models.ETFHolding.shares > 0  # Only include holdings with actual shares
     ).all()
     
     bond_holdings = db.query(models.BondHolding).filter(
@@ -678,7 +679,8 @@ def get_holding_attribution(db: Session, user_id: int) -> List[Dict]:
     
     # ETF holdings
     etf_holdings = db.query(models.ETFHolding).filter(
-        models.ETFHolding.user_id == user_id
+        models.ETFHolding.user_id == user_id,
+        models.ETFHolding.shares > 0  # Only include holdings with actual shares
     ).all()
     
     for h in etf_holdings:

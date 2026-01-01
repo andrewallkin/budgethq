@@ -674,23 +674,64 @@ async def create_etf_holding(
         models.ETFHolding.user_id == current_user.id,
         models.ETFHolding.jse_ticker == holding.jse_ticker
     ).first()
-    
+
     if existing:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Holding for {holding.jse_ticker} already exists. Use PUT to update."
-        )
-    
+        # If it exists but has 0 shares, allow re-adding it (reactivate)
+        if existing.shares > 0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Holding for {holding.jse_ticker} already exists with {existing.shares} shares. Use transaction system to buy more shares."
+            )
+        # If shares == 0, we'll update it below instead of creating new
+
     # Get current price from Google Sheets (user-specific sheet)
     sheets_service = get_sheets_service(current_user.id)
     current_price = None
     price_updated_at = None
-    
+
     if sheets_service.is_available():
         current_price = sheets_service.get_price_for_ticker(holding.jse_ticker)
         if current_price:
             price_updated_at = get_sast_now()
-    
+
+    # Handle existing holding with 0 shares (reactivate it)
+    if existing and existing.shares == 0:
+        existing.shares = holding.shares
+        existing.target_percentage = holding.target_percentage
+        existing.region = holding.region
+        existing.etf_name = holding.etf_name  # Update name in case it changed
+        existing.current_price = current_price
+        existing.price_updated_at = price_updated_at
+
+        # Initialize cost_basis to current market value
+        if existing.shares and existing.current_price:
+            existing.cost_basis = existing.shares * existing.current_price
+
+        # Re-add to Google Sheet if not already there
+        sheet_added = False
+        if sheets_service.is_available() and not sheets_service.check_ticker_exists(holding.jse_ticker):
+            sheet_added = sheets_service.add_etf_to_sheet(holding.jse_ticker, holding.etf_name)
+
+        db.commit()
+        db.refresh(existing)
+
+        total_value = (existing.shares * existing.current_price) if existing.current_price else None
+
+        return {
+            "id": existing.id,
+            "jse_ticker": existing.jse_ticker,
+            "etf_name": existing.etf_name,
+            "region": existing.region,
+            "shares": existing.shares,
+            "target_percentage": existing.target_percentage,
+            "current_price": existing.current_price,
+            "total_value": total_value,
+            "cost_basis": existing.cost_basis,
+            "price_updated_at": (existing.price_updated_at.isoformat() + "Z") if existing.price_updated_at else None,
+            "reactivated": True,
+            "sheet_added": sheet_added
+        }
+
     new_holding = models.ETFHolding(
         user_id=current_user.id,
         jse_ticker=holding.jse_ticker,
@@ -701,7 +742,11 @@ async def create_etf_holding(
         current_price=current_price,
         price_updated_at=price_updated_at
     )
-    
+
+    # Initialize cost_basis to current market value if shares and price are available
+    if new_holding.shares and new_holding.current_price:
+        new_holding.cost_basis = new_holding.shares * new_holding.current_price
+
     db.add(new_holding)
     db.commit()
     db.refresh(new_holding)
@@ -717,6 +762,7 @@ async def create_etf_holding(
         "target_percentage": new_holding.target_percentage,
         "current_price": new_holding.current_price,
         "total_value": total_value,
+        "cost_basis": new_holding.cost_basis,
         "price_updated_at": (new_holding.price_updated_at.isoformat() + "Z") if new_holding.price_updated_at else None
     }
 
@@ -1036,17 +1082,51 @@ async def create_etf_transaction(
 
     db.add(new_transaction)
 
+    # Store original shares before transaction for comparison
+    shares_before_transaction = holding.shares
+
     # Update holding share count
     if transaction.transaction_type == "BUY":
         holding.shares += transaction.shares
     else:  # SELL
         holding.shares -= transaction.shares
 
+    # Check if shares reached 0 after sell - clean up but preserve transaction history
+    holding_fully_sold = False
+    sheet_deleted = False
+
+    # Check if shares went from 0 to >0 after buy - re-add to Google Sheet
+    holding_reactivated = False
+    sheet_added = False
+
+    if transaction.transaction_type == "SELL" and holding.shares <= 0:
+        # Store values for response
+        jse_ticker = holding.jse_ticker
+        etf_name = holding.etf_name
+
+        # Set shares to exactly 0 (in case it went negative due to rounding)
+        holding.shares = 0
+
+        # Delete from Google Sheet since it's no longer an active holding
+        sheets_service = get_sheets_service(current_user.id)
+        if sheets_service.is_available():
+            sheet_deleted = sheets_service.delete_etf_from_sheet(jse_ticker)
+
+        holding_fully_sold = True
+
+    elif transaction.transaction_type == "BUY" and shares_before_transaction == 0 and holding.shares > 0:
+        # Re-activate holding by adding back to Google Sheet
+        sheets_service = get_sheets_service(current_user.id)
+        if sheets_service.is_available():
+            if not sheets_service.check_ticker_exists(holding.jse_ticker):
+                sheet_added = sheets_service.add_etf_to_sheet(holding.jse_ticker, holding.etf_name)
+
+        holding_reactivated = True
+
     db.commit()
     db.refresh(new_transaction)
 
     # Record transaction snapshot for historical tracking
-    # This captures portfolio state at the moment of the transaction
     try:
         snapshot_result = history.record_transaction_snapshot(db, current_user.id, new_transaction.id)
     except Exception as e:
@@ -1054,19 +1134,53 @@ async def create_etf_transaction(
         print(f"Warning: Failed to record transaction snapshot: {e}")
         snapshot_result = None
 
-    return {
-        "id": new_transaction.id,
-        "holding_id": new_transaction.holding_id,
-        "jse_ticker": holding.jse_ticker,
-        "etf_name": holding.etf_name,
-        "transaction_type": new_transaction.transaction_type,
-        "shares": new_transaction.shares,
-        "price_per_share": new_transaction.price_per_share,
-        "total_value": new_transaction.total_value,
-        "transaction_date": new_transaction.transaction_date.isoformat() + "Z",
-        "updated_share_count": holding.shares,
-        "cost_basis": holding.cost_basis
-    }
+    # Return appropriate response
+    if holding_fully_sold:
+        return {
+            "id": new_transaction.id,
+            "holding_id": new_transaction.holding_id,
+            "jse_ticker": jse_ticker,
+            "etf_name": etf_name,
+            "transaction_type": new_transaction.transaction_type,
+            "shares": new_transaction.shares,
+            "price_per_share": new_transaction.price_per_share,
+            "total_value": new_transaction.total_value,
+            "transaction_date": new_transaction.transaction_date.isoformat() + "Z",
+            "updated_share_count": 0,  # Now 0 since fully sold
+            "cost_basis": holding.cost_basis,
+            "holding_fully_sold": True,
+            "sheet_deleted": sheet_deleted
+        }
+    elif holding_reactivated:
+        return {
+            "id": new_transaction.id,
+            "holding_id": new_transaction.holding_id,
+            "jse_ticker": holding.jse_ticker,
+            "etf_name": holding.etf_name,
+            "transaction_type": new_transaction.transaction_type,
+            "shares": new_transaction.shares,
+            "price_per_share": new_transaction.price_per_share,
+            "total_value": new_transaction.total_value,
+            "transaction_date": new_transaction.transaction_date.isoformat() + "Z",
+            "updated_share_count": holding.shares,
+            "cost_basis": holding.cost_basis,
+            "holding_reactivated": True,
+            "sheet_added": sheet_added
+        }
+    else:
+        return {
+            "id": new_transaction.id,
+            "holding_id": new_transaction.holding_id,
+            "jse_ticker": holding.jse_ticker,
+            "etf_name": holding.etf_name,
+            "transaction_type": new_transaction.transaction_type,
+            "shares": new_transaction.shares,
+            "price_per_share": new_transaction.price_per_share,
+            "total_value": new_transaction.total_value,
+            "transaction_date": new_transaction.transaction_date.isoformat() + "Z",
+            "updated_share_count": holding.shares,
+            "cost_basis": holding.cost_basis
+        }
 
 
 @app.delete("/api/etf/transactions/{transaction_id}")
