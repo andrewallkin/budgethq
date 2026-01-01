@@ -249,7 +249,7 @@ class SalaryResponse(BaseModel):
 @app.post("/api/auth/register", response_model=Token)
 def register(user: UserCreate, db: Session = Depends(database.get_db)):
     # Restrict registration to authorized users only
-    authorized_users = os.environ.get("AUTHORIZED_USERS", "andrewallkin@gmail.com")
+    authorized_users = os.environ.get("AUTHORIZED_USERS")
     authorized_list = [u.strip() for u in authorized_users.split(",")]
     if user.username not in authorized_list:
         raise HTTPException(
@@ -281,7 +281,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
         )
     
     # Restrict login to authorized users only
-    authorized_users = os.environ.get("AUTHORIZED_USERS", "andrewallkin@gmail.com")
+    authorized_users = os.environ.get("AUTHORIZED_USERS")
     authorized_list = [u.strip() for u in authorized_users.split(",")]
     if user.username not in authorized_list:
         raise HTTPException(
