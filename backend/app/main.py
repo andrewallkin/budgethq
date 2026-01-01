@@ -643,6 +643,14 @@ async def get_etf_holdings(
     result = []
     for h in holdings:
         total_value = (h.shares * h.current_price) if h.current_price else None
+
+        # Calculate gain/loss
+        gain_loss_percentage = None
+        gain_loss_amount = None
+        if total_value is not None and h.cost_basis > 0:
+            gain_loss_amount = total_value - h.cost_basis
+            gain_loss_percentage = (gain_loss_amount / h.cost_basis) * 100
+
         result.append({
             "id": h.id,
             "jse_ticker": h.jse_ticker,
@@ -652,7 +660,10 @@ async def get_etf_holdings(
             "target_percentage": h.target_percentage,
             "current_price": h.current_price,
             "total_value": total_value,
-            "price_updated_at": (h.price_updated_at.isoformat() + "Z") if h.price_updated_at else None
+            "cost_basis": h.cost_basis,
+            "gain_loss_percentage": gain_loss_percentage,
+            "gain_loss_amount": gain_loss_amount,
+            "price_updated_at": (h.price_updated_at.isoformat()) if h.price_updated_at else None
         })
     
     return result
@@ -1397,12 +1408,22 @@ async def get_bond_holdings(
 
     result = []
     for h in holdings:
+        # Calculate gain/loss
+        gain_loss_percentage = None
+        gain_loss_amount = None
+        if h.current_value is not None and h.cost_basis > 0:
+            gain_loss_amount = h.current_value - h.cost_basis
+            gain_loss_percentage = (gain_loss_amount / h.cost_basis) * 100
+
         result.append({
             "id": h.id,
             "bond_name": h.bond_name,
             "region": h.region,
             "current_value": h.current_value,
             "target_percentage": h.target_percentage,
+            "cost_basis": h.cost_basis,
+            "gain_loss_percentage": gain_loss_percentage,
+            "gain_loss_amount": gain_loss_amount,
             "updated_at": (h.updated_at.isoformat() + "Z") if h.updated_at else None
         })
 
@@ -1726,6 +1747,86 @@ async def delete_bond_transaction(
 # =====================================================
 # Portfolio History & Analytics Endpoints
 # =====================================================
+
+@app.put("/api/etf/holdings/{holding_id}/cost-basis")
+async def update_etf_cost_basis(
+    holding_id: int,
+    data: dict,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """Update the cost basis for an ETF holding."""
+    holding = db.query(models.ETFHolding).filter(
+        models.ETFHolding.id == holding_id,
+        models.ETFHolding.user_id == current_user.id
+    ).first()
+
+    if not holding:
+        raise HTTPException(status_code=404, detail="ETF holding not found")
+
+    cost_basis = data.get('cost_basis')
+    if cost_basis is None or not isinstance(cost_basis, (int, float)) or cost_basis < 0:
+        raise HTTPException(status_code=400, detail="Invalid cost basis value")
+
+    holding.cost_basis = float(cost_basis)
+
+    # Recalculate gain/loss
+    total_value = (holding.shares * holding.current_price) if holding.current_price else None
+    gain_loss_percentage = None
+    gain_loss_amount = None
+    if total_value is not None and holding.cost_basis > 0:
+        gain_loss_amount = total_value - holding.cost_basis
+        gain_loss_percentage = (gain_loss_amount / holding.cost_basis) * 100
+
+    db.commit()
+
+    return {
+        "id": holding.id,
+        "cost_basis": holding.cost_basis,
+        "gain_loss_percentage": gain_loss_percentage,
+        "gain_loss_amount": gain_loss_amount
+    }
+
+
+@app.put("/api/bond/holdings/{holding_id}/cost-basis")
+async def update_bond_cost_basis(
+    holding_id: int,
+    data: dict,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """Update the cost basis for a bond holding."""
+    holding = db.query(models.BondHolding).filter(
+        models.BondHolding.id == holding_id,
+        models.BondHolding.user_id == current_user.id
+    ).first()
+
+    if not holding:
+        raise HTTPException(status_code=404, detail="Bond holding not found")
+
+    cost_basis = data.get('cost_basis')
+    if cost_basis is None or not isinstance(cost_basis, (int, float)) or cost_basis < 0:
+        raise HTTPException(status_code=400, detail="Invalid cost basis value")
+
+    holding.cost_basis = float(cost_basis)
+
+    # Recalculate gain/loss
+    gain_loss_percentage = None
+    gain_loss_amount = None
+    if holding.current_value is not None and holding.cost_basis > 0:
+        gain_loss_amount = holding.current_value - holding.cost_basis
+        gain_loss_percentage = (gain_loss_amount / holding.cost_basis) * 100
+
+    holding.updated_at = get_sast_now()
+    db.commit()
+
+    return {
+        "id": holding.id,
+        "cost_basis": holding.cost_basis,
+        "gain_loss_percentage": gain_loss_percentage,
+        "gain_loss_amount": gain_loss_amount
+    }
+
 
 @app.post("/api/portfolio/initialize-cost-basis")
 async def initialize_cost_basis(
