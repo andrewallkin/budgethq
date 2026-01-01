@@ -26,6 +26,25 @@ class User(Base):
     daily_portfolio_summaries = relationship("DailyPortfolioSummary", back_populates="owner")
     monthly_portfolio_summaries = relationship("MonthlyPortfolioSummary", back_populates="owner")
     salary = relationship("Salary", back_populates="owner", uselist=False)
+    user_sheet = relationship("UserSheet", back_populates="owner", uselist=False)
+
+
+class UserSheet(Base):
+    """User-specific Google Sheets tab mapping"""
+    __tablename__ = "user_sheets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), unique=True)
+    sheet_name = Column(String, unique=True)  # User ID-based sheet name (e.g., "user_123")
+    created_at = Column(DateTime, default=get_sast_now)
+
+    owner = relationship("User", back_populates="user_sheet")
+
+    @staticmethod
+    def generate_sheet_name(user_id: int) -> str:
+        """Generate a sheet name based on user ID"""
+        return f"user_{user_id}"
+
 
 class Salary(Base):
     __tablename__ = "salaries"

@@ -159,7 +159,6 @@ DATABASE_URL=postgresql://budget_user:your_secure_password@postgres:5432/budget_
 # Google Sheets (get from Google Cloud Console)
 GCP_SERVICE_ACCOUNT_CREDENTIALS={"type":"service_account",...}
 GOOGLE_SPREADSHEET_ID=your_spreadsheet_id
-GOOGLE_SHEET_NAME=ETF Holdings
 
 # Authentication & Security
 AUTHORIZED_USERS=user1@example.com,user2@example.com  # Comma-separated list of authorized usernames
@@ -280,10 +279,10 @@ The application uses Google Sheets as a data source for ETF prices and as a sync
    - Copy the entire JSON content for your `.env` file
 
 3. **Create Your Google Sheet**:
-   - Create a new Google Sheet
-   - Name a sheet tab "ETF Holdings" (or customize `GOOGLE_SHEET_NAME`)
-   - Add columns: `ETF Name`, `JSE Ticker`, `Region`, `Target %`, `Shares`, `Current Price`, `Total Value`
-   - Use `=GOOGLEFINANCE("JSE:XXXX")` formulas in the `Current Price` column for live prices
+   - Create a new Google Sheet (this will contain per-user tabs)
+   - The application will automatically create user-specific tabs (e.g., "user_1", "user_2")
+   - Each user's tab will have columns: `Ticker`, `ETF Name`, `Price`
+   - Price formulas will be auto-generated: `=GOOGLEFINANCE(A2,"price")/100`
 
 4. **Share the Sheet**:
    - Copy the service account email (from the JSON key)
@@ -293,14 +292,14 @@ The application uses Google Sheets as a data source for ETF prices and as a sync
 5. **Configure Environment**:
    - Add `GCP_SERVICE_ACCOUNT_CREDENTIALS` (entire JSON as string)
    - Add `GOOGLE_SPREADSHEET_ID` (from sheet URL)
-   - Add `GOOGLE_SHEET_NAME` (default: "ETF Holdings")
 
 ### How It Works
 
-- **Price Sync**: Background job runs every 5 minutes fetching latest prices from your sheet
-- **Holdings Sync**: When you add/update ETFs via the UI, changes sync to Google Sheets
-- **Manual Refresh**: Click the refresh button to trigger an immediate price update
+- **Price Sync**: Background job runs every 5 minutes fetching latest prices from each user's sheet
+- **Holdings Sync**: When you add/update ETFs via the UI, changes sync to your user-specific sheet tab
+- **Manual Refresh**: Click the refresh button to trigger an immediate price update from your sheet
 - **Offline Mode**: If Google Sheets is unavailable, the app continues using last known prices
+- **Per-User Sheets**: Each user gets their own sheet tab (e.g., "user_123") for complete data isolation
 
 ## Local Development
 
@@ -489,7 +488,7 @@ The following secrets must be configured in your GitHub repository settings for 
 - `BACKEND_PORT`, `FRONTEND_PORT` - Application ports
 - `GCP_SERVICE_ACCOUNT_CREDENTIALS` - Google Cloud service account JSON
 - `GCS_BUCKET_NAME` - Google Cloud Storage bucket name
-- `GOOGLE_SPREADSHEET_ID`, `GOOGLE_SHEET_NAME` - Google Sheets integration
+- `GOOGLE_SPREADSHEET_ID` - Google Sheets integration (per-user tabs)
 - `BACKUP_RETENTION_DAYS`, `BACKUP_SCHEDULE_HOUR`, `BACKUP_SCHEDULE_MINUTE` - Backup configuration
 
 ## Troubleshooting
@@ -503,9 +502,10 @@ The following secrets must be configured in your GitHub repository settings for 
 - Manually trigger sync via the UI refresh button
 
 **Problem**: ETFs not appearing in sheet
-- **Solution**: Verify sheet name matches `GOOGLE_SHEET_NAME` env variable
-- Check that spreadsheet ID is correct
-- Ensure sheet has the required columns (case-sensitive)
+- **Solution**: Check that spreadsheet ID is correct
+- User-specific tabs are created automatically (e.g., "user_123")
+- Ensure spreadsheet is shared with service account email
+- Check logs for tab creation errors
 
 ### Database Migration Issues
 

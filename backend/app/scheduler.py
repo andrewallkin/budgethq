@@ -44,55 +44,74 @@ def set_last_sync_time(time: datetime = None):
 
 async def sync_all_prices():
     """
-    Background task to sync prices from Google Sheets for all users.
-    This runs every 5 minutes.
+    Background task to sync prices from each user's Google Sheets.
+    This runs every 5 minutes and processes each user individually.
     """
     global last_sync_time
-    
+
     logger.info("Starting scheduled price sync...")
-    
-    sheets_service = get_sheets_service()
-    
-    if not sheets_service.is_available():
-        logger.warning("Google Sheets service not available, skipping sync")
-        return
-    
-    # Get all prices from Google Sheets
-    all_prices = sheets_service.get_all_etf_prices()
-    
+
     # Always update last sync time, even if no prices found
     now = get_sast_now()
     last_sync_time = now
-    
-    if not all_prices:
-        logger.info("Price sync complete: No prices retrieved from Google Sheets")
-        return
-    
-    prices_map = {p['jse_ticker']: p['current_price'] for p in all_prices}
-    
+
     # Create database session
     db: Session = SessionLocal()
-    
+
     try:
-        # Get all holdings across all users
-        holdings = db.query(models.ETFHolding).all()
-        
-        updated_count = 0
-        
-        for holding in holdings:
-            if holding.jse_ticker in prices_map:
-                new_price = prices_map[holding.jse_ticker]
-                if new_price is not None:
-                    holding.current_price = new_price
-                    holding.price_updated_at = now
-                    updated_count += 1
-        
+        # Get all users who have ETF holdings
+        users_with_holdings = db.query(models.ETFHolding.user_id).distinct().all()
+        user_ids = [u[0] for u in users_with_holdings]
+
+        if not user_ids:
+            logger.info("Price sync complete: No users with holdings found")
+            return
+
+        logger.info(f"Syncing prices for {len(user_ids)} users")
+        total_updated = 0
+
+        for user_id in user_ids:
+            try:
+                # Get user's specific sheets service
+                sheets_service = get_sheets_service(user_id)
+
+                if not sheets_service.is_available():
+                    logger.warning(f"Google Sheets service not available for user {user_id}, skipping")
+                    continue
+
+                # Get prices from this user's sheet
+                user_prices = sheets_service.get_all_etf_prices()
+
+                if not user_prices:
+                    logger.debug(f"No prices found in user {user_id}'s sheet")
+                    continue
+
+                prices_map = {p['jse_ticker']: p['current_price'] for p in user_prices}
+
+                # Update only this user's holdings
+                user_holdings = db.query(models.ETFHolding).filter(
+                    models.ETFHolding.user_id == user_id
+                ).all()
+
+                user_updated = 0
+                for holding in user_holdings:
+                    if holding.jse_ticker in prices_map:
+                        new_price = prices_map[holding.jse_ticker]
+                        if new_price is not None:
+                            holding.current_price = new_price
+                            holding.price_updated_at = now
+                            user_updated += 1
+
+                logger.debug(f"User {user_id}: Updated {user_updated} holdings")
+                total_updated += user_updated
+
+            except Exception as e:
+                logger.error(f"Error syncing prices for user {user_id}: {e}")
+                continue
+
         db.commit()
-        
-        db.commit()
-        
-        logger.info(f"Price sync complete: {updated_count} holdings updated")
-        
+        logger.info(f"Price sync complete: {total_updated} holdings updated across {len(user_ids)} users")
+
     except Exception as e:
         logger.error(f"Error during price sync: {e}")
         db.rollback()
