@@ -162,7 +162,7 @@ GOOGLE_SPREADSHEET_ID=your_spreadsheet_id
 GOOGLE_SHEET_NAME=ETF Holdings
 
 # Authentication & Security
-AUTHORIZED_EMAIL=your_authorized_email@example.com  # Only this email can register
+AUTHORIZED_USERS=user1@example.com,user2@example.com  # Comma-separated list of authorized usernames
 
 # Local Development DB Restore (GCS)
 LOCAL_USERNAME=your_authorized_email@example.com
@@ -475,6 +475,23 @@ Deployment workflow:
 **Manual Deployment:**
 Navigate to Actions → Deploy to VPS → Run workflow → Select branch to deploy
 
+### Required GitHub Actions Secrets
+
+The following secrets must be configured in your GitHub repository settings for deployment:
+
+**Database & Infrastructure:**
+- `VPS_HOST`, `VPS_PORT`, `VPS_USER`, `VPS_SSH_KEY` - VPS connection details
+- `GH_USERNAME`, `GH_PAT` - GitHub credentials for code sync
+- `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT`, `DATABASE_URL` - Database configuration
+
+**Application Secrets:**
+- `AUTHORIZED_USERS` - Comma-separated list of authorized usernames for registration/login
+- `BACKEND_PORT`, `FRONTEND_PORT` - Application ports
+- `GCP_SERVICE_ACCOUNT_CREDENTIALS` - Google Cloud service account JSON
+- `GCS_BUCKET_NAME` - Google Cloud Storage bucket name
+- `GOOGLE_SPREADSHEET_ID`, `GOOGLE_SHEET_NAME` - Google Sheets integration
+- `BACKUP_RETENTION_DAYS`, `BACKUP_SCHEDULE_HOUR`, `BACKUP_SCHEDULE_MINUTE` - Backup configuration
+
 ## Troubleshooting
 
 ### Google Sheets Issues
@@ -504,9 +521,9 @@ Navigate to Actions → Deploy to VPS → Run workflow → Select branch to depl
 ### Registration Issues
 
 **Problem**: Cannot register new account
-- **Solution**: Ensure email matches `AUTHORIZED_EMAIL` environment variable
+- **Solution**: Ensure username is included in `AUTHORIZED_USERS` environment variable
 - Check backend logs for validation errors
-- Verify email is entered correctly (case-sensitive)
+- Verify username is entered correctly and matches one of the authorized users (case-sensitive)
 
 ### General Issues
 

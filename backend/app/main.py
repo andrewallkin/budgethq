@@ -248,11 +248,12 @@ class SalaryResponse(BaseModel):
 # Auth Endpoints
 @app.post("/api/auth/register", response_model=Token)
 def register(user: UserCreate, db: Session = Depends(database.get_db)):
-    # Restrict registration to authorized email only
-    authorized_email = os.environ.get("AUTHORIZED_EMAIL", "andrewallkin@gmail.com")
-    if user.username != authorized_email:
+    # Restrict registration to authorized users only
+    authorized_users = os.environ.get("AUTHORIZED_USERS", "andrewallkin@gmail.com")
+    authorized_list = [u.strip() for u in authorized_users.split(",")]
+    if user.username not in authorized_list:
         raise HTTPException(
-            status_code=403, 
+            status_code=403,
             detail="Registration is currently restricted. Only authorized users can create accounts."
         )
     
@@ -279,9 +280,10 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    # Restrict login to authorized email only
-    authorized_email = os.environ.get("AUTHORIZED_EMAIL", "andrewallkin@gmail.com")
-    if user.username != authorized_email:
+    # Restrict login to authorized users only
+    authorized_users = os.environ.get("AUTHORIZED_USERS", "andrewallkin@gmail.com")
+    authorized_list = [u.strip() for u in authorized_users.split(",")]
+    if user.username not in authorized_list:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access restricted. This account is not authorized to login.",

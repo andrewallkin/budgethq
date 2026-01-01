@@ -40,6 +40,7 @@ jobs:
           ENV_BACKUP_RETENTION_DAYS: ${{ secrets.BACKUP_RETENTION_DAYS }}
           ENV_BACKUP_SCHEDULE_HOUR: ${{ secrets.BACKUP_SCHEDULE_HOUR }}
           ENV_BACKUP_SCHEDULE_MINUTE: ${{ secrets.BACKUP_SCHEDULE_MINUTE }}
+          ENV_AUTHORIZED_USERS: ${{ secrets.AUTHORIZED_USERS }}
         run: |
           ssh -t -i ~/.ssh/id_rsa -p ${{ secrets.VPS_PORT }} -o StrictHostKeyChecking=no -o ServerAliveInterval=50 -o ServerAliveCountMax=10 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} <<EOF
           set -euo pipefail
@@ -93,6 +94,8 @@ jobs:
           BACKUP_RETENTION_DAYS=${ENV_BACKUP_RETENTION_DAYS}
           BACKUP_SCHEDULE_HOUR=${ENV_BACKUP_SCHEDULE_HOUR}
           BACKUP_SCHEDULE_MINUTE=${ENV_BACKUP_SCHEDULE_MINUTE}
+
+          AUTHORIZED_USERS=${ENV_AUTHORIZED_USERS}
           EOF_ENV
           echo "✓ Environment configured"
           echo "::endgroup::"
