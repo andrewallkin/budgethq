@@ -9,6 +9,7 @@ from datetime import date, datetime, timedelta
 import csv
 import io
 import os
+import logging
 from . import models, database, auth, history
 from .logic import calculate_monthly_tax_with_age, calculate_uif, calculate_rebalancing, calculate_ra_tax_scenarios
 from .tax_engine import calculate_salary_breakdown
@@ -17,6 +18,9 @@ from .scheduler import start_scheduler, stop_scheduler, sync_all_prices, get_las
 from .utils import get_sast_now
 from .logging_config import configure_logging
 from pydantic import BaseModel
+
+# Initialize logger
+logger = logging.getLogger(__name__)
 
 # Configure logging on startup
 configure_logging()
@@ -677,8 +681,8 @@ async def create_etf_holding(
             detail=f"Holding for {holding.jse_ticker} already exists. Use PUT to update."
         )
     
-    # Get current price from Google Sheets
-    sheets_service = get_sheets_service()
+    # Get current price from Google Sheets (user-specific sheet)
+    sheets_service = get_sheets_service(current_user.id)
     current_price = None
     price_updated_at = None
     
@@ -784,10 +788,10 @@ async def delete_etf_holding(
     db.delete(holding)
     db.commit()
     
-    # Also delete from Google Sheet if requested
+    # Also delete from Google Sheet if requested (user-specific sheet)
     sheet_deleted = False
     if delete_from_sheet:
-        sheets_service = get_sheets_service()
+        sheets_service = get_sheets_service(current_user.id)
         if sheets_service.is_available():
             sheet_deleted = sheets_service.delete_etf_from_sheet(jse_ticker)
     
@@ -830,8 +834,8 @@ async def bulk_import_holdings(
             detail=f"Missing required columns: {', '.join(missing)}"
         )
     
-    # Get prices from Google Sheets
-    sheets_service = get_sheets_service()
+    # Get prices from Google Sheets (user-specific sheet)
+    sheets_service = get_sheets_service(current_user.id)
     prices_map = {}
     sheets_available = sheets_service.is_available()
     
@@ -1151,7 +1155,7 @@ async def sync_etf_prices(
     db: Session = Depends(database.get_db)
 ):
     """Manually trigger a price sync from Google Sheets."""
-    sheets_service = get_sheets_service()
+    sheets_service = get_sheets_service(current_user.id)
 
     if not sheets_service.is_available():
         raise HTTPException(
@@ -1198,7 +1202,7 @@ async def add_etf_to_sheet(
     current_user: models.User = Depends(auth.get_current_user)
 ):
     """Add a new ETF to the Google Sheet (creates row with GOOGLEFINANCE formula)."""
-    sheets_service = get_sheets_service()
+    sheets_service = get_sheets_service(current_user.id)
 
     if not sheets_service.is_available():
         raise HTTPException(
@@ -1235,7 +1239,7 @@ async def get_sheet_prices(
     current_user: models.User = Depends(auth.get_current_user)
 ):
     """Get all ETF prices directly from Google Sheets (for debugging/reference)."""
-    sheets_service = get_sheets_service()
+    sheets_service = get_sheets_service(current_user.id)
 
     if not sheets_service.is_available():
         raise HTTPException(
@@ -1955,8 +1959,16 @@ async def get_admin_etf_price_history(
     current_user: models.User = Depends(auth.get_current_user),
     db: Session = Depends(database.get_db)
 ):
-    """Get raw ETF price history table data."""
-    prices = db.query(models.ETFPriceHistory).order_by(
+    """Get raw ETF price history table data for ETFs the user holds."""
+    # Get tickers that this user holds
+    user_tickers = db.query(models.ETFHolding.jse_ticker).filter(
+        models.ETFHolding.user_id == current_user.id
+    ).distinct().subquery()
+
+    # Only return price history for those tickers
+    prices = db.query(models.ETFPriceHistory).filter(
+        models.ETFPriceHistory.jse_ticker.in_(user_tickers)
+    ).order_by(
         models.ETFPriceHistory.recorded_at.desc()
     ).limit(limit).all()
     return prices
@@ -2180,3 +2192,55 @@ async def update_salary_item(
     db.commit()
 
     return {"status": "success"}
+
+
+# =====================================================
+# Migration Endpoints (remove after use)
+# =====================================================
+
+@app.post("/api/admin/migrate-user-sheet")
+async def migrate_user_sheet(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """
+    One-time migration to create a user_sheet record for the current user.
+    Call this once after deploying the per-user sheets changes.
+    Assumes the user_sheets table already exists (created by Alembic migration).
+    """
+    try:
+        # Check if current user already has a user_sheet record
+        existing_sheet = db.query(models.UserSheet).filter(
+            models.UserSheet.user_id == current_user.id
+        ).first()
+
+        if existing_sheet:
+            return {
+                "status": "success",
+                "message": f"User {current_user.id} already has a user_sheet record: {existing_sheet.sheet_name}",
+                "already_exists": True,
+                "sheet_name": existing_sheet.sheet_name
+            }
+
+        # Create user_sheet record with "user_{id}" naming
+        sheet_name = f"user_{current_user.id}"
+        user_sheet = models.UserSheet(
+            user_id=current_user.id,
+            sheet_name=sheet_name
+        )
+        db.add(user_sheet)
+        db.commit()
+
+        logger.info(f"Created user_sheet record for user {current_user.id}: {sheet_name}")
+
+        return {
+            "status": "success",
+            "message": f"Created user_sheet record for user {current_user.id}: {sheet_name}",
+            "sheet_name": sheet_name,
+            "user_id": current_user.id
+        }
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error during user sheet migration: {e}")
+        raise HTTPException(status_code=500, detail=f"Migration failed: {str(e)}")
