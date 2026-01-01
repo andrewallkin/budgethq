@@ -9,7 +9,6 @@ from datetime import date, datetime, timedelta
 import csv
 import io
 import os
-import logging
 from . import models, database, auth, history
 from .logic import calculate_monthly_tax_with_age, calculate_uif, calculate_rebalancing, calculate_ra_tax_scenarios
 from .tax_engine import calculate_salary_breakdown
@@ -18,9 +17,6 @@ from .scheduler import start_scheduler, stop_scheduler, sync_all_prices, get_las
 from .utils import get_sast_now
 from .logging_config import configure_logging
 from pydantic import BaseModel
-
-# Initialize logger
-logger = logging.getLogger(__name__)
 
 # Configure logging on startup
 configure_logging()
@@ -2307,54 +2303,3 @@ async def update_salary_item(
 
     return {"status": "success"}
 
-
-# =====================================================
-# Migration Endpoints (remove after use)
-# =====================================================
-
-@app.post("/api/admin/migrate-user-sheet")
-async def migrate_user_sheet(
-    current_user: models.User = Depends(auth.get_current_user),
-    db: Session = Depends(database.get_db)
-):
-    """
-    One-time migration to create a user_sheet record for the current user.
-    Call this once after deploying the per-user sheets changes.
-    Assumes the user_sheets table already exists (created by Alembic migration).
-    """
-    try:
-        # Check if current user already has a user_sheet record
-        existing_sheet = db.query(models.UserSheet).filter(
-            models.UserSheet.user_id == current_user.id
-        ).first()
-
-        if existing_sheet:
-            return {
-                "status": "success",
-                "message": f"User {current_user.id} already has a user_sheet record: {existing_sheet.sheet_name}",
-                "already_exists": True,
-                "sheet_name": existing_sheet.sheet_name
-            }
-
-        # Create user_sheet record with "user_{id}" naming
-        sheet_name = f"user_{current_user.id}"
-        user_sheet = models.UserSheet(
-            user_id=current_user.id,
-            sheet_name=sheet_name
-        )
-        db.add(user_sheet)
-        db.commit()
-
-        logger.info(f"Created user_sheet record for user {current_user.id}: {sheet_name}")
-
-        return {
-            "status": "success",
-            "message": f"Created user_sheet record for user {current_user.id}: {sheet_name}",
-            "sheet_name": sheet_name,
-            "user_id": current_user.id
-        }
-
-    except Exception as e:
-        db.rollback()
-        logger.error(f"Error during user sheet migration: {e}")
-        raise HTTPException(status_code=500, detail=f"Migration failed: {str(e)}")
