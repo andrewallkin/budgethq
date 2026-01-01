@@ -13,6 +13,8 @@ import TransactionHistory from '../components/TransactionHistory'
 import PriceRefreshIndicator from '../components/PriceRefreshIndicator'
 import ConfirmModal from '../components/ConfirmModal'
 import PortfolioChart from '../components/PortfolioChart'
+import GainLossIndicator from '../components/GainLossIndicator'
+import HoldingDetailsModal from '../components/HoldingDetailsModal'
 
 
 export default function TFSAPortfolio() {
@@ -30,6 +32,7 @@ export default function TFSAPortfolio() {
     const [showBuySellModal, setShowBuySellModal] = useState(false)
     const [showEditModal, setShowEditModal] = useState(false)
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+    const [showDetailsModal, setShowDetailsModal] = useState(false)
     const [selectedHolding, setSelectedHolding] = useState(null)
     const [holdingToDelete, setHoldingToDelete] = useState(null)
 
@@ -246,6 +249,16 @@ export default function TFSAPortfolio() {
         setTransactionRefresh(prev => prev + 1)
     }
 
+    const handleHoldingUpdate = (holdingId, updates) => {
+        setHoldings(prevHoldings =>
+            prevHoldings.map(holding =>
+                holding.id === holdingId
+                    ? { ...holding, ...updates }
+                    : holding
+            )
+        )
+    }
+
     const handleSort = (column) => {
         if (sortColumn === column) {
             // Toggle direction if clicking the same column
@@ -275,36 +288,21 @@ export default function TFSAPortfolio() {
 
             switch (sortColumn) {
                 case 'name':
-                    aVal = a.etf_name.toLowerCase()
-                    bVal = b.etf_name.toLowerCase()
-                    break
-                case 'ticker':
-                    aVal = a.jse_ticker ? a.jse_ticker.toLowerCase() : 'zzz' // Put bonds at end
-                    bVal = b.jse_ticker ? b.jse_ticker.toLowerCase() : 'zzz'
-                    break
-                case 'region':
-                    aVal = a.region.toLowerCase()
-                    bVal = b.region.toLowerCase()
-                    break
-                case 'shares':
-                    aVal = a.shares || 0
-                    bVal = b.shares || 0
-                    break
-                case 'price':
-                    aVal = a.current_price || 0
-                    bVal = b.current_price || 0
+                    aVal = (a.type === 'ETF' ? a.etf_name : a.bond_name).toLowerCase()
+                    bVal = (b.type === 'ETF' ? b.etf_name : b.bond_name).toLowerCase()
                     break
                 case 'value':
-                    aVal = a.total_value || 0
-                    bVal = b.total_value || 0
+                    aVal = a.type === 'ETF' ? (a.total_value || 0) : (a.current_value || 0)
+                    bVal = b.type === 'ETF' ? (b.total_value || 0) : (b.current_value || 0)
                     break
-                case 'target':
-                    aVal = a.target_percentage
-                    bVal = b.target_percentage
-                    break
-                case 'actual':
-                    aVal = totalValue > 0 ? ((a.total_value || 0) / totalValue) * 100 : 0
-                    bVal = totalValue > 0 ? ((b.total_value || 0) / totalValue) * 100 : 0
+                case 'gain_loss':
+                    // Sort by percentage first, then by amount
+                    aVal = a.gain_loss_percentage !== null ? a.gain_loss_percentage : -999
+                    bVal = b.gain_loss_percentage !== null ? b.gain_loss_percentage : -999
+                    if (aVal === bVal) {
+                        aVal = a.gain_loss_amount !== null ? a.gain_loss_amount : -999
+                        bVal = b.gain_loss_amount !== null ? b.gain_loss_amount : -999
+                    }
                     break
                 default:
                     return 0
@@ -713,7 +711,7 @@ export default function TFSAPortfolio() {
                                 <tr className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider border-b border-gray-200 dark:border-gray-700">
                                     <th
                                         onClick={() => handleSort('name')}
-                                        className="text-left py-3 px-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                                        className="text-left py-3 px-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors w-1/4"
                                     >
                                         <div className="flex items-center gap-1">
                                             Name
@@ -721,44 +719,8 @@ export default function TFSAPortfolio() {
                                         </div>
                                     </th>
                                     <th
-                                        onClick={() => handleSort('ticker')}
-                                        className="text-left py-3 px-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-                                    >
-                                        <div className="flex items-center gap-1">
-                                            Ticker
-                                            <SortIcon column="ticker" />
-                                        </div>
-                                    </th>
-                                    <th
-                                        onClick={() => handleSort('region')}
-                                        className="text-left py-3 px-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-                                    >
-                                        <div className="flex items-center gap-1">
-                                            Region
-                                            <SortIcon column="region" />
-                                        </div>
-                                    </th>
-                                    <th
-                                        onClick={() => handleSort('shares')}
-                                        className="text-right py-3 px-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-                                    >
-                                        <div className="flex items-center justify-end gap-1">
-                                            Shares
-                                            <SortIcon column="shares" />
-                                        </div>
-                                    </th>
-                                    <th
-                                        onClick={() => handleSort('price')}
-                                        className="text-right py-3 px-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-                                    >
-                                        <div className="flex items-center justify-end gap-1">
-                                            Price
-                                            <SortIcon column="price" />
-                                        </div>
-                                    </th>
-                                    <th
                                         onClick={() => handleSort('value')}
-                                        className="text-right py-3 px-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                                        className="text-right py-3 px-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors w-1/4"
                                     >
                                         <div className="flex items-center justify-end gap-1">
                                             Value
@@ -766,36 +728,35 @@ export default function TFSAPortfolio() {
                                         </div>
                                     </th>
                                     <th
-                                        onClick={() => handleSort('target')}
-                                        className="text-right py-3 px-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                                        onClick={() => handleSort('gain_loss')}
+                                        className="text-center py-3 px-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors w-1/3"
                                     >
-                                        <div className="flex items-center justify-end gap-1">
-                                            Target %
-                                            <SortIcon column="target" />
+                                        <div className="flex items-center justify-center gap-1">
+                                            Gain/Loss
+                                            <SortIcon column="gain_loss" />
                                         </div>
                                     </th>
-                                    <th
-                                        onClick={() => handleSort('actual')}
-                                        className="text-right py-3 px-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-                                    >
-                                        <div className="flex items-center justify-end gap-1">
-                                            Actual %
-                                            <SortIcon column="actual" />
-                                        </div>
-                                    </th>
-                                    <th className="text-center py-3 px-2">Actions</th>
+                                    <th className="text-center py-3 px-2 w-1/6">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                                 {getSortedHoldings().map((h) => {
-                                    const actualPct = totalValue > 0 ? ((h.total_value || 0) / totalValue) * 100 : 0
-                                    const deviation = actualPct - h.target_percentage
-
                                     return (
-                                        <tr key={`${h.type}-${h.id}`} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                                            <td className="py-3 px-2">
+                                        <tr
+                                            key={`${h.type}-${h.id}`}
+                                            className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer"
+                                            onClick={(e) => {
+                                                // Don't trigger row click if clicking on action buttons
+                                                if (e.target.closest('button')) return
+                                                setSelectedHolding(h)
+                                                setShowDetailsModal(true)
+                                            }}
+                                        >
+                                            <td className="py-3 px-2 w-1/4">
                                                 <div className="flex items-center gap-2">
-                                                    <div className="font-medium text-gray-900 dark:text-white">{h.etf_name}</div>
+                                                    <div className="font-medium text-gray-900 dark:text-white truncate">
+                                                        {h.type === 'ETF' ? h.etf_name : h.bond_name}
+                                                    </div>
                                                     {h.type === 'BOND' && (
                                                         <span className="px-1.5 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium rounded">
                                                             BOND
@@ -803,41 +764,16 @@ export default function TFSAPortfolio() {
                                                     )}
                                                 </div>
                                             </td>
-                                            <td className="py-3 px-2 font-mono text-sm text-gray-600 dark:text-gray-400">
-                                                {h.jse_ticker || '—'}
+                                            <td className="py-3 px-2 text-right font-semibold text-gray-900 dark:text-white w-1/4">
+                                                R {(h.type === 'ETF' ? h.total_value : h.current_value || 0).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                             </td>
-                                            <td className="py-3 px-2 text-sm text-gray-600 dark:text-gray-400">
-                                                {h.region}
+                                            <td className="py-3 px-2 text-center w-1/3">
+                                                <GainLossIndicator
+                                                    percentage={h.gain_loss_percentage}
+                                                    amount={h.gain_loss_amount}
+                                                />
                                             </td>
-                                            <td className="py-3 px-2 text-right font-medium text-gray-900 dark:text-white">
-                                                {h.type === 'BOND' ? '—' : h.shares.toFixed(4)}
-                                            </td>
-                                            <td className="py-3 px-2 text-right text-gray-600 dark:text-gray-400">
-                                                {h.type === 'BOND' ? '—' : (h.current_price ? `R ${h.current_price.toFixed(2)}` : '—')}
-                                            </td>
-                                            <td className="py-3 px-2 text-right font-semibold text-gray-900 dark:text-white">
-                                                R {(h.total_value || 0).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                            </td>
-                                            <td
-                                                onClick={() => handleEdit(h)}
-                                                className="py-3 px-2 text-right text-gray-600 dark:text-gray-400 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors group"
-                                                title="Click to edit target percentage"
-                                            >
-                                                <span className="group-hover:text-blue-600 dark:group-hover:text-blue-400 font-medium">
-                                                    {h.target_percentage.toFixed(1)}%
-                                                </span>
-                                            </td>
-                                            <td className="py-3 px-2 text-right">
-                                                <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${Math.abs(deviation) <= threshold
-                                                    ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                                                    : deviation > 0
-                                                        ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
-                                                        : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
-                                                    }`}>
-                                                    {actualPct.toFixed(1)}%
-                                                </span>
-                                            </td>
-                                            <td className="py-3 px-2">
+                                            <td className="py-3 px-2 w-1/6" onClick={(e) => e.stopPropagation()}>
                                                 <div className="flex items-center justify-center gap-1">
                                                     <button
                                                         onClick={() => handleEdit(h)}
@@ -1142,7 +1078,7 @@ export default function TFSAPortfolio() {
                 }}
                 onConfirm={handleDeleteConfirm}
                 title={`Delete ${holdingToDelete?.type === 'BOND' ? 'Bond' : 'ETF'} Holding`}
-                message={holdingToDelete ? `Are you sure you want to delete ${holdingToDelete.etf_name}?` : ''}
+                message={holdingToDelete ? `Are you sure you want to delete ${holdingToDelete.type === 'ETF' ? holdingToDelete.etf_name : holdingToDelete.bond_name}?` : ''}
                 details={
                     holdingToDelete?.type === 'BOND'
                         ? ['Delete all associated transactions']
@@ -1153,6 +1089,16 @@ export default function TFSAPortfolio() {
                 variant="danger"
             />
 
+            <HoldingDetailsModal
+                isOpen={showDetailsModal}
+                onClose={() => {
+                    setShowDetailsModal(false)
+                    setSelectedHolding(null)
+                }}
+                holding={selectedHolding}
+                onHoldingUpdate={handleHoldingUpdate}
+                totalPortfolioValue={totalValue}
+            />
 
         </div>
     )
