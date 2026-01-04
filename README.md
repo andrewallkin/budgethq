@@ -166,6 +166,7 @@ AUTHORIZED_USERS=user1@example.com,user2@example.com  # Comma-separated list of 
 # Local Development DB Restore (GCS)
 LOCAL_USERNAME=your_authorized_email@example.com
 LOCAL_PASSWORD=your_local_dev_login_password
+RESTORE_TARGET_USERNAME=andrewallkin@gmail.com  # Optional: Only restore data for this user (defaults to andrewallkin@gmail.com)
 ```
 
 ### Local Database Initialization (`db-init`)
@@ -173,10 +174,11 @@ LOCAL_PASSWORD=your_local_dev_login_password
 When running in development mode (`make dev-up`), the stack includes a `db-init` container that automatically:
 1. **Connects to Google Cloud Storage** using your service account credentials.
 2. **Downloads the latest production backup**.
-3. **Restores the data** to your local PostgreSQL instance.
-4. **Updates your local password**: Uses `LOCAL_USERNAME` and `LOCAL_PASSWORD` to update the restored user's password so you can log in locally with your preferred development credentials.
+3. **Restores the full backup** to your local PostgreSQL instance (including all user data).
+4. **Cleans up unwanted data**: Automatically discovers all tables with user data and removes all records not belonging to `andrewallkin@gmail.com`.
+5. **Updates your local password**: Uses `LOCAL_USERNAME` and `LOCAL_PASSWORD` to update the restored user's password so you can log in locally with your preferred development credentials.
 
-This ensures your local environment always has realistic data to test with, mirrored from production.
+This approach works with any backup format (INSERT, COPY, etc.) and automatically adapts to schema changes. When you add new tables with `user_id` columns, the cleanup process will automatically discover and clean them up without requiring code changes.
 
 ### Database Persistence Control
 
@@ -184,7 +186,7 @@ The development environment now supports two database modes:
 
 - **Persistent Mode** (`make dev-up`): Database state persists between container restarts. Schema changes and test data are maintained, making iterative development seamless.
 
-- **Restore Mode** (`make dev-up-restore`): Downloads and restores the latest production backup fresh each time, ensuring you always have current production data for testing.
+- **Restore Mode** (`make dev-up-restore`): Downloads and restores the latest production backup fresh each time, ensuring you always have current production data for testing. **Security: Full backup is restored, then all non-`andrewallkin@gmail.com` data is automatically removed - the database will NEVER contain other users' data.**
 
 **Usage Examples:**
 

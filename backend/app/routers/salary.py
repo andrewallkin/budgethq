@@ -22,7 +22,7 @@ class SalaryItemRead(SalaryItemCreate):
     salary_id: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class SalaryUpdate(BaseModel):
     medical_aid_members: Optional[int] = None
