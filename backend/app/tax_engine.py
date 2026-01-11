@@ -176,12 +176,9 @@ def calculate_salary_breakdown(salary_orm, age: int = 30, save_to_db: bool = Tru
     # Gross Income is Basic Salary + Additional Earnings
     gross_income = basic_salary + earnings_total
     
-    # Taxable Income = Gross Income - Pre-tax Deductions
-    # (Fringe benefits are non-cash benefits ALREADY part of the taxable income)
-    taxable_income = gross_income - deductions_pre
-    
-    # Gross Cash for Net Pay calculation starts at Gross Income MINUS non-cash benefits
-    gross_cash = gross_income - total_fringe_benefits
+    # Taxable Income = Gross Income - Pre-tax Deductions + Fringe Benefits
+    # Fringe benefits increase taxable income but don't touch cash
+    taxable_income = gross_income - deductions_pre + total_fringe_benefits
     
     # 3. Calculate Tax (PAYE)
     # PAYE is calculated on (Gross Income + Fringe - Pre-tax Deductions)
@@ -217,24 +214,14 @@ def calculate_salary_breakdown(salary_orm, age: int = 30, save_to_db: bool = Tru
     breakdown_deductions["uif"] = uif_deduction
 
     # 6. Net Pay
-    # Gross Cash - PAYE - UIF - Post Tax Deductions (User paid)
-    # Note: We do NOT deduct Pre-Tax (Pension) again if it was "salary sacrifice" structure?
-    # Usually: Gross Cash is AFTER pre-tax deduction if it's Structuring?
-    # Or Gross Cash is BEFORE?
-    # Standard: Gross Salary (R50k) -> Subtract Pension (R3k) -> Taxable (47k).
-    # Payslip: Gross 50k. Deductions: Tax, UIF, Pension, MedAid.
-    # Net = 50k - Tax - UIF - Pension - MedAid.
-    # So yes, we subtract Pre-Tax deductions validly from the Cash.
+    # Net Pay = Gross Income - Pre-Tax Deductions + Fringe Benefits - PAYE - UIF - Post-Tax Deductions
+    # Note: Fringe benefits are added back for tax calculation but never touch cash
+    # UIF is part of Post-Tax Deductions but kept separate in breakdown for reporting
+    net_pay = gross_income - deductions_pre + total_fringe_benefits - final_paye - uif_deduction - deductions_post
     
-    # Wait, allowed_deduction vs actual deduction.
-    # We subtract the ACTUAL deduction amount from cash, even if tax benefit was capped.
-    
+    # Total deductions for reporting (pre-tax deductions are included in net pay calculation above)
     total_deductions = final_paye + uif_deduction + deductions_pre + deductions_post
-    net_pay = gross_cash - total_deductions
     breakdown_deductions["total"] = total_deductions
-
-    # Fringe Benefits total for display
-    fringe_total = gross_income - gross_cash
 
     # Save net salary to database if requested
     if save_to_db and hasattr(salary_orm, 'net_salary'):
@@ -242,8 +229,7 @@ def calculate_salary_breakdown(salary_orm, age: int = 30, save_to_db: bool = Tru
 
     return {
         "gross_income": gross_income,
-        "gross_cash": gross_cash,
-        "fringe_benefits": fringe_total,
+        "fringe_benefits": total_fringe_benefits,
         "taxable_income": taxable_income,
         "deductions": breakdown_deductions,
         "net_pay": net_pay
