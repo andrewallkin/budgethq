@@ -31,7 +31,6 @@ class SalaryUpdate(BaseModel):
 
 class SalaryResponse(BaseModel):
     gross_income: float
-    gross_cash: float
     fringe_benefits: float
     taxable_income: float
     net_pay: float
@@ -83,7 +82,6 @@ async def get_salary_structure(
             } for i in salary.items
         ],
         "gross_income": breakdown["gross_income"],
-        "gross_cash": breakdown["gross_cash"],
         "fringe_benefits": breakdown["fringe_benefits"],
         "taxable_income": breakdown["taxable_income"],
         "net_pay": breakdown["net_pay"],
