@@ -214,10 +214,10 @@ def calculate_salary_breakdown(salary_orm, age: int = 30, save_to_db: bool = Tru
     breakdown_deductions["uif"] = uif_deduction
 
     # 6. Net Pay
-    # Net Pay = Gross Income - Pre-Tax Deductions + Fringe Benefits - PAYE - UIF - Post-Tax Deductions
-    # Note: Fringe benefits are added back for tax calculation but never touch cash
+    # Net Pay = Gross Income - Pre-Tax Deductions - PAYE - UIF - Post-Tax Deductions
+    # Note: Fringe benefits only affect taxable income, not net pay (they don't touch cash)
     # UIF is part of Post-Tax Deductions but kept separate in breakdown for reporting
-    net_pay = gross_income - deductions_pre + total_fringe_benefits - final_paye - uif_deduction - deductions_post
+    net_pay = gross_income - deductions_pre - final_paye - uif_deduction - deductions_post
     
     # Total deductions for reporting (pre-tax deductions are included in net pay calculation above)
     total_deductions = final_paye + uif_deduction + deductions_pre + deductions_post

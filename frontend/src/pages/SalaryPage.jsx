@@ -152,7 +152,17 @@ export default function SalaryPage() {
                     </SectionContainer>
 
                     {/* 2. PRE-TAX DEDUCTIONS */}
-                    <SectionContainer title="Pre-Tax Deductions" color="orange" description="Pension, RA, and other deductions that reduce taxable income.">
+                    <SectionContainer 
+                        title="Pre-Tax Deductions" 
+                        color="orange"
+                        tooltip={
+                            <>
+                                Employee retirement contributions that reduce taxable income before tax.
+                                <div className="border-t border-gray-600 dark:border-gray-500 my-2"></div>
+                                <div className="text-gray-300 dark:text-gray-400">Examples: Pension, Retirement Annuity (RA)</div>
+                            </>
+                        }
+                    >
                         <ItemList
                             items={preTax}
                             onDelete={handleDeleteItem}
@@ -163,7 +173,17 @@ export default function SalaryPage() {
                     </SectionContainer>
 
                     {/* 3. FRINGE BENEFITS */}
-                    <SectionContainer title="Fringe Benefits" color="purple" description="Company contributions paid on your behalf (e.g. Med Aid, Pension).">
+                    <SectionContainer 
+                        title="Fringe Benefits" 
+                        color="purple"
+                        tooltip={
+                            <>
+                                Employer-paid benefits that increase taxable income but don't reduce cash salary.
+                                <div className="border-t border-gray-600 dark:border-gray-500 my-2"></div>
+                                <div className="text-gray-300 dark:text-gray-400">Examples: Employer Pension, Medical Aid (employer portion)</div>
+                            </>
+                        }
+                    >
                         <div className="space-y-4">
                             {/* Global Settings for this section */}
                             <div className="flex items-center gap-4 bg-purple-50 dark:bg-purple-900/10 p-3 rounded-lg">
@@ -191,8 +211,18 @@ export default function SalaryPage() {
                         </div>
                     </SectionContainer>
 
-                    {/* 4. POST-TAX DEDUCTIONS */}
-                    <SectionContainer title="Post-Tax Deductions" color="indigo" description="Union Fees, Gap Cover, etc.">
+                    {/* 4. DEDUCTIONS */}
+                    <SectionContainer 
+                        title="Deductions" 
+                        color="indigo"
+                        tooltip={
+                            <>
+                                Post-tax deductions that reduce net pay but don't affect taxable income.
+                                <div className="border-t border-gray-600 dark:border-gray-500 my-2"></div>
+                                <div className="text-gray-300 dark:text-gray-400">Examples: Medical Aid (employee portion), Gap Cover</div>
+                            </>
+                        }
+                    >
                         <ItemList
                             items={postTaxDeductions}
                             onDelete={handleDeleteItem}
@@ -243,8 +273,13 @@ export default function SalaryPage() {
                             <SummaryRow label="Pre-Tax Deductions" value={salaryData.deductions.pre_tax} isMutedRed />
 
                             <SummaryRow
-                                label="Post-Tax Deductions"
-                                value={(salaryData.deductions.fringe_benefits_deducted || 0) + (salaryData.deductions.post_tax || 0)}
+                                label="Fringe Benefits"
+                                value={salaryData.deductions.fringe_benefits_deducted || 0}
+                                isMutedRed
+                            />
+                            <SummaryRow
+                                label="Deductions"
+                                value={salaryData.deductions.post_tax || 0}
                                 isMutedRed
                             />
                             {salaryData.deductions.medical_credits_applied > 0 && (
@@ -274,7 +309,7 @@ export default function SalaryPage() {
 
 // Sub-components
 
-function SectionContainer({ title, color, description, children }) {
+function SectionContainer({ title, color, description, children, tooltip }) {
     const colors = {
         blue: "border-l-blue-500",
         orange: "border-l-orange-500",
@@ -284,7 +319,20 @@ function SectionContainer({ title, color, description, children }) {
 
     return (
         <div className={`bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 border-l-4 ${colors[color]}`}>
-            <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-1">{title}</h2>
+            <div className="flex items-center gap-2 mb-1">
+                <h2 className="text-lg font-bold text-gray-900 dark:text-white">{title}</h2>
+                {tooltip && (
+                    <div className="relative group">
+                        <Info className="w-4 h-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 cursor-help" />
+                        <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block z-50 pointer-events-none">
+                            <div className="bg-gray-900 dark:bg-gray-700 text-white text-sm rounded-lg py-2.5 px-4 shadow-xl whitespace-normal w-[500px] text-left">
+                                <div>{tooltip}</div>
+                                <div className="absolute left-1/2 -translate-x-1/2 top-full border-4 border-transparent border-t-gray-900 dark:border-t-gray-700"></div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
             {description && <p className="text-sm text-gray-500 mb-6">{description}</p>}
             <div className="mt-4">{children}</div>
         </div>
