@@ -44,17 +44,9 @@ export default function TFSAPortfolio() {
     const TFSA_ANNUAL_LIMIT = 36000
     const TFSA_LIFETIME_LIMIT = 500000
 
-    // SA Financial Year runs March to February
-    const getSAFinancialYear = () => {
-        const now = new Date()
-        const month = now.getMonth()
-        const year = now.getFullYear()
-        if (month < 2) {
-            return { start: year - 1, end: year }
-        }
-        return { start: year, end: year + 1 }
-    }
-    const financialYear = getSAFinancialYear()
+    // Financial year metadata from backend (source of truth)
+    const [financialYearStart, setFinancialYearStart] = useState(null)
+    const [financialYearLabel, setFinancialYearLabel] = useState(null)
 
     // Deposits for current financial year
     const [deposits, setDeposits] = useState([])
@@ -153,6 +145,13 @@ export default function TFSAPortfolio() {
                 }))
                 setDeposits(loadedDeposits)
 
+                if (res.data.financial_year_start) {
+                    setFinancialYearStart(res.data.financial_year_start)
+                }
+                if (res.data.current_financial_year_label) {
+                    setFinancialYearLabel(res.data.current_financial_year_label)
+                }
+
                 // Mark that we've successfully loaded contributions
                 hasLoadedContributions.current = true
             } else {
@@ -201,7 +200,10 @@ export default function TFSAPortfolio() {
                     amount: d.amount,
                     date: d.date
                 })),
-                financial_year_start: financialYear.start
+                // financial_year_start is now derived server-side; we still send it for
+                // backward compatibility if available, but backend does not rely on it.
+                financial_year_start: financialYearStart,
+                current_financial_year_start: financialYearStart
             })
         } catch (err) {
             console.error("Failed to save contributions", err)
@@ -531,7 +533,7 @@ export default function TFSAPortfolio() {
                 <div className="flex items-center justify-between mb-4">
                     <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
                         <PiggyBank className="w-5 h-5 text-blue-500" />
-                        TFSA Contributions (FY {financialYear.start}/{financialYear.end})
+                        TFSA Contributions{financialYearLabel ? ` (FY ${financialYearLabel})` : ''}
                     </h2>
                     <span className="text-sm text-gray-500 dark:text-gray-400">
                         {isSaving ? 'Saving...' : 'Auto-saved'}
