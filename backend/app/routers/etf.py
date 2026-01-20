@@ -17,6 +17,8 @@ class ETFHoldingCreate(BaseModel):
     region: str
     shares: float
     target_percentage: float
+    cost_basis: Optional[float] = None
+
 
 class ETFHoldingUpdate(BaseModel):
     shares: Optional[float] = None
@@ -126,8 +128,13 @@ async def create_etf_holding(
         existing.current_price = current_price
         existing.price_updated_at = price_updated_at
 
-        # Initialize cost_basis to current market value
-        if existing.shares and existing.current_price:
+        # Initialize or override cost_basis
+        if holding.cost_basis is not None:
+            if holding.cost_basis < 0:
+                raise HTTPException(status_code=400, detail="cost_basis must be non-negative")
+            existing.cost_basis = float(holding.cost_basis)
+        elif existing.shares and existing.current_price:
+            # Fallback: initialize to current market value
             existing.cost_basis = existing.shares * existing.current_price
 
         # Re-add to Google Sheet if not already there
@@ -166,8 +173,12 @@ async def create_etf_holding(
         price_updated_at=price_updated_at
     )
 
-    # Initialize cost_basis to current market value if shares and price are available
-    if new_holding.shares and new_holding.current_price:
+    # Initialize cost_basis: respect user-provided value if present, otherwise fall back
+    if holding.cost_basis is not None:
+        if holding.cost_basis < 0:
+            raise HTTPException(status_code=400, detail="cost_basis must be non-negative")
+        new_holding.cost_basis = float(holding.cost_basis)
+    elif new_holding.shares and new_holding.current_price:
         new_holding.cost_basis = new_holding.shares * new_holding.current_price
 
     db.add(new_holding)

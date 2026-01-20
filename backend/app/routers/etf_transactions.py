@@ -14,6 +14,7 @@ class ETFTransactionCreate(BaseModel):
     shares: float
     price_per_share: float
     transaction_date: Optional[str] = None  # ISO format, defaults to now
+    total_cost_basis: Optional[float] = None  # Optional override for this transaction's total value
 
 class ETFTransactionResponse(BaseModel):
     id: int
@@ -94,6 +95,9 @@ async def create_etf_transaction(
     if transaction.price_per_share <= 0:
         raise HTTPException(status_code=400, detail="Price per share must be positive")
 
+    if transaction.total_cost_basis is not None and transaction.total_cost_basis < 0:
+        raise HTTPException(status_code=400, detail="total_cost_basis must be non-negative")
+
     # For SELL, ensure user has enough shares
     if transaction.transaction_type == "SELL" and holding.shares < transaction.shares:
         raise HTTPException(
@@ -109,7 +113,13 @@ async def create_etf_transaction(
         except ValueError:
             trans_date = get_sast_now()
 
-    total_value = transaction.shares * transaction.price_per_share
+    # Determine total transaction value; allow user override via total_cost_basis
+    inferred_total_value = transaction.shares * transaction.price_per_share
+    total_value = (
+        float(transaction.total_cost_basis)
+        if transaction.total_cost_basis is not None
+        else inferred_total_value
+    )
 
     # Create transaction record
     new_transaction = models.ETFTransaction(
