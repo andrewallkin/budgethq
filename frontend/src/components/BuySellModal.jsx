@@ -6,7 +6,6 @@ export default function BuySellModal({ isOpen, onClose, holding, onSuccess }) {
     const [transactionType, setTransactionType] = useState('BUY')
     const [shares, setShares] = useState('')
     const [amount, setAmount] = useState('') // For bonds
-    const [etfCostBasis, setEtfCostBasis] = useState('') // For ETF BUY transactions
     const [pricePerShare, setPricePerShare] = useState('') // For ETF BUY transactions - editable price
     const [transactionDate, setTransactionDate] = useState(new Date().toISOString().split('T')[0])
     const [submitting, setSubmitting] = useState(false)
@@ -20,7 +19,6 @@ export default function BuySellModal({ isOpen, onClose, holding, onSuccess }) {
             setTransactionType('BUY')
             setShares('')
             setAmount('')
-            setEtfCostBasis('')
             // Initialize price per share to Google Sheets price for ETF BUY
             setPricePerShare(holding.current_price ? holding.current_price.toString() : '')
             setTransactionDate(new Date().toISOString().split('T')[0])
@@ -113,21 +111,10 @@ export default function BuySellModal({ isOpen, onClose, holding, onSuccess }) {
                     transaction_date: transactionDate
                 }
 
-                // For BUY transactions, include optional transaction-level cost basis
+                // For BUY transactions, calculate total cost basis automatically
+                // Cost basis is always Price Per Share × Shares
                 if (transactionType === 'BUY') {
-                    const inferredCostBasis = sharesNum * effectivePrice
-
-                    if (etfCostBasis.trim() === '') {
-                        payload.total_cost_basis = inferredCostBasis
-                    } else {
-                        const override = parseFloat(etfCostBasis)
-                        if (isNaN(override) || override < 0) {
-                            setError('Cost basis must be a non-negative number')
-                            setSubmitting(false)
-                            return
-                        }
-                        payload.total_cost_basis = override
-                    }
+                    payload.total_cost_basis = sharesNum * effectivePrice
                 }
 
                 await axios.post('/api/etf/transactions', payload)
@@ -304,34 +291,6 @@ export default function BuySellModal({ isOpen, onClose, holding, onSuccess }) {
                                     </button>
                                 )}
                             </div>
-
-                            {/* Optional Cost Basis for ETF BUY */}
-                            {transactionType === 'BUY' && (
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                        Cost Basis for This Buy (optional)
-                                    </label>
-                                    <div className="flex items-center">
-                                        <span className="mr-2 text-gray-500 dark:text-gray-400">R</span>
-                                        <input
-                                            type="number"
-                                            step="0.01"
-                                            min="0"
-                                            value={etfCostBasis}
-                                            onChange={(e) => setEtfCostBasis(e.target.value)}
-                                            placeholder={
-                                                shares && holding?.current_price
-                                                    ? (parseFloat(shares) * holding.current_price).toFixed(2)
-                                                    : 'Prepopulated from price × shares'
-                                            }
-                                            className="flex-1 px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                                        />
-                                    </div>
-                                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                                        Total amount you are paying for this buy transaction. Defaults to current price × shares.
-                                    </p>
-                                </div>
-                            )}
 
                             {/* Price Per Share - Editable for BUY, Read-only for SELL */}
                             {transactionType === 'BUY' ? (
