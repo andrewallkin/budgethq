@@ -6,6 +6,7 @@ export default function BuySellModal({ isOpen, onClose, holding, onSuccess }) {
     const [transactionType, setTransactionType] = useState('BUY')
     const [shares, setShares] = useState('')
     const [amount, setAmount] = useState('') // For bonds
+    const [pricePerShare, setPricePerShare] = useState('') // For ETF BUY transactions - editable price
     const [transactionDate, setTransactionDate] = useState(new Date().toISOString().split('T')[0])
     const [submitting, setSubmitting] = useState(false)
     const [error, setError] = useState('')
@@ -18,6 +19,8 @@ export default function BuySellModal({ isOpen, onClose, holding, onSuccess }) {
             setTransactionType('BUY')
             setShares('')
             setAmount('')
+            // Initialize price per share to Google Sheets price for ETF BUY
+            setPricePerShare(holding.current_price ? holding.current_price.toString() : '')
             setTransactionDate(new Date().toISOString().split('T')[0])
             setError('')
         }
@@ -55,7 +58,6 @@ export default function BuySellModal({ isOpen, onClose, holding, onSuccess }) {
             } else {
                 // ETF transaction logic
                 const sharesNum = parseFloat(shares)
-                const priceNum = holding.current_price
 
                 if (isNaN(sharesNum) || sharesNum <= 0) {
                     setError('Please enter a valid number of shares')
@@ -63,10 +65,36 @@ export default function BuySellModal({ isOpen, onClose, holding, onSuccess }) {
                     return
                 }
 
-                if (!priceNum || priceNum <= 0) {
-                    setError('No price available. Please sync prices first.')
-                    setSubmitting(false)
-                    return
+                // Determine effective price per share
+                let effectivePrice = null
+                
+                if (transactionType === 'BUY') {
+                    // For BUY: use editable price if provided, otherwise fall back to Google Sheets price
+                    if (pricePerShare.trim() !== '') {
+                        const customPrice = parseFloat(pricePerShare)
+                        if (isNaN(customPrice) || customPrice <= 0) {
+                            setError('Price per share must be a positive number')
+                            setSubmitting(false)
+                            return
+                        }
+                        effectivePrice = customPrice
+                    } else {
+                        // Fall back to Google Sheets price
+                        if (!holding.current_price || holding.current_price <= 0) {
+                            setError('No price available. Please enter a price or sync prices first.')
+                            setSubmitting(false)
+                            return
+                        }
+                        effectivePrice = holding.current_price
+                    }
+                } else {
+                    // For SELL: always use Google Sheets price (read-only behavior)
+                    if (!holding.current_price || holding.current_price <= 0) {
+                        setError('No price available. Please sync prices first.')
+                        setSubmitting(false)
+                        return
+                    }
+                    effectivePrice = holding.current_price
                 }
 
                 if (transactionType === 'SELL' && sharesNum > holding.shares) {
@@ -75,13 +103,21 @@ export default function BuySellModal({ isOpen, onClose, holding, onSuccess }) {
                     return
                 }
 
-                await axios.post('/api/etf/transactions', {
+                const payload = {
                     holding_id: holding.id,
                     transaction_type: transactionType,
                     shares: sharesNum,
-                    price_per_share: priceNum,
+                    price_per_share: effectivePrice,
                     transaction_date: transactionDate
-                })
+                }
+
+                // For BUY transactions, calculate total cost basis automatically
+                // Cost basis is always Price Per Share × Shares
+                if (transactionType === 'BUY') {
+                    payload.total_cost_basis = sharesNum * effectivePrice
+                }
+
+                await axios.post('/api/etf/transactions', payload)
             }
 
             onSuccess?.()
@@ -96,9 +132,17 @@ export default function BuySellModal({ isOpen, onClose, holding, onSuccess }) {
     if (!isOpen || !holding) return null
 
     // Calculate values based on type
+    // For ETF BUY, use editable price if available, otherwise Google Sheets price
+    // For ETF SELL, always use Google Sheets price
+    const effectivePriceForDisplay = !isBond && transactionType === 'BUY' && pricePerShare.trim() !== ''
+        ? parseFloat(pricePerShare) || holding?.current_price || 0
+        : !isBond
+        ? (holding?.current_price || 0)
+        : 0
+    
     const totalValue = isBond 
         ? (parseFloat(amount) || 0)
-        : (parseFloat(shares) || 0) * (holding?.current_price || 0)
+        : (parseFloat(shares) || 0) * effectivePriceForDisplay
     
     const newShareCount = !isBond && transactionType === 'BUY'
         ? holding.shares + (parseFloat(shares) || 0)
@@ -248,21 +292,44 @@ export default function BuySellModal({ isOpen, onClose, holding, onSuccess }) {
                                 )}
                             </div>
 
-                            {/* Price Per Share (Read-only, from Google Sheets) */}
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                    Price Per Share
-                                    <span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400">
-                                        (from Google Sheets)
-                                    </span>
-                                </label>
-                                <div className="flex items-center px-4 py-2.5 bg-gray-100 dark:bg-gray-700/70 border border-gray-200 dark:border-gray-600 rounded-lg">
-                                    <span className="text-gray-500 dark:text-gray-400">R</span>
-                                    <span className="ml-2 font-medium text-gray-900 dark:text-white">
-                                        {holding.current_price?.toFixed(2) || '—'}
-                                    </span>
+                            {/* Price Per Share - Editable for BUY, Read-only for SELL */}
+                            {transactionType === 'BUY' ? (
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                        Price Per Share
+                                    </label>
+                                    <div className="flex items-center">
+                                        <span className="mr-2 text-gray-500 dark:text-gray-400">R</span>
+                                        <input
+                                            type="number"
+                                            step="0.0001"
+                                            min="0"
+                                            value={pricePerShare}
+                                            onChange={(e) => setPricePerShare(e.target.value)}
+                                            placeholder={holding.current_price ? holding.current_price.toFixed(2) : 'Leave blank to use Google Sheets price'}
+                                            className="flex-1 px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                        />
+                                    </div>
+                                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                        Editable. Leave blank to use current Google Sheets price.
+                                    </p>
                                 </div>
-                            </div>
+                            ) : (
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                        Price Per Share
+                                        <span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400">
+                                            (from Google Sheets)
+                                        </span>
+                                    </label>
+                                    <div className="flex items-center px-4 py-2.5 bg-gray-100 dark:bg-gray-700/70 border border-gray-200 dark:border-gray-600 rounded-lg">
+                                        <span className="text-gray-500 dark:text-gray-400">R</span>
+                                        <span className="ml-2 font-medium text-gray-900 dark:text-white">
+                                            {holding.current_price?.toFixed(2) || '—'}
+                                        </span>
+                                    </div>
+                                </div>
+                            )}
                         </>
                     )}
 
@@ -280,7 +347,7 @@ export default function BuySellModal({ isOpen, onClose, holding, onSuccess }) {
                     </div>
 
                     {/* Transaction Summary */}
-                    {((isBond && amount) || (!isBond && shares && holding?.current_price)) && (
+                    {((isBond && amount) || (!isBond && shares && (transactionType === 'SELL' ? holding?.current_price : (pricePerShare.trim() || holding?.current_price)))) && (
                         <div className={`p-4 rounded-lg ${
                             transactionType === 'BUY'
                                 ? 'bg-green-50 dark:bg-green-900/20'
@@ -331,7 +398,7 @@ export default function BuySellModal({ isOpen, onClose, holding, onSuccess }) {
                     </button>
                     <button
                         onClick={handleSubmit}
-                        disabled={submitting || (isBond ? !amount : (!shares || !holding?.current_price))}
+                        disabled={submitting || (isBond ? !amount : (!shares || (transactionType === 'SELL' ? !holding?.current_price : (!pricePerShare.trim() && !holding?.current_price))))}
                         className={`px-6 py-2 text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${
                             transactionType === 'BUY'
                                 ? 'bg-green-600 hover:bg-green-700'

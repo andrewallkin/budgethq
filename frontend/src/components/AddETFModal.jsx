@@ -8,7 +8,8 @@ export default function AddETFModal({ isOpen, onClose, onSuccess }) {
         etf_name: '',
         region: '',
         shares: '',
-        target_percentage: ''
+        target_percentage: '',
+        cost_basis: ''
     })
     const [addToSheet, setAddToSheet] = useState(true)
     const [submitting, setSubmitting] = useState(false)
@@ -20,7 +21,8 @@ export default function AddETFModal({ isOpen, onClose, onSuccess }) {
             etf_name: '',
             region: '',
             shares: '',
-            target_percentage: ''
+            target_percentage: '',
+            cost_basis: ''
         })
         setAddToSheet(true)
         setError('')
@@ -66,6 +68,14 @@ export default function AddETFModal({ isOpen, onClose, onSuccess }) {
             return false
         }
 
+        if (formData.cost_basis.trim() !== '') {
+            const costBasis = parseFloat(formData.cost_basis)
+            if (isNaN(costBasis) || costBasis < 0) {
+                setError('Cost basis must be a non-negative number')
+                return false
+            }
+        }
+
         return true
     }
 
@@ -92,13 +102,19 @@ export default function AddETFModal({ isOpen, onClose, onSuccess }) {
             }
 
             // Add the holding to the database
-            await axios.post('/api/etf/holdings', {
+            const payload = {
                 jse_ticker: formData.jse_ticker.trim(),
                 etf_name: formData.etf_name.trim(),
                 region: formData.region.trim(),
                 shares: parseFloat(formData.shares),
                 target_percentage: parseFloat(formData.target_percentage)
-            })
+            }
+
+            if (formData.cost_basis.trim() !== '') {
+                payload.cost_basis = parseFloat(formData.cost_basis)
+            }
+
+            await axios.post('/api/etf/holdings', payload)
 
             onSuccess?.()
             handleClose()
@@ -223,6 +239,28 @@ export default function AddETFModal({ isOpen, onClose, onSuccess }) {
                                 Can be 0 if planning to sell
                             </p>
                         </div>
+                    </div>
+
+                    {/* Optional Cost Basis */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Cost Basis (optional)
+                        </label>
+                        <div className="flex items-center">
+                            <span className="mr-2 text-gray-500 dark:text-gray-400">R</span>
+                            <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={formData.cost_basis}
+                                onChange={(e) => handleChange('cost_basis', e.target.value)}
+                                placeholder="Leave blank to use current market value"
+                                className="flex-1 px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                            />
+                        </div>
+                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                            Total amount you&apos;ve paid for this position. If left blank, it will be initialized from the current market value.
+                        </p>
                     </div>
 
                     {/* Add to Google Sheet checkbox */}

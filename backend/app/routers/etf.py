@@ -9,6 +9,7 @@ import io
 from .. import models, database, auth
 from ..sheets_service import get_sheets_service
 from ..utils import get_sast_now
+from .. import history
 
 # ETF Holdings Models (New System)
 class ETFHoldingCreate(BaseModel):
@@ -17,6 +18,8 @@ class ETFHoldingCreate(BaseModel):
     region: str
     shares: float
     target_percentage: float
+    cost_basis: Optional[float] = None
+
 
 class ETFHoldingUpdate(BaseModel):
     shares: Optional[float] = None
@@ -126,8 +129,13 @@ async def create_etf_holding(
         existing.current_price = current_price
         existing.price_updated_at = price_updated_at
 
-        # Initialize cost_basis to current market value
-        if existing.shares and existing.current_price:
+        # Initialize or override cost_basis
+        if holding.cost_basis is not None:
+            if holding.cost_basis < 0:
+                raise HTTPException(status_code=400, detail="cost_basis must be non-negative")
+            existing.cost_basis = float(holding.cost_basis)
+        elif existing.shares and existing.current_price:
+            # Fallback: initialize to current market value
             existing.cost_basis = existing.shares * existing.current_price
 
         # Re-add to Google Sheet if not already there
@@ -166,13 +174,70 @@ async def create_etf_holding(
         price_updated_at=price_updated_at
     )
 
-    # Initialize cost_basis to current market value if shares and price are available
-    if new_holding.shares and new_holding.current_price:
-        new_holding.cost_basis = new_holding.shares * new_holding.current_price
+    # Calculate intended cost_basis (for transaction calculation)
+    # We'll reset cost_basis to 0 before creating transaction, then let transaction update it
+    intended_cost_basis = 0.0
+    if holding.cost_basis is not None:
+        if holding.cost_basis < 0:
+            raise HTTPException(status_code=400, detail="cost_basis must be non-negative")
+        intended_cost_basis = float(holding.cost_basis)
+    elif new_holding.shares and new_holding.current_price:
+        intended_cost_basis = new_holding.shares * new_holding.current_price
+
+    # Initialize cost_basis to 0 - it will be set correctly by the transaction snapshot
+    # This prevents double-counting when update_cost_basis_for_transaction adds the transaction value
+    new_holding.cost_basis = 0.0
 
     db.add(new_holding)
     db.commit()
     db.refresh(new_holding)
+
+    # If shares > 0, create a BUY transaction record (mandatory for audit trail)
+    transaction_created = False
+    if new_holding.shares > 0:
+        # Calculate price_per_share and total_value for the transaction
+        # Use intended_cost_basis if available, otherwise use current_price
+        price_per_share = 0.0
+        total_value = 0.0
+        
+        if intended_cost_basis > 0:
+            # Use intended_cost_basis to calculate price_per_share
+            price_per_share = intended_cost_basis / new_holding.shares
+            total_value = intended_cost_basis
+        elif new_holding.current_price and new_holding.current_price > 0:
+            # Fallback to current_price
+            price_per_share = new_holding.current_price
+            total_value = new_holding.shares * new_holding.current_price
+        # Else: use 0 values as final fallback (transaction still created for audit trail)
+        
+        # Create BUY transaction record
+        new_transaction = models.ETFTransaction(
+            user_id=current_user.id,
+            holding_id=new_holding.id,
+            transaction_type="BUY",
+            shares=new_holding.shares,
+            price_per_share=price_per_share,
+            total_value=total_value,
+            transaction_date=get_sast_now()
+        )
+        
+        db.add(new_transaction)
+        db.commit()
+        db.refresh(new_transaction)
+        transaction_created = True
+        
+        # Record transaction snapshot for historical tracking
+        # This will also update cost_basis via update_cost_basis_for_transaction
+        # Since cost_basis starts at 0, it will be set to total_value correctly
+        try:
+            snapshot_result = history.record_transaction_snapshot(db, current_user.id, new_transaction.id)
+        except Exception as e:
+            # Don't fail the holding creation if snapshot fails
+            print(f"Warning: Failed to record transaction snapshot: {e}")
+            snapshot_result = None
+        
+        # Refresh holding to get updated cost_basis after transaction snapshot
+        db.refresh(new_holding)
 
     total_value = (new_holding.shares * new_holding.current_price) if new_holding.current_price else None
 
@@ -186,7 +251,8 @@ async def create_etf_holding(
         "current_price": new_holding.current_price,
         "total_value": total_value,
         "cost_basis": new_holding.cost_basis,
-        "price_updated_at": (new_holding.price_updated_at.isoformat() + "Z") if new_holding.price_updated_at else None
+        "price_updated_at": (new_holding.price_updated_at.isoformat() + "Z") if new_holding.price_updated_at else None,
+        "transaction_created": transaction_created
     }
 
 @router.put("/holdings/{holding_id}")

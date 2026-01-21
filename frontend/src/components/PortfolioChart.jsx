@@ -155,9 +155,57 @@ export default function PortfolioChart() {
         }
     }
 
+    // Calculate evenly spaced x-axis ticks based on selected range
+    const computeXTicks = (data, rangeKey) => {
+        if (!data || data.length === 0) return []
+
+        const totalPoints = data.length
+
+        // Target number of ticks per range (including start and end)
+        const rangeTickTargets = {
+            '1m': 6,
+            '3m': 8,
+            '6m': 6,
+            '1y': 6,
+            'all': 10
+        }
+
+        let targetTickCount = rangeTickTargets[rangeKey] || 6
+        // Don't ask for more ticks than we have points
+        targetTickCount = Math.min(targetTickCount, totalPoints)
+
+        if (targetTickCount <= 1) {
+            const firstDate = data[0]?.date
+            return firstDate ? [firstDate] : []
+        }
+
+        // Spread ticks roughly evenly across the data indices
+        const step = Math.max(1, Math.floor((totalPoints - 1) / (targetTickCount - 1)))
+        const ticks = []
+
+        for (let i = 0; i < totalPoints; i += step) {
+            const date = data[i]?.date
+            if (date && ticks[ticks.length - 1] !== date) {
+                ticks.push(date)
+            }
+        }
+
+        // Ensure the last data point is always included
+        const lastDate = data[totalPoints - 1]?.date
+        if (lastDate && ticks[ticks.length - 1] !== lastDate) {
+            ticks.push(lastDate)
+        }
+
+        return ticks
+    }
+
     const yAxisConfig = useMemo(() => {
         return calculateYAxisDomain(processedData, showContributions)
     }, [processedData, showContributions])
+
+    const xTicks = useMemo(() => {
+        return computeXTicks(processedData, selectedRange)
+    }, [processedData, selectedRange])
 
     const CustomTooltip = ({ active, payload, label }) => {
         if (!active || !payload || payload.length === 0) return null
@@ -353,6 +401,7 @@ export default function PortfolioChart() {
                             <XAxis
                                 dataKey="date"
                                 tickFormatter={formatDate}
+                                ticks={xTicks}
                                 stroke="#9CA3AF"
                                 fontSize={12}
                                 tickLine={false}
