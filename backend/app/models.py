@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, Date, DateTime
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, Date, DateTime, UniqueConstraint
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from .database import Base
@@ -14,6 +14,8 @@ class User(Base):
     budget = relationship("Budget", back_populates="owner", uselist=False)
     emergency_savings = relationship("EmergencySavings", back_populates="owner", uselist=False)
     retirement_annuity = relationship("RetirementAnnuity", back_populates="owner", uselist=False)
+    ra_value_history = relationship("RAValueHistory", back_populates="owner")
+    ra_contributions = relationship("RAContribution", back_populates="owner")
     etfs = relationship("ETF", back_populates="owner")
     etf_holdings = relationship("ETFHolding", back_populates="owner")
     etf_transactions = relationship("ETFTransaction", back_populates="owner")
@@ -111,6 +113,31 @@ class RetirementAnnuity(Base):
     monthly_contribution = Column(Float, default=0)
 
     owner = relationship("User", back_populates="retirement_annuity")
+
+
+class RAValueHistory(Base):
+    """User-entered RA portfolio value per date (one snapshot per date)."""
+    __tablename__ = "ra_value_history"
+    __table_args__ = (UniqueConstraint("user_id", "record_date", name="uq_ra_value_history_user_record_date"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    record_date = Column(Date, index=True)
+    portfolio_value = Column(Float, default=0)
+
+    owner = relationship("User", back_populates="ra_value_history")
+
+
+class RAContribution(Base):
+    """Individual RA contribution event; total contributions = sum of amounts."""
+    __tablename__ = "ra_contributions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    contribution_date = Column(Date, index=True)
+    amount = Column(Float, default=0)
+
+    owner = relationship("User", back_populates="ra_contributions")
 
 
 class BudgetCategory(Base):
