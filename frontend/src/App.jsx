@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
 import { Routes, Route, Link, useLocation, Navigate } from 'react-router-dom'
-import { LayoutDashboard, PieChart, Home, Moon, Sun, LogOut, Settings as SettingsIcon, ChevronLeft, ChevronRight, Calculator, Shield } from 'lucide-react'
+import { LayoutDashboard, PieChart, Home, Moon, Sun, LogOut, Settings as SettingsIcon, ChevronLeft, ChevronRight, Calculator, Shield, TrendingUp } from 'lucide-react'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import BudgetDashboard from './pages/BudgetDashboard'
 import TFSAPortfolio from './pages/TFSAPortfolio'
 import RATaxCalculator from './pages/RATaxCalculator'
+import RAPerformance from './pages/RAPerformance'
 import EmergencySavings from './pages/EmergencySavings'
 import Login from './pages/Login'
 import Register from './pages/Register'
@@ -52,6 +53,7 @@ function AppContent() {
         { path: '/budget', label: 'Budget Dashboard', icon: LayoutDashboard },
         { path: '/portfolio', label: 'TFSA Portfolio', icon: PieChart },
         { path: '/emergency-savings', label: 'Emergency Savings', icon: Shield },
+        { path: '/ra', label: 'RA Performance', icon: TrendingUp },
         { path: '/ra-calculator', label: 'RA Tax Calculator', icon: Calculator },
         { path: '/settings', label: 'Settings', icon: SettingsIcon },
     ]
@@ -144,6 +146,7 @@ function AppContent() {
                         <Route path="/salary" element={<ProtectedRoute><SalaryPage /></ProtectedRoute>} />
                         <Route path="/portfolio" element={<ProtectedRoute><TFSAPortfolio /></ProtectedRoute>} />
                         <Route path="/emergency-savings" element={<ProtectedRoute><EmergencySavings /></ProtectedRoute>} />
+                        <Route path="/ra" element={<ProtectedRoute><RAPerformance /></ProtectedRoute>} />
                         <Route path="/ra-calculator" element={<ProtectedRoute><RATaxCalculator /></ProtectedRoute>} />
                         <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
                     </Routes>
@@ -157,7 +160,7 @@ function HomePage() {
     return (
         <div className="space-y-8 max-w-6xl mx-auto">
             <div>
-                <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-3">Welcome to Your Financial Dashboard</h1>
+                <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-3">Welcome to BudgetHQ – Your Financial Dashboard</h1>
                 <p className="text-lg text-gray-600 dark:text-gray-400">
                     Take control of your finances with powerful budgeting and portfolio management tools.
                 </p>
@@ -356,7 +359,7 @@ function HomePage() {
                                 <span className="text-amber-600 dark:text-amber-400 mr-3 mt-1">✓</span>
                                 <div>
                                     <p className="font-semibold text-gray-900 dark:text-white">Auto-Synced from Budget</p>
-                                    <p className="text-sm text-gray-600 dark:text-gray-400">Uses your "Needs" total from the budget dashboard automatically</p>
+                                    <p className="text-sm text-gray-600 dark:text-gray-400">Uses your \"Needs\" total from the budget dashboard automatically</p>
                                 </div>
                             </div>
                             <div className="flex items-start">
@@ -380,6 +383,53 @@ function HomePage() {
                             className="mt-auto block w-full text-center px-6 py-3 bg-amber-600 text-white font-semibold rounded-lg hover:bg-amber-700 transition-colors"
                         >
                             Open Emergency Savings →
+                        </Link>
+                    </div>
+                </div>
+
+                {/* RA Performance Card */}
+                <div className="flex flex-col h-full bg-gradient-to-br from-indigo-50 to-indigo-100 dark:from-indigo-900/20 dark:to-indigo-800/20 rounded-2xl shadow-lg border border-indigo-200 dark:border-indigo-800 overflow-hidden hover:shadow-xl transition-all">
+                    <div className="p-8 flex-1 flex flex-col">
+                        <div className="flex items-center mb-6">
+                            <div className="p-4 bg-indigo-600 rounded-xl">
+                                <TrendingUp className="w-8 h-8 text-white" />
+                            </div>
+                            <h2 className="text-2xl font-bold text-gray-900 dark:text-white ml-4">RA Performance</h2>
+                        </div>
+
+                        <p className="text-gray-700 dark:text-gray-300 mb-6 text-base leading-relaxed">
+                            Track your retirement annuity value and contributions month by month, with clear performance and growth insights.
+                        </p>
+
+                        <div className="space-y-3 mb-8">
+                            <div className="flex items-start">
+                                <span className="text-indigo-600 dark:text-indigo-400 mr-3 mt-1">✓</span>
+                                <div>
+                                    <p className="font-semibold text-gray-900 dark:text-white">Monthly Value Snapshots</p>
+                                    <p className="text-sm text-gray-600 dark:text-gray-400">Capture your RA value once per month to see its trajectory over time</p>
+                                </div>
+                            </div>
+                            <div className="flex items-start">
+                                <span className="text-indigo-600 dark:text-indigo-400 mr-3 mt-1">✓</span>
+                                <div>
+                                    <p className="font-semibold text-gray-900 dark:text-white">Contribution Tracking</p>
+                                    <p className="text-sm text-gray-600 dark:text-gray-400">See total and financial-year contributions alongside portfolio growth</p>
+                                </div>
+                            </div>
+                            <div className="flex items-start">
+                                <span className="text-indigo-600 dark:text-indigo-400 mr-3 mt-1">✓</span>
+                                <div>
+                                    <p className="font-semibold text-gray-900 dark:text-white">Performance Chart</p>
+                                    <p className="text-sm text-gray-600 dark:text-gray-400">Visualize value and cumulative contributions on a single time-series chart</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <Link
+                            to="/ra"
+                            className="mt-auto block w-full text-center px-6 py-3 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition-colors"
+                        >
+                            Open RA Performance →
                         </Link>
                     </div>
                 </div>
@@ -436,40 +486,6 @@ function HomePage() {
                         >
                             Open RA Tax Calculator →
                         </Link>
-                    </div>
-                </div>
-            </div>
-
-            {/* Additional Info Section */}
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 p-8">
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Getting Started</h3>
-                <div className="grid md:grid-cols-3 gap-6">
-                    <div>
-                        <div className="flex items-center mb-2">
-                            <span className="text-2xl mr-2">🎯</span>
-                            <h4 className="font-semibold text-gray-900 dark:text-white">Set Your Goals</h4>
-                        </div>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                            Start by entering your monthly salary and defining your budget categories. The system will automatically calculate your taxes.
-                        </p>
-                    </div>
-                    <div>
-                        <div className="flex items-center mb-2">
-                            <span className="text-2xl mr-2">📊</span>
-                            <h4 className="font-semibold text-gray-900 dark:text-white">Track Progress</h4>
-                        </div>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                            Monitor your spending and investments with real-time visualizations. See how your allocations compare to your targets.
-                        </p>
-                    </div>
-                    <div>
-                        <div className="flex items-center mb-2">
-                            <span className="text-2xl mr-2">💡</span>
-                            <h4 className="font-semibold text-gray-900 dark:text-white">Make Decisions</h4>
-                        </div>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                            Use the insights to make informed financial decisions. Adjust your budget or rebalance your portfolio with confidence.
-                        </p>
                     </div>
                 </div>
             </div>
