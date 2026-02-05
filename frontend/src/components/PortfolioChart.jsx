@@ -11,6 +11,7 @@ import {
     Legend
 } from 'recharts'
 import { TrendingUp, TrendingDown, Calendar, RefreshCw, Layers } from 'lucide-react'
+import { formatCurrency as formatCurrencyUtil } from '../utils/numberFormatting'
 
 const TIME_RANGES = [
     { key: '1m', label: '1M' },
@@ -49,8 +50,9 @@ export default function PortfolioChart() {
     }
 
     const formatCurrency = (value) => {
-        if (value === null || value === undefined) return 'R 0'
-        return `R ${value.toLocaleString('en-ZA', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+        if (value === null || value === undefined) return 'R 0.00'
+        // Always show 2 decimals for summary values
+        return formatCurrencyUtil(value, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     }
 
     const formatDate = (dateStr) => {

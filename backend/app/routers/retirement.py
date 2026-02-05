@@ -10,7 +10,6 @@ from ..utils import get_sast_now, get_sa_financial_year_start, format_sa_financi
 
 # RetirementAnnuity Pydantic Models
 class RetirementAnnuityData(BaseModel):
-    current_value: Optional[float] = 0
     monthly_contribution: Optional[float] = 0
 
 
@@ -49,15 +48,29 @@ async def get_retirement_annuity(
         models.RetirementAnnuity.user_id == current_user.id
     ).first()
 
+    # Latest portfolio value from RAValueHistory (canonical RA \"current value\")
+    latest_snapshot = (
+        db.query(models.RAValueHistory)
+        .filter(models.RAValueHistory.user_id == current_user.id)
+        .order_by(models.RAValueHistory.record_date.desc())
+        .first()
+    )
+    latest_portfolio_value = round(latest_snapshot.portfolio_value or 0, 2) if latest_snapshot else 0.0
+
     if not ra:
         return {
-            "current_value": 0,
-            "monthly_contribution": 0
+            # Kept for backwards compatibility; now sourced from RAValueHistory
+            "current_value": latest_portfolio_value,
+            "monthly_contribution": 0,
+            "latest_portfolio_value": latest_portfolio_value,
         }
 
+    monthly_contribution = ra.monthly_contribution or 0
     return {
-        "current_value": ra.current_value or 0,
-        "monthly_contribution": ra.monthly_contribution or 0
+        # Kept for backwards compatibility; now sourced from RAValueHistory
+        "current_value": latest_portfolio_value,
+        "monthly_contribution": monthly_contribution,
+        "latest_portfolio_value": latest_portfolio_value,
     }
 
 @router.post("/default_user")
@@ -74,7 +87,7 @@ async def save_retirement_annuity(
         ra = models.RetirementAnnuity(user_id=current_user.id)
         db.add(ra)
 
-    ra.current_value = data.current_value or 0
+    # Only monthly contribution is persisted here; portfolio value comes from RAValueHistory
     ra.monthly_contribution = data.monthly_contribution or 0
 
     db.commit()
@@ -216,7 +229,7 @@ async def save_ra_snapshot(
     current_user: models.User = Depends(auth.get_current_user),
     db: Session = Depends(database.get_db),
 ):
-    """Upsert one RA value snapshot for the given month. If month is current month, also update retirement_annuities.current_value."""
+    """Upsert one RA value snapshot for the given month."""
     try:
         record_date = _parse_month_to_date(body.month)
     except ValueError as e:
@@ -243,18 +256,6 @@ async def save_ra_snapshot(
             portfolio_value=portfolio_value,
         )
         db.add(row)
-
-    now = get_sast_now().date()
-    if record_date.year == now.year and record_date.month == now.month:
-        ra = (
-            db.query(models.RetirementAnnuity)
-            .filter(models.RetirementAnnuity.user_id == current_user.id)
-            .first()
-        )
-        if not ra:
-            ra = models.RetirementAnnuity(user_id=current_user.id)
-            db.add(ra)
-        ra.current_value = portfolio_value
 
     db.commit()
     return {"status": "success"}
@@ -287,17 +288,6 @@ async def update_ra_snapshot(
         raise HTTPException(status_code=400, detail="portfolio_value must be non-negative")
     row.record_date = record_date
     row.portfolio_value = portfolio_value
-    now = get_sast_now().date()
-    if record_date.year == now.year and record_date.month == now.month:
-        ra = (
-            db.query(models.RetirementAnnuity)
-            .filter(models.RetirementAnnuity.user_id == current_user.id)
-            .first()
-        )
-        if not ra:
-            ra = models.RetirementAnnuity(user_id=current_user.id)
-            db.add(ra)
-        ra.current_value = portfolio_value
     db.commit()
     return {"status": "success"}
 

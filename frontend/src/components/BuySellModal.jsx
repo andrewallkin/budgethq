@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { X, TrendingUp, TrendingDown, AlertCircle } from 'lucide-react'
 import axios from 'axios'
+import { formatCurrency, formatNumber } from '../utils/numberFormatting'
 
 export default function BuySellModal({ isOpen, onClose, holding, onSuccess }) {
     const [transactionType, setTransactionType] = useState('BUY')
@@ -44,7 +45,12 @@ export default function BuySellModal({ isOpen, onClose, holding, onSuccess }) {
                 }
 
                 if (transactionType === 'SELL' && amountNum > holding.current_value) {
-                    setError(`You only have R${holding.current_value.toFixed(2)} available to sell`)
+                    setError(
+                        `You only have ${formatCurrency(holding.current_value, {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                        })} available to sell`
+                    )
                     setSubmitting(false)
                     return
                 }
@@ -98,7 +104,12 @@ export default function BuySellModal({ isOpen, onClose, holding, onSuccess }) {
                 }
 
                 if (transactionType === 'SELL' && sharesNum > holding.shares) {
-                    setError(`You only have ${holding.shares} shares available to sell`)
+                    setError(
+                        `You only have ${formatNumber(holding.shares, {
+                            minimumFractionDigits: 0,
+                            maximumFractionDigits: 4,
+                        })} shares available to sell`
+                    )
                     setSubmitting(false)
                     return
                 }
@@ -225,17 +236,25 @@ export default function BuySellModal({ isOpen, onClose, holding, onSuccess }) {
                                 {isBond ? 'Current Value' : 'Current Holdings'}
                             </span>
                             <span className="font-medium text-gray-900 dark:text-white">
-                                {isBond 
-                                    ? `R ${holding.current_value.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                                    : `${holding.shares.toFixed(4)} shares`
-                                }
+                                {isBond
+                                    ? formatCurrency(holding.current_value, {
+                                        minimumFractionDigits: 2,
+                                        maximumFractionDigits: 2,
+                                    })
+                                    : `${formatNumber(holding.shares, {
+                                        minimumFractionDigits: 0,
+                                        maximumFractionDigits: 4,
+                                    })} shares`}
                             </span>
                         </div>
                         {!isBond && holding.current_price && (
                             <div className="flex justify-between text-sm mt-1">
                                 <span className="text-gray-500 dark:text-gray-400">Latest Price</span>
                                 <span className="font-medium text-gray-900 dark:text-white">
-                                    R {holding.current_price.toFixed(2)}
+                                    {formatCurrency(holding.current_price, {
+                                        minimumFractionDigits: 2,
+                                        maximumFractionDigits: 2,
+                                    })}
                                 </span>
                             </div>
                         )}
@@ -263,7 +282,12 @@ export default function BuySellModal({ isOpen, onClose, holding, onSuccess }) {
                                     onClick={() => setAmount(holding.current_value.toString())}
                                     className="mt-1 text-xs text-blue-600 dark:text-blue-400 hover:underline"
                                 >
-                                    Sell all (R {holding.current_value.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+                                    Sell all (
+                                        {formatCurrency(holding.current_value, {
+                                            minimumFractionDigits: 2,
+                                            maximumFractionDigits: 2,
+                                        })}
+                                    )
                                 </button>
                             )}
                         </div>
@@ -325,7 +349,12 @@ export default function BuySellModal({ isOpen, onClose, holding, onSuccess }) {
                                     <div className="flex items-center px-4 py-2.5 bg-gray-100 dark:bg-gray-700/70 border border-gray-200 dark:border-gray-600 rounded-lg">
                                         <span className="text-gray-500 dark:text-gray-400">R</span>
                                         <span className="ml-2 font-medium text-gray-900 dark:text-white">
-                                            {holding.current_price?.toFixed(2) || '—'}
+                                            {holding.current_price != null
+                                                ? formatNumber(holding.current_price, {
+                                                    minimumFractionDigits: 2,
+                                                    maximumFractionDigits: 2,
+                                                })
+                                                : '—'}
                                         </span>
                                     </div>
                                 </div>
@@ -357,12 +386,17 @@ export default function BuySellModal({ isOpen, onClose, holding, onSuccess }) {
                                 <span className="text-gray-600 dark:text-gray-400">
                                     {isBond ? 'Transaction Amount' : 'Total Value'}
                                 </span>
-                                <span className={`font-bold ${
-                                    transactionType === 'BUY'
-                                        ? 'text-green-700 dark:text-green-400'
-                                        : 'text-red-700 dark:text-red-400'
-                                }`}>
-                                    R {totalValue.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                <span
+                                    className={`font-bold ${
+                                        transactionType === 'BUY'
+                                            ? 'text-green-700 dark:text-green-400'
+                                            : 'text-red-700 dark:text-red-400'
+                                    }`}
+                                >
+                                    {formatCurrency(totalValue, {
+                                        minimumFractionDigits: 2,
+                                        maximumFractionDigits: 2,
+                                    })}
                                 </span>
                             </div>
                             <div className="flex justify-between text-sm">
@@ -370,10 +404,15 @@ export default function BuySellModal({ isOpen, onClose, holding, onSuccess }) {
                                     {isBond ? 'New Bond Value' : 'New Share Count'}
                                 </span>
                                 <span className="font-medium text-gray-900 dark:text-white">
-                                    {isBond 
-                                        ? `R ${newBondValue.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                                        : `${newShareCount.toFixed(4)} shares`
-                                    }
+                                    {isBond
+                                        ? formatCurrency(newBondValue, {
+                                            minimumFractionDigits: 2,
+                                            maximumFractionDigits: 2,
+                                        })
+                                        : `${formatNumber(newShareCount, {
+                                            minimumFractionDigits: 0,
+                                            maximumFractionDigits: 4,
+                                        })} shares`}
                                 </span>
                             </div>
                         </div>

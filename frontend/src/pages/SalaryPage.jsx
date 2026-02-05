@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
 import { Plus, Trash2, Info, ArrowLeft, Check, HelpCircle } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { formatCurrency } from '../utils/numberFormatting'
 
 export default function SalaryPage() {
     const [loading, setLoading] = useState(true)
@@ -565,17 +566,10 @@ function SummaryRow({ label, value, isMutedRed, bold, isGreen }) {
         <div className={`flex justify-between items-center ${bold ? 'font-bold' : ''}`}>
             <span className={isMutedRed ? 'text-gray-500' : ''}>{label}</span>
             <span className={textColorClass}>
-                {isMutedRed ? '-' : ''} {formatCurrency(value)}
+                {isMutedRed ? '-' : ''} {formatCurrencyLocal(value)}
             </span>
         </div>
     )
 }
 
-const formatCurrency = (val) => {
-    return new Intl.NumberFormat('en-ZA', {
-        style: 'currency',
-        currency: 'ZAR',
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-    }).format(val || 0)
-}
+const formatCurrencyLocal = (val) => formatCurrency(val || 0)

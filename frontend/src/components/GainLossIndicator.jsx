@@ -1,4 +1,5 @@
 import { TrendingUp, TrendingDown } from 'lucide-react'
+import { formatCurrency, formatPercent } from '../utils/numberFormatting'
 
 export default function GainLossIndicator({ percentage, amount, size = 'sm' }) {
     // Handle cases where we don't have valid data
@@ -15,15 +16,6 @@ export default function GainLossIndicator({ percentage, amount, size = 'sm' }) {
     const Icon = isPositive ? TrendingUp : TrendingDown
     const colorClass = isPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
 
-    const formatCurrency = (value) => {
-        return new Intl.NumberFormat('en-ZA', {
-            style: 'currency',
-            currency: 'ZAR',
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2
-        }).format(Math.abs(value))
-    }
-
     const iconSize = size === 'lg' ? 'w-4 h-4' : 'w-3 h-3'
     const textSize = size === 'lg' ? 'text-sm' : 'text-xs'
 
@@ -32,9 +24,9 @@ export default function GainLossIndicator({ percentage, amount, size = 'sm' }) {
             <Icon className={iconSize} />
             <div className="text-center">
                 <div className={`font-semibold flex items-center gap-1 ${textSize === 'sm' ? 'text-sm' : 'text-base'}`}>
-                    <span>{isPositive ? '+' : '-'}{Math.abs(percentage).toFixed(1)}%</span>
+                    <span>{formatPercent(percentage)}</span>
                     <span className={colorClass}>
-                        ({isPositive ? '+' : '-'}R {formatCurrency(Math.abs(amount)).replace('R', '')})
+                        ({formatCurrency(amount)})
                     </span>
                 </div>
             </div>

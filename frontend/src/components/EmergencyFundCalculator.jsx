@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { AlertCircle, CheckCircle } from 'lucide-react'
+import { formatCurrency, formatNumber } from '../utils/numberFormatting'
 
 export default function EmergencyFundCalculator({ needsTotal, emergencyFundData, onSave }) {
     // Initialize state from props or defaults
@@ -275,7 +276,11 @@ export default function EmergencyFundCalculator({ needsTotal, emergencyFundData,
                     </div>
                     {targetType === 'months' && (
                         <div className="text-sm text-gray-700 dark:text-gray-300">
-                            You have <span className="font-semibold">{monthsCovered.toFixed(1)} months</span> of expenses covered
+                            You have{' '}
+                            <span className="font-semibold">
+                                {formatNumber(monthsCovered, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} months
+                            </span>{' '}
+                            of expenses covered
                         </div>
                     )}
                 </div>
@@ -284,7 +289,9 @@ export default function EmergencyFundCalculator({ needsTotal, emergencyFundData,
                 <div>
                     <div className="flex justify-between text-sm mb-2">
                         <span className="text-gray-600 dark:text-gray-400">Progress to Target</span>
-                        <span className="font-medium text-gray-900 dark:text-white">{progress.toFixed(1)}%</span>
+                        <span className="font-medium text-gray-900 dark:text-white">
+                            {formatNumber(progress, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%
+                        </span>
                     </div>
                     <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
                         <div
@@ -296,8 +303,12 @@ export default function EmergencyFundCalculator({ needsTotal, emergencyFundData,
                         />
                     </div>
                     <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        <span>R {currentFund.toLocaleString('en-ZA', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
-                        <span>R {targetAmount.toLocaleString('en-ZA', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
+                        <span>
+                            {formatCurrency(currentFund, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                        </span>
+                        <span>
+                            {formatCurrency(targetAmount, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                        </span>
                     </div>
                 </div>
 
@@ -306,15 +317,19 @@ export default function EmergencyFundCalculator({ needsTotal, emergencyFundData,
                     <div>
                         <div className="text-sm text-gray-600 dark:text-gray-400">Target Amount</div>
                         <div className="text-lg font-semibold text-gray-900 dark:text-white">
-                            R {targetAmount.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {formatCurrency(targetAmount, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </div>
                     </div>
                     <div>
                         <div className="text-sm text-gray-600 dark:text-gray-400">
                             {shortfall > 0 ? 'Remaining to Save' : 'Excess'}
                         </div>
-                        <div className={`text-lg font-semibold ${shortfall > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
-                            R {Math.abs(shortfall).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        <div
+                            className={`text-lg font-semibold ${
+                                shortfall > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'
+                            }`}
+                        >
+                            {formatCurrency(Math.abs(shortfall), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </div>
                     </div>
                 </div>

@@ -12,15 +12,16 @@ import {
 } from 'recharts'
 import { TrendingUp, Edit2, Trash2 } from 'lucide-react'
 import ConfirmModal from '../components/ConfirmModal'
+import { formatCurrency } from '../utils/numberFormatting'
 
 const TIME_RANGES = [
     { key: '1y', label: '1Y' },
     { key: 'all', label: 'All' },
 ]
 
-function formatCurrency(value) {
+const formatCurrencyLocal = (value) => {
     if (value === null || value === undefined) return 'R 0.00'
-    return `R ${Number(value).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    return formatCurrency(value)
 }
 
 export default function RAPerformance() {
@@ -308,19 +309,19 @@ export default function RAPerformance() {
                 <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
                     <p className="text-sm text-gray-500 dark:text-gray-400">Portfolio value</p>
                     <p className="text-xl font-semibold text-gray-900 dark:text-white">
-                        {formatCurrency(portfolioValueNum)}
+                        {formatCurrencyLocal(portfolioValueNum)}
                     </p>
                 </div>
                 <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
                     <p className="text-sm text-gray-500 dark:text-gray-400">Total contributions</p>
                     <p className="text-xl font-semibold text-gray-900 dark:text-white">
-                        {formatCurrency(totalContributionsNum)}
+                        {formatCurrencyLocal(totalContributionsNum)}
                     </p>
                 </div>
                 <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
                     <p className="text-sm text-gray-500 dark:text-gray-400">Growth</p>
                     <p className={`text-xl font-semibold ${growth >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                        {formatCurrency(growth)}
+                        {formatCurrencyLocal(growth)}
                     </p>
                     {growthPercent !== null && (
                         <p className={`text-sm font-medium ${growth >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
@@ -333,7 +334,7 @@ export default function RAPerformance() {
                         Contributions this financial year ({financialYearLabel})
                     </p>
                     <p className="text-xl font-semibold text-gray-900 dark:text-white">
-                        {formatCurrency(contributionsCurrentFy)}
+                        {formatCurrencyLocal(contributionsCurrentFy)}
                     </p>
                 </div>
             </div>
@@ -506,8 +507,8 @@ export default function RAPerformance() {
                                 {monthlyRows.map((row) => (
                                     <tr key={row.monthKey} className="border-b border-gray-100 dark:border-gray-700">
                                         <td className="py-2 pr-4">{formatTableMonth(row.date)}</td>
-                                        <td className="py-2 pr-4">{row.portfolio_value != null ? formatCurrency(row.portfolio_value) : '—'}</td>
-                                        <td className="py-2 pr-4">{row.contribution_total ? formatCurrency(row.contribution_total) : '—'}</td>
+                                        <td className="py-2 pr-4">{row.portfolio_value != null ? formatCurrencyLocal(row.portfolio_value) : '—'}</td>
+                                        <td className="py-2 pr-4">{row.contribution_total ? formatCurrencyLocal(row.contribution_total) : '—'}</td>
                                         <td className="py-2 pr-2">
                                             <div className="flex justify-end gap-1">
                                                 <button

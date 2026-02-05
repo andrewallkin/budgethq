@@ -4,6 +4,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recha
 import { Plus, Trash2, TrendingUp, ChevronDown, ChevronRight, Folder, Calculator } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import SavingsCalculator from '../components/SavingsCalculator'
+import { formatCurrency, formatNumber } from '../utils/numberFormatting'
 
 const COLORS = {
     Needs: '#B91C1C', // red-700
@@ -212,10 +213,10 @@ export default function BudgetDashboard() {
                                     </Link>
                                 </div>
                                 <input
-                                    type="number"
-                                    value={parseFloat(salary).toFixed(2)}
+                                    type="text"
+                                    value={formatCurrency(salary, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                     readOnly
-                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 cursor-not-allowed"
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white cursor-not-allowed"
                                 />
                             </div>
                         </div>
@@ -395,8 +396,12 @@ function SummaryItem({ label, value, color, percentage }) {
         <div className="flex justify-between items-center">
             <span className="text-gray-600 dark:text-gray-400">{label}</span>
             <span className={`font-medium ${color}`}>
-                R {value.toFixed(2)}
-                {percentage !== undefined && <span className="text-sm ml-2 text-gray-500 dark:text-gray-400">({percentage.toFixed(1)}%)</span>}
+                {formatCurrency(value, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                {percentage !== undefined && (
+                    <span className="text-sm ml-2 text-gray-500 dark:text-gray-400">
+                        ({formatNumber(percentage, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%)
+                    </span>
+                )}
             </span>
         </div>
     )
@@ -486,10 +491,16 @@ const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => 
                     </div>
                     <div className="flex items-center gap-2">
                         <span className="font-semibold text-blue-900 dark:text-blue-100">
-                            R {total.toFixed(2)}
+                            {formatCurrency(total, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </span>
                         <span className="text-sm text-blue-700 dark:text-blue-300">
-                            ({calculatePercentage(total).toFixed(1)}%)
+                        (
+                            {formatNumber(calculatePercentage(total), {
+                                minimumFractionDigits: 1,
+                                maximumFractionDigits: 1,
+                            })}
+                            %
+                        )
                         </span>
                     </div>
                 </button>
@@ -556,12 +567,15 @@ const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => 
                     <input
                         type="number"
                         value={item.amount}
-                        onChange={(e) => onUpdate(index, 'amount', e.target.value)}
+                        onChange={(e) => onUpdate(index, 'amount', e.target.value.replace(/,/g, ''))}
                         onFocus={(e) => e.target.select()}
                         className="w-24 bg-white dark:bg-gray-600 border border-gray-200 dark:border-gray-500 rounded px-2 py-1 text-right text-gray-900 dark:text-white"
                     />
                     <span className="text-xs text-gray-500 dark:text-gray-400 min-w-[50px] text-right">
-                        ({percentage.toFixed(1)}%)
+                        (
+                            {formatNumber(percentage, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                            %
+                        )
                     </span>
                 </div>
                 <button
@@ -591,7 +605,7 @@ const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => 
                         type="number"
                         placeholder="0"
                         value={newAmount}
-                        onChange={(e) => setNewAmount(e.target.value)}
+                        onChange={(e) => setNewAmount(e.target.value.replace(/,/g, ''))}
                         onKeyPress={handleKeyPress}
                         onFocus={(e) => e.target.select()}
                         className="w-24 bg-transparent border-none focus:ring-0 p-0 text-right text-gray-900 dark:text-white"
