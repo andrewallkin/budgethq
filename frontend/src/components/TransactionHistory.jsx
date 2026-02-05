@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { TrendingUp, TrendingDown, ChevronDown, ChevronUp, History, Trash2 } from 'lucide-react'
 import axios from 'axios'
 import ConfirmModal from './ConfirmModal'
+import { formatCurrency, formatNumber } from '../utils/numberFormatting'
 
 export default function TransactionHistory({ refreshTrigger, onTransactionDeleted }) {
     const [transactions, setTransactions] = useState([])
@@ -178,16 +179,30 @@ export default function TransactionHistory({ refreshTrigger, onTransactionDelete
                                     </div>
                                 </td>
                                 <td className="py-3 px-2 text-right font-medium text-gray-900 dark:text-white">
-                                    {tx.type === 'BOND' ? '—' : tx.shares.toFixed(4)}
+                                    {tx.type === 'BOND'
+                                        ? '—'
+                                        : formatNumber(tx.shares, { minimumFractionDigits: 0, maximumFractionDigits: 4 })}
                                 </td>
                                 <td className="py-3 px-2 text-right text-gray-600 dark:text-gray-400">
-                                    {tx.type === 'BOND' ? '—' : `R ${tx.price_per_share.toFixed(2)}`}
+                                    {tx.type === 'BOND'
+                                        ? '—'
+                                        : formatCurrency(tx.price_per_share, {
+                                              minimumFractionDigits: 2,
+                                              maximumFractionDigits: 2,
+                                          })}
                                 </td>
-                                <td className={`py-3 px-2 text-right font-semibold ${tx.transaction_type === 'BUY'
-                                        ? 'text-green-600 dark:text-green-400'
-                                        : 'text-red-600 dark:text-red-400'
-                                    }`}>
-                                    {tx.transaction_type === 'BUY' ? '-' : '+'}R {tx.total_value.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                <td
+                                    className={`py-3 px-2 text-right font-semibold ${
+                                        tx.transaction_type === 'BUY'
+                                            ? 'text-green-600 dark:text-green-400'
+                                            : 'text-red-600 dark:text-red-400'
+                                    }`}
+                                >
+                                    {tx.transaction_type === 'BUY' ? '-' : '+'}
+                                    {formatCurrency(tx.total_value, {
+                                        minimumFractionDigits: 2,
+                                        maximumFractionDigits: 2,
+                                    })}
                                 </td>
                                 <td className="py-3 px-2">
                                     <button
@@ -233,11 +248,33 @@ export default function TransactionHistory({ refreshTrigger, onTransactionDelete
                 onConfirm={handleDeleteConfirm}
                 title={`Delete ${transactionToDelete?.type === 'BOND' ? 'Bond' : 'ETF'} Transaction`}
                 message={transactionToDelete ? `Are you sure you want to delete this ${transactionToDelete.transaction_type} transaction?` : ''}
-                details={transactionToDelete ? [
-                    `This will reverse the ${transactionToDelete.transaction_type === 'BUY' ? 'purchase' : 'sale'} of ${transactionToDelete.type === 'BOND' ? `R ${transactionToDelete.total_value.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `${transactionToDelete.shares.toFixed(4)} shares`}`,
-                    transactionToDelete.type === 'ETF' ? `Holding shares will be ${transactionToDelete.transaction_type === 'BUY' ? 'reduced' : 'increased'}` : `Holding value will be ${transactionToDelete.transaction_type === 'BUY' ? 'reduced' : 'increased'}`,
-                    'Cost basis will be recalculated'
-                ] : []}
+                details={
+                    transactionToDelete
+                        ? [
+                              `This will reverse the ${
+                                  transactionToDelete.transaction_type === 'BUY' ? 'purchase' : 'sale'
+                              } of ${
+                                  transactionToDelete.type === 'BOND'
+                                      ? formatCurrency(transactionToDelete.total_value, {
+                                            minimumFractionDigits: 2,
+                                            maximumFractionDigits: 2,
+                                        })
+                                      : `${formatNumber(transactionToDelete.shares, {
+                                            minimumFractionDigits: 0,
+                                            maximumFractionDigits: 4,
+                                        })} shares`
+                              }`,
+                              transactionToDelete.type === 'ETF'
+                                  ? `Holding shares will be ${
+                                        transactionToDelete.transaction_type === 'BUY' ? 'reduced' : 'increased'
+                                    }`
+                                  : `Holding value will be ${
+                                        transactionToDelete.transaction_type === 'BUY' ? 'reduced' : 'increased'
+                                    }`,
+                              'Cost basis will be recalculated',
+                          ]
+                        : []
+                }
                 confirmText="Delete"
                 cancelText="Cancel"
                 variant="danger"

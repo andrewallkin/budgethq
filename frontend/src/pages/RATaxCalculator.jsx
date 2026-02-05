@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import axios from 'axios'
 import { Calculator, Info } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import { formatCurrency, formatNumber } from '../utils/numberFormatting'
 
 export default function RATaxCalculator() {
     const [loading, setLoading] = useState(true)
@@ -15,12 +16,8 @@ export default function RATaxCalculator() {
     const [calculationResult, setCalculationResult] = useState(null)
     const [calculating, setCalculating] = useState(false)
 
-    // Store latest RA values in refs to avoid stale closures
-    const currentRAValueRef = useRef(currentRAValue)
+    // Store latest RA contribution in a ref to avoid stale closures in debounced saves
     const monthlyRAContributionRef = useRef(monthlyRAContribution)
-    useEffect(() => {
-        currentRAValueRef.current = currentRAValue
-    }, [currentRAValue])
     useEffect(() => {
         monthlyRAContributionRef.current = monthlyRAContribution
     }, [monthlyRAContribution])
@@ -45,13 +42,17 @@ export default function RATaxCalculator() {
             // Fetch RA data from dedicated endpoint
             const raRes = await axios.get('/api/ra/default_user')
 
-            // Even if no data comes back (new user), we init with 0
-            const loadedRAValue = raRes.data?.current_value ?? 0
+            // Even if no data comes back (new user), we init with 0.
+            // Prefer latest_portfolio_value from RA performance history, fall back to current_value for safety.
+            const latestPortfolioValue = raRes.data?.latest_portfolio_value
+            const loadedRAValue =
+                latestPortfolioValue !== undefined && latestPortfolioValue !== null
+                    ? latestPortfolioValue
+                    : (raRes.data?.current_value ?? 0)
             const loadedRAContribution = raRes.data?.monthly_contribution ?? 0
 
             setCurrentRAValue(loadedRAValue)
             setMonthlyRAContribution(loadedRAContribution)
-            currentRAValueRef.current = loadedRAValue
             monthlyRAContributionRef.current = loadedRAContribution
 
             hasLoadedData.current = true
@@ -63,7 +64,7 @@ export default function RATaxCalculator() {
         }
     }
 
-    // Save function - saves ONLY to RA endpoint
+    // Save function - saves ONLY the monthly contribution to the RA endpoint
     const saveRAData = useCallback(async () => {
         if (!hasLoadedData.current) {
             console.log('RA: Not saving - data not loaded yet')
@@ -74,18 +75,15 @@ export default function RATaxCalculator() {
             return
         }
 
-        const latestRAValue = currentRAValueRef.current
         const latestRAContribution = monthlyRAContributionRef.current
 
         console.log('RA: Saving data', {
-            current_value: latestRAValue,
             monthly_contribution: latestRAContribution
         })
 
         setIsSaving(true)
         try {
             await axios.post('/api/ra/default_user', {
-                current_value: latestRAValue ?? 0,
                 monthly_contribution: latestRAContribution ?? 0
             })
             console.log('RA: Save successful')
@@ -122,14 +120,7 @@ export default function RATaxCalculator() {
         }
     }, [salary, monthlyRAContribution])
 
-    // Wrapper functions to update both state and refs immediately, and mark as edited
-    const updateCurrentRAValue = useCallback((value) => {
-        setHasUserEdited(true)
-        const numValue = parseFloat(value) || 0
-        currentRAValueRef.current = numValue
-        setCurrentRAValue(numValue)
-    }, [])
-
+    // Wrapper function to update contribution state/ref immediately, and mark as edited
     const updateMonthlyRAContribution = useCallback((value) => {
         setHasUserEdited(true)
         const numValue = parseFloat(value) || 0
@@ -142,7 +133,7 @@ export default function RATaxCalculator() {
         fetchUserData()
     }, [])
 
-    // Auto-save RA values - only after user has explicitly edited data
+    // Auto-save RA monthly contribution - only after user has explicitly edited data
     useEffect(() => {
         if (!hasLoadedData.current) return
         if (!hasUserEdited) return
@@ -153,7 +144,7 @@ export default function RATaxCalculator() {
         }, 1000)
 
         return () => clearTimeout(timer)
-    }, [currentRAValue, monthlyRAContribution, loading, saveRAData, hasUserEdited])
+    }, [monthlyRAContribution, loading, saveRAData, hasUserEdited])
 
     // Calculate when RA contribution changes (only if valid)
     useEffect(() => {
@@ -164,22 +155,6 @@ export default function RATaxCalculator() {
             calculateRATax()
         }
     }, [salary, age, monthlyRAContribution, maxMonthlyRAContribution, calculateRATax])
-
-    const formatCurrency = (value) => {
-        return new Intl.NumberFormat('en-ZA', {
-            style: 'currency',
-            currency: 'ZAR',
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2
-        }).format(value)
-    }
-
-    const formatNumber = (value) => {
-        return new Intl.NumberFormat('en-ZA', {
-            minimumFractionDigits: 0,
-            maximumFractionDigits: 2
-        }).format(value)
-    }
 
     // Calculate RA growth projection
     const calculateRAGrowth = (currentValue, monthlyContribution, annualReturn = 0.055) => {
@@ -255,8 +230,8 @@ export default function RATaxCalculator() {
                             Monthly Gross Salary (R)
                         </label>
                         <input
-                            type="number"
-                            value={salary}
+                            type="text"
+                            value={formatCurrency(salary)}
                             readOnly
                             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white cursor-not-allowed"
                         />
@@ -267,13 +242,15 @@ export default function RATaxCalculator() {
                             Current RA Value (R)
                         </label>
                         <input
-                            type="number"
-                            value={currentRAValue}
-                            onChange={(e) => updateCurrentRAValue(e.target.value)}
-                            onFocus={(e) => e.target.select()}
-                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors"
+                            type="text"
+                            value={formatCurrency(currentRAValue)}
+                            readOnly
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white cursor-not-allowed"
                             placeholder="0"
                         />
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            From your RA performance history (latest month)
+                        </p>
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">

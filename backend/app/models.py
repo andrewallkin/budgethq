@@ -109,7 +109,6 @@ class RetirementAnnuity(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), unique=True)
-    current_value = Column(Float, default=0)
     monthly_contribution = Column(Float, default=0)
 
     owner = relationship("User", back_populates="retirement_annuity")

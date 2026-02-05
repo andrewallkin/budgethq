@@ -15,6 +15,7 @@ import ConfirmModal from '../components/ConfirmModal'
 import PortfolioChart from '../components/PortfolioChart'
 import GainLossIndicator from '../components/GainLossIndicator'
 import HoldingDetailsModal from '../components/HoldingDetailsModal'
+import { formatCurrency, formatNumber } from '../utils/numberFormatting'
 
 
 export default function TFSAPortfolio() {
@@ -329,13 +330,20 @@ export default function TFSAPortfolio() {
 
     // Deposit management
     const addDeposit = () => {
-        const amount = parseFloat(newDepositAmount)
+        const amount = parseFloat(String(newDepositAmount).replace(/,/g, ''))
         if (!amount || amount <= 0) return
 
         const newTotal = annualContributions + amount
         if (newTotal > TFSA_ANNUAL_LIMIT) {
             const exceed = newTotal - TFSA_ANNUAL_LIMIT
-            if (!window.confirm(`This will exceed your annual limit by R${exceed.toLocaleString()}. Continue anyway?`)) {
+            if (
+                !window.confirm(
+                    `This will exceed your annual limit by ${formatCurrency(exceed, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                    })}. Continue anyway?`
+                )
+            ) {
                 return
             }
         }
@@ -360,7 +368,7 @@ export default function TFSAPortfolio() {
     // Historical contribution management
     const addHistoricalContribution = () => {
         const fy = newHistoricalYear.trim()
-        const amount = parseFloat(newHistoricalAmount)
+        const amount = parseFloat(String(newHistoricalAmount).replace(/,/g, ''))
         if (!fy || !amount || amount <= 0) return
 
         const existingForYear = historicalContributions
@@ -370,7 +378,14 @@ export default function TFSAPortfolio() {
 
         if (yearTotal > TFSA_ANNUAL_LIMIT) {
             const exceed = yearTotal - TFSA_ANNUAL_LIMIT
-            if (!window.confirm(`FY ${fy} will exceed annual limit by R${exceed.toLocaleString()}. Continue anyway?`)) {
+            if (
+                !window.confirm(
+                    `FY ${fy} will exceed annual limit by ${formatCurrency(exceed, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                    })}. Continue anyway?`
+                )
+            ) {
                 return
             }
         }
@@ -378,7 +393,14 @@ export default function TFSAPortfolio() {
         const newLifetimeTotal = historicalTotal + annualContributions + amount
         if (newLifetimeTotal > TFSA_LIFETIME_LIMIT) {
             const exceed = newLifetimeTotal - TFSA_LIFETIME_LIMIT
-            if (!window.confirm(`This will exceed your lifetime limit by R${exceed.toLocaleString()}. Continue anyway?`)) {
+            if (
+                !window.confirm(
+                    `This will exceed your lifetime limit by ${formatCurrency(exceed, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                    })}. Continue anyway?`
+                )
+            ) {
                 return
             }
         }
@@ -495,7 +517,7 @@ export default function TFSAPortfolio() {
                     <div>
                         <h2 className="text-sm font-medium text-emerald-100 uppercase tracking-wide">Portfolio Value</h2>
                         <p className="mt-2 text-4xl font-bold text-white">
-                            R {totalValue.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {formatCurrency(totalValue, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </p>
                         <p className="text-sm text-emerald-100 mt-1">{holdings.length} holding{holdings.length !== 1 ? 's' : ''} in portfolio</p>
                     </div>
@@ -503,7 +525,7 @@ export default function TFSAPortfolio() {
                     <div>
                         <h2 className="text-sm font-medium text-emerald-100 uppercase tracking-wide">Total Invested</h2>
                         <p className="mt-2 text-3xl font-bold text-white">
-                            R {totalLifetimeContributions.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {formatCurrency(totalLifetimeContributions, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </p>
                         <p className="text-sm text-emerald-100 mt-1">Lifetime contributions</p>
                     </div>
@@ -513,7 +535,7 @@ export default function TFSAPortfolio() {
                             {totalValue >= totalLifetimeContributions ? 'Profit' : 'Loss'}
                         </h2>
                         <p className={`mt-2 text-3xl font-bold ${totalValue >= totalLifetimeContributions ? 'text-white' : 'text-red-200'}`}>
-                            {totalValue >= totalLifetimeContributions ? '+' : ''}R {(totalValue - totalLifetimeContributions).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {formatCurrency(totalValue - totalLifetimeContributions, { minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: 'always' })}
                         </p>
                         <p className={`text-sm mt-1 font-medium ${totalValue >= totalLifetimeContributions ? 'text-emerald-100' : 'text-red-200'}`}>
                             {totalLifetimeContributions > 0
@@ -545,7 +567,9 @@ export default function TFSAPortfolio() {
                     <div className="space-y-3">
                         <div className="flex items-center justify-between">
                             <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Annual Limit</h3>
-                            <span className="text-sm font-bold text-gray-900 dark:text-white">R {TFSA_ANNUAL_LIMIT.toLocaleString()}</span>
+                            <span className="text-sm font-bold text-gray-900 dark:text-white">
+                                {formatCurrency(TFSA_ANNUAL_LIMIT, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                            </span>
                         </div>
 
                         <div className="flex gap-2 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
@@ -578,9 +602,9 @@ export default function TFSAPortfolio() {
                                 {deposits.sort((a, b) => new Date(a.date) - new Date(b.date)).map((deposit) => (
                                     <div key={deposit.id} className="flex items-center justify-between p-2 bg-blue-50 dark:bg-blue-900/20 rounded text-sm">
                                         <div className="flex items-center gap-2">
-                                            <span className="font-medium text-blue-700 dark:text-blue-400">
-                                                R {deposit.amount.toLocaleString()}
-                                            </span>
+                                        <span className="font-medium text-blue-700 dark:text-blue-400">
+                                            {formatCurrency(deposit.amount, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                        </span>
                                             <span className="text-gray-500 dark:text-gray-400 text-xs">
                                                 {new Date(deposit.date).toLocaleDateString('en-ZA')}
                                             </span>
@@ -598,9 +622,11 @@ export default function TFSAPortfolio() {
 
                         <div>
                             <div className="flex justify-between text-xs mb-1">
-                                <span className="text-gray-600 dark:text-gray-400">R {annualContributions.toLocaleString()}</span>
+                                <span className="text-gray-600 dark:text-gray-400">
+                                    {formatCurrency(annualContributions, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                </span>
                                 <span className={`font-medium ${contributionsRemaining < 0 ? 'text-red-500' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                                    R {contributionsRemaining.toLocaleString()} left
+                                    {formatCurrency(contributionsRemaining, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} left
                                 </span>
                             </div>
                             <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
@@ -613,7 +639,7 @@ export default function TFSAPortfolio() {
                                 />
                             </div>
                             <div className="text-center mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                                {contributionPercentUsed.toFixed(1)}% used
+                                {formatNumber(contributionPercentUsed, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}% used
                             </div>
                         </div>
                     </div>
@@ -622,7 +648,9 @@ export default function TFSAPortfolio() {
                     <div className="space-y-3">
                         <div className="flex items-center justify-between">
                             <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Lifetime Limit</h3>
-                            <span className="text-sm font-bold text-gray-900 dark:text-white">R {TFSA_LIFETIME_LIMIT.toLocaleString()}</span>
+                            <span className="text-sm font-bold text-gray-900 dark:text-white">
+                                {formatCurrency(TFSA_LIFETIME_LIMIT, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                            </span>
                         </div>
 
                         <div className="flex gap-2 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
@@ -658,7 +686,9 @@ export default function TFSAPortfolio() {
                                         <div className="flex items-center gap-2">
                                             <span className="font-medium text-purple-700 dark:text-purple-400">FY {hist.financial_year}</span>
                                             <span className="text-gray-500 dark:text-gray-400 text-xs">→</span>
-                                            <span className="font-medium text-gray-900 dark:text-white">R {hist.amount.toLocaleString()}</span>
+                                            <span className="font-medium text-gray-900 dark:text-white">
+                                                {formatCurrency(hist.amount, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                            </span>
                                         </div>
                                         <button
                                             onClick={() => removeHistoricalContribution(hist.id)}
@@ -674,10 +704,10 @@ export default function TFSAPortfolio() {
                         <div className="p-4 bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 rounded-lg">
                             <div className="text-center mb-3">
                                 <p className="text-2xl font-bold text-purple-700 dark:text-purple-400">
-                                    R {totalLifetimeContributions.toLocaleString()}
+                                    {formatCurrency(totalLifetimeContributions, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                                 </p>
                                 <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                                    Total (R {historicalTotal.toLocaleString()} + R {annualContributions.toLocaleString()})
+                                    Total ({formatCurrency(historicalTotal, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} + {formatCurrency(annualContributions, { minimumFractionDigits: 0, maximumFractionDigits: 0 })})
                                 </p>
                             </div>
 
@@ -692,9 +722,11 @@ export default function TFSAPortfolio() {
                                     />
                                 </div>
                                 <div className="flex justify-between text-xs">
-                                    <span className="text-gray-600 dark:text-gray-400">{lifetimePercentUsed.toFixed(1)}% used</span>
+                                    <span className="text-gray-600 dark:text-gray-400">
+                                        {formatNumber(lifetimePercentUsed, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}% used
+                                    </span>
                                     <span className={`font-medium ${lifetimeRemaining < 0 ? 'text-red-500' : 'text-purple-600 dark:text-purple-400'}`}>
-                                        R {lifetimeRemaining.toLocaleString()} left
+                                        {formatCurrency(lifetimeRemaining, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} left
                                     </span>
                                 </div>
                             </div>
@@ -767,7 +799,10 @@ export default function TFSAPortfolio() {
                                                 </div>
                                             </td>
                                             <td className="py-3 px-2 text-right font-semibold text-gray-900 dark:text-white w-1/4">
-                                                R {(h.type === 'ETF' ? h.total_value : h.current_value || 0).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                {formatCurrency(h.type === 'ETF' ? h.total_value : h.current_value || 0, {
+                                                    minimumFractionDigits: 2,
+                                                    maximumFractionDigits: 2,
+                                                })}
                                             </td>
                                             <td className="py-3 px-2 text-center w-1/3">
                                                 <GainLossIndicator
@@ -932,9 +967,9 @@ export default function TFSAPortfolio() {
                                         <span className="font-medium text-gray-900 dark:text-white">{item.etf}</span>
                                     </div>
                                     <div className="text-right">
-                                        <div className="font-semibold text-purple-700 dark:text-purple-400">
-                                            R {item.buyAmount.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                        </div>
+                                <div className="font-semibold text-purple-700 dark:text-purple-400">
+                                    {formatCurrency(item.buyAmount, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </div>
                                         <div className="text-xs text-gray-500 dark:text-gray-400">
                                             {item.targetPercentage.toFixed(1)}% of total
                                         </div>
@@ -942,7 +977,10 @@ export default function TFSAPortfolio() {
                                 </div>
                             ))}
                             <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg text-sm text-gray-600 dark:text-gray-400">
-                                💡 Total: R {whatIfDistribution.reduce((sum, item) => sum + item.buyAmount, 0).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                💡 Total: {formatCurrency(whatIfDistribution.reduce((sum, item) => sum + item.buyAmount, 0), {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                })}
                             </div>
                         </div>
                     ) : (
@@ -982,7 +1020,7 @@ export default function TFSAPortfolio() {
                                             <span>Buy <b>{action.buy_etf}</b></span>
                                         </div>
                                         <div className="mt-1 text-right font-semibold text-blue-700 dark:text-blue-400">
-                                            R {action.amount.toFixed(2)}
+                                            {formatCurrency(action.amount, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                         </div>
                                     </div>
                                 ))}
@@ -1014,7 +1052,9 @@ export default function TFSAPortfolio() {
                                         ))}
                                     </Pie>
                                     <Tooltip
-                                        formatter={(value) => `R ${value.toFixed(2)}`}
+                                        formatter={(value) =>
+                                            formatCurrency(value, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                                        }
                                         contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#f3f4f6' }}
                                         itemStyle={{ color: '#f3f4f6' }}
                                     />

@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { X } from 'lucide-react'
+import { formatCurrency } from '../utils/numberFormatting'
 
 export default function SavingsCalculator({ isOpen, onClose }) {
     const [initialAmount, setInitialAmount] = useState(0)
@@ -144,19 +145,19 @@ export default function SavingsCalculator({ isOpen, onClose }) {
                         <div>
                             <div className="text-sm text-gray-600 dark:text-gray-400">Projected Final Amount</div>
                             <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                                R {finalAmount.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                {formatCurrency(finalAmount, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </div>
                         </div>
                         <div>
                             <div className="text-sm text-gray-600 dark:text-gray-400">Total Contributions</div>
                             <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                                R {totalContributions.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                {formatCurrency(totalContributions, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </div>
                         </div>
                         <div>
                             <div className="text-sm text-gray-600 dark:text-gray-400">Interest Earned</div>
                             <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-                                R {totalInterest.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                {formatCurrency(totalInterest, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </div>
                         </div>
                     </div>
@@ -179,7 +180,12 @@ export default function SavingsCalculator({ isOpen, onClose }) {
                                             tickFormatter={(value) => `R${(value / 1000).toFixed(0)}k`}
                                         />
                                         <Tooltip
-                                            formatter={(value) => `R ${value.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                            formatter={(value) =>
+                                                formatCurrency(value, {
+                                                    minimumFractionDigits: 2,
+                                                    maximumFractionDigits: 2,
+                                                })
+                                            }
                                             contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#f3f4f6' }}
                                             labelStyle={{ color: '#f3f4f6' }}
                                         />
