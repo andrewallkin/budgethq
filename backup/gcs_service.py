@@ -21,7 +21,7 @@ class GoogleCloudStorageService:
 
     def __init__(self):
         self.client: Optional[storage.Client] = None
-        self.bucket_name = os.getenv("GCS_BUCKET_NAME", "budgethq_database_backups")
+        self.bucket_name = os.getenv("GCS_DB_BACKUP_BUCKET_NAME", "budgethq_database_backups")
         self._temp_credentials_file: Optional[str] = None
         self._initialize_service()
 

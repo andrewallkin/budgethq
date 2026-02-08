@@ -19,8 +19,11 @@ backend = [
     "python-multipart>=0.0.6",
     "google-auth>=2.0.0",
     "google-api-python-client>=2.0.0",
+    "google-cloud-storage>=2.10.0",
     "apscheduler>=3.10.0",
     "alembic>=1.12.0",
+    "openai>=1.0.0",
+    "cryptography>=41.0.0",
 ]
 backup = [
     "google-cloud-storage>=2.10.0",

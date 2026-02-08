@@ -1,7 +1,10 @@
 // Centralized number formatting utilities
 // All app code should use these helpers for displaying numeric values.
 
-const DEFAULT_LOCALE = 'en-US'
+// Using en-ZA (South African English) locale:
+// - Space for thousands separator: 1 234 567
+// - Period for decimal separator: 1 234.56
+const DEFAULT_LOCALE = 'en-ZA'
 
 const baseNumberFormat = (options = {}) =>
     new Intl.NumberFormat(DEFAULT_LOCALE, {

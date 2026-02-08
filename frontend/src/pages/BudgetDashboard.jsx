@@ -36,7 +36,7 @@ export default function BudgetDashboard() {
     const [wants, setWants] = useState([])
     const [savings, setSavings] = useState([])
 
-    const [taxInfo, setTaxInfo] = useState({ monthly_tax: 0, monthly_uif: 0 })
+    const [latestPayslip, setLatestPayslip] = useState(null)
     const [activeTab, setActiveTab] = useState('needs')
 
     const [isSaving, setIsSaving] = useState(false)
@@ -55,10 +55,18 @@ export default function BudgetDashboard() {
         fetchData()
     }, [])
 
-    // Tax is now calculated on the salary page only
+    // Fetch latest payslip data
     useEffect(() => {
-        // Set default tax info since tax is calculated on salary page
-        setTaxInfo({ monthly_tax: 0, monthly_uif: 0 })
+        const fetchPayslip = async () => {
+            try {
+                const response = await axios.get('/api/payslip/latest')
+                setLatestPayslip(response.data)
+            } catch (err) {
+                // No payslip available
+                console.log('No payslip data available')
+            }
+        }
+        fetchPayslip()
     }, [])
 
     // Auto-save - only after user has explicitly edited data
@@ -82,7 +90,8 @@ export default function BudgetDashboard() {
             ])
 
             if (budgetRes.data && Object.keys(budgetRes.data).length > 0) {
-                setSalary(budgetRes.data.salary || 0)
+                // Only set salary if it exists and is not null
+                setSalary(budgetRes.data.salary ?? 0)
                 // Ensure all categories have group field (backward compatibility)
                 setNeeds((budgetRes.data.needs || []).map(item => ({ ...item, group: item.group || null })))
                 setWants((budgetRes.data.wants || []).map(item => ({ ...item, group: item.group || null })))
@@ -212,15 +221,66 @@ export default function BudgetDashboard() {
                                         Edit Salary Details →
                                     </Link>
                                 </div>
-                                <input
-                                    type="text"
-                                    value={formatCurrency(salary, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                    readOnly
-                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white cursor-not-allowed"
-                                />
+                                {salary > 0 ? (
+                                    <input
+                                        type="text"
+                                        value={formatCurrency(salary, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        readOnly
+                                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white cursor-not-allowed"
+                                    />
+                                ) : (
+                                    <div className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 italic">
+                                        No income data available
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
+
+                    {/* Payslip & Tax Info Card */}
+                    {latestPayslip && (
+                        <div className="bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 p-6 rounded-xl shadow-sm border border-purple-200 dark:border-purple-800 transition-colors">
+                            <div className="flex justify-between items-center mb-4">
+                                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">💰 Payslip Info</h2>
+                                <Link to="/salary" className="text-xs text-purple-600 dark:text-purple-400 hover:underline font-medium">
+                                    View Details →
+                                </Link>
+                            </div>
+                            <div className="space-y-3 text-sm">
+                                <div className="flex justify-between">
+                                    <span className="text-gray-600 dark:text-gray-300">Gross Salary</span>
+                                    <span className="font-semibold text-green-600 dark:text-green-400">
+                                        {formatCurrency(latestPayslip.gross_salary)}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-gray-600 dark:text-gray-300">PAYE (Tax)</span>
+                                    <span className="font-semibold text-red-600 dark:text-red-400">
+                                        - {formatCurrency(latestPayslip.paye)}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-gray-600 dark:text-gray-300">UIF</span>
+                                    <span className="font-semibold text-red-600 dark:text-red-400">
+                                        - {formatCurrency(latestPayslip.uif_employee_portion)}
+                                    </span>
+                                </div>
+                                <div className="pt-2 border-t border-purple-200 dark:border-purple-700">
+                                    <div className="flex justify-between">
+                                        <span className="text-gray-700 dark:text-gray-200 font-medium">Net Pay</span>
+                                        <span className="font-bold text-blue-600 dark:text-blue-400">
+                                            {formatCurrency(latestPayslip.net_pay)}
+                                        </span>
+                                    </div>
+                                </div>
+                                {latestPayslip.company_name && (
+                                    <div className="pt-2 text-xs text-gray-500 dark:text-gray-400 italic">
+                                        {latestPayslip.company_name}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
 
                     {/* Summary Stats Card */}
                     <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">

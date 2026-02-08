@@ -10,6 +10,7 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True)
     hashed_password = Column(String)
+    openai_api_key = Column(String, nullable=True)  # Encrypted OpenAI API key
 
     budget = relationship("Budget", back_populates="owner", uselist=False)
     emergency_savings = relationship("EmergencySavings", back_populates="owner", uselist=False)
@@ -27,8 +28,8 @@ class User(Base):
     holding_value_history = relationship("HoldingValueHistory", back_populates="owner")
     daily_portfolio_summaries = relationship("DailyPortfolioSummary", back_populates="owner")
     monthly_portfolio_summaries = relationship("MonthlyPortfolioSummary", back_populates="owner")
-    salary = relationship("Salary", back_populates="owner", uselist=False)
     user_sheet = relationship("UserSheet", back_populates="owner", uselist=False)
+    monthly_payslips = relationship("MonthlyPayslip", back_populates="owner", cascade="all, delete-orphan")
 
 
 class UserSheet(Base):
@@ -47,37 +48,6 @@ class UserSheet(Base):
         """Generate a sheet name based on user ID"""
         return f"user_{user_id}"
 
-
-class Salary(Base):
-    __tablename__ = "salaries"
-
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), unique=True)
-    medical_aid_members = Column(Integer, default=0) # Main member + dependents
-
-    # New Fields
-    basic_salary = Column(Float, default=0.0)
-    age = Column(Integer, default=30)
-    net_salary = Column(Float, default=0.0)  # Calculated net take-home pay
-
-    owner = relationship("User", back_populates="salary")
-    items = relationship("SalaryItem", back_populates="salary", cascade="all, delete-orphan")
-
-class SalaryItem(Base):
-    __tablename__ = "salary_items"
-
-    id = Column(Integer, primary_key=True, index=True)
-    salary_id = Column(Integer, ForeignKey("salaries.id"))
-
-    name = Column(String)
-    amount = Column(Float)
-    # Types: "earning", "deduction_pre", "deduction_post" (Fringe is now a property of post-tax/earning usually, let's keep types simple)
-    # Actually user wants "Separate Pre and Post Tax". 
-    # And "Select whether it is a fringe benefit or not".
-    item_type = Column(String) 
-    is_fringe = Column(Integer, default=0) # 0=False, 1=True (Boolean)
-
-    salary = relationship("Salary", back_populates="items")
 
 class Budget(Base):
     __tablename__ = "budgets"
@@ -361,3 +331,66 @@ class MonthlyPortfolioSummary(Base):
     monthly_change_percent = Column(Float)
 
     owner = relationship("User", back_populates="monthly_portfolio_summaries")
+
+
+# =====================================================
+# Monthly Payslip Tracking Models
+# =====================================================
+
+class MonthlyPayslip(Base):
+    """Monthly payslip records with extracted data from uploaded PDFs"""
+    __tablename__ = "monthly_payslips"
+    __table_args__ = (UniqueConstraint("user_id", "year", "month", name="uq_monthly_payslip_user_year_month"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    year = Column(Integer, index=True)
+    month = Column(Integer, index=True)  # 1-12
+    
+    # Extracted payslip data
+    title = Column(String, nullable=True)  # Job title
+    company_name = Column(String, nullable=True)
+    gross_salary = Column(Float, default=0.0)
+    paye = Column(Float, default=0.0)
+    uif_employee_portion = Column(Float, default=0.0)
+    net_pay = Column(Float, default=0.0)
+    
+    # File storage
+    gcs_file_path = Column(String, nullable=True)  # Path to PDF in Google Cloud Storage
+    
+    # Timestamps
+    uploaded_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=get_sast_now)
+    updated_at = Column(DateTime, default=get_sast_now, onupdate=get_sast_now)
+    
+    # Relationships
+    owner = relationship("User", back_populates="monthly_payslips")
+    items = relationship("PayslipItem", back_populates="payslip", cascade="all, delete-orphan")
+    additional_income = relationship("PayslipAdditionalIncome", back_populates="payslip", cascade="all, delete-orphan")
+
+
+class PayslipItem(Base):
+    """Line items for payslips (company contributions, deductions)"""
+    __tablename__ = "payslip_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    payslip_id = Column(Integer, ForeignKey("monthly_payslips.id"), index=True)
+    
+    description = Column(String)
+    amount = Column(Float)
+    item_type = Column(String)  # 'company_contribution' or 'personal_deduction'
+    
+    payslip = relationship("MonthlyPayslip", back_populates="items")
+
+
+class PayslipAdditionalIncome(Base):
+    """Additional income items (bonuses, reimbursements, claims)"""
+    __tablename__ = "payslip_additional_income"
+
+    id = Column(Integer, primary_key=True, index=True)
+    payslip_id = Column(Integer, ForeignKey("monthly_payslips.id"), index=True)
+    
+    description = Column(String)
+    amount = Column(Float)
+    
+    payslip = relationship("MonthlyPayslip", back_populates="additional_income")

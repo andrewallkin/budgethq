@@ -489,7 +489,7 @@ The following secrets must be configured in your GitHub repository settings for 
 - `AUTHORIZED_USERS` - Comma-separated list of authorized usernames for registration/login
 - `BACKEND_PORT`, `FRONTEND_PORT` - Application ports
 - `GCP_SERVICE_ACCOUNT_CREDENTIALS` - Google Cloud service account JSON
-- `GCS_BUCKET_NAME` - Google Cloud Storage bucket name
+- `GCS_DB_BACKUP_BUCKET_NAME` - Google Cloud Storage bucket name
 - `GOOGLE_SPREADSHEET_ID` - Google Sheets integration (per-user tabs)
 - `BACKUP_RETENTION_DAYS`, `BACKUP_SCHEDULE_HOUR`, `BACKUP_SCHEDULE_MINUTE` - Backup configuration
 
