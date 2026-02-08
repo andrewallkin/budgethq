@@ -35,11 +35,13 @@ jobs:
           ENV_FRONTEND_PORT: ${{ secrets.FRONTEND_PORT }}
           ENV_GCP_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GCP_SERVICE_ACCOUNT_CREDENTIALS }}
           ENV_GCS_DB_BACKUP_BUCKET_NAME: ${{ secrets.GCS_DB_BACKUP_BUCKET_NAME }}
+          ENV_GCS_PAYSLIPS_BUCKET_NAME: ${{ secrets.GCS_PAYSLIPS_BUCKET_NAME }}
           ENV_GOOGLE_SPREADSHEET_ID: ${{ secrets.GOOGLE_SPREADSHEET_ID }}
           ENV_BACKUP_RETENTION_DAYS: ${{ secrets.BACKUP_RETENTION_DAYS }}
           ENV_BACKUP_SCHEDULE_HOUR: ${{ secrets.BACKUP_SCHEDULE_HOUR }}
           ENV_BACKUP_SCHEDULE_MINUTE: ${{ secrets.BACKUP_SCHEDULE_MINUTE }}
           ENV_AUTHORIZED_USERS: ${{ secrets.AUTHORIZED_USERS }}
+          ENV_ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
         run: |
           ssh -t -i ~/.ssh/id_rsa -p ${{ secrets.VPS_PORT }} -o StrictHostKeyChecking=no -o ServerAliveInterval=50 -o ServerAliveCountMax=10 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} <<EOF
           set -euo pipefail
@@ -86,6 +88,7 @@ jobs:
 
           GCP_SERVICE_ACCOUNT_CREDENTIALS=${ENV_GCP_SERVICE_ACCOUNT_CREDENTIALS}
           GCS_DB_BACKUP_BUCKET_NAME=${ENV_GCS_DB_BACKUP_BUCKET_NAME}
+          GCS_PAYSLIPS_BUCKET_NAME=${ENV_GCS_PAYSLIPS_BUCKET_NAME}
 
           GOOGLE_SPREADSHEET_ID=${ENV_GOOGLE_SPREADSHEET_ID}
           
@@ -94,6 +97,7 @@ jobs:
           BACKUP_SCHEDULE_MINUTE=${ENV_BACKUP_SCHEDULE_MINUTE}
 
           AUTHORIZED_USERS=${ENV_AUTHORIZED_USERS}
+          ENCRYPTION_KEY=${ENV_ENCRYPTION_KEY}
           EOF_ENV
           echo "✓ Environment configured"
           echo "::endgroup::"
