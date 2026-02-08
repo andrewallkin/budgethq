@@ -3,6 +3,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from .. import models, database, auth
+from ..utils import encrypt_api_key, decrypt_api_key
 import os
 
 # Pydantic Models for Auth
@@ -17,6 +18,15 @@ class Token(BaseModel):
 class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str
+
+class OpenAIKeyRequest(BaseModel):
+    api_key: str
+
+class OpenAIKeyStatus(BaseModel):
+    has_key: bool
+
+class UsernameChangeRequest(BaseModel):
+    username: str
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -92,3 +102,91 @@ async def change_password(
     db.commit()
 
     return {"status": "success", "message": "Password changed successfully"}
+
+
+@router.put("/user/settings/openai-key")
+async def save_openai_key(
+    request: OpenAIKeyRequest,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """Save or update user's OpenAI API key (encrypted)."""
+    if not request.api_key or len(request.api_key.strip()) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="API key cannot be empty"
+        )
+    
+    # Encrypt the API key
+    try:
+        encrypted_key = encrypt_api_key(request.api_key.strip())
+        current_user.openai_api_key = encrypted_key
+        db.commit()
+        return {"status": "success", "message": "OpenAI API key saved successfully"}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to save API key: {str(e)}"
+        )
+
+
+@router.get("/user/settings/openai-key", response_model=OpenAIKeyStatus)
+async def check_openai_key(
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    """Check if user has an OpenAI API key configured."""
+    has_key = current_user.openai_api_key is not None and len(current_user.openai_api_key) > 0
+    return {"has_key": has_key}
+
+
+@router.delete("/user/settings/openai-key")
+async def delete_openai_key(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """Delete user's OpenAI API key."""
+    current_user.openai_api_key = None
+    db.commit()
+    return {"status": "success", "message": "OpenAI API key deleted successfully"}
+
+
+@router.put("/user/username")
+async def change_username(
+    request: UsernameChangeRequest,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """Change user's username. Must still be in authorized users list."""
+    new_username = request.username.strip()
+    
+    if not new_username:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username cannot be empty"
+        )
+    
+    # Check if username is in authorized list
+    authorized_users = os.environ.get("AUTHORIZED_USERS")
+    authorized_list = [u.strip() for u in authorized_users.split(",")]
+    if new_username not in authorized_list:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Username must be in the authorized users list"
+        )
+    
+    # Check if username is already taken by another user
+    existing_user = db.query(models.User).filter(
+        models.User.username == new_username,
+        models.User.id != current_user.id
+    ).first()
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username is already taken"
+        )
+    
+    # Update username
+    current_user.username = new_username
+    db.commit()
+    
+    return {"status": "success", "message": "Username updated successfully"}

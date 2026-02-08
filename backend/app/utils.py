@@ -1,5 +1,8 @@
 
 from datetime import datetime, timedelta, timezone, date
+from cryptography.fernet import Fernet
+import os
+import base64
 
 def get_sast_now():
     """
@@ -43,4 +46,46 @@ def format_sa_financial_year_label(financial_year_start: int) -> str:
     """
     short_end = (financial_year_start + 1) % 100
     return f"{financial_year_start}/{short_end:02d}"
+
+
+# =====================================================
+# Encryption Utilities for API Keys
+# =====================================================
+
+def get_encryption_key() -> bytes:
+    """
+    Get or generate encryption key from environment variable.
+    The key should be a base64-encoded Fernet key.
+    """
+    key_str = os.getenv("ENCRYPTION_KEY")
+    if not key_str:
+        raise ValueError("ENCRYPTION_KEY environment variable not set")
+    return key_str.encode()
+
+
+def encrypt_api_key(api_key: str) -> str:
+    """
+    Encrypt an API key using Fernet symmetric encryption.
+    Returns base64-encoded encrypted string.
+    """
+    if not api_key:
+        return None
+    
+    fernet = Fernet(get_encryption_key())
+    encrypted = fernet.encrypt(api_key.encode())
+    return base64.b64encode(encrypted).decode()
+
+
+def decrypt_api_key(encrypted_key: str) -> str:
+    """
+    Decrypt an encrypted API key.
+    Returns the original API key string.
+    """
+    if not encrypted_key:
+        return None
+    
+    fernet = Fernet(get_encryption_key())
+    encrypted_bytes = base64.b64decode(encrypted_key.encode())
+    decrypted = fernet.decrypt(encrypted_bytes)
+    return decrypted.decode()
 

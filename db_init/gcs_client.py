@@ -21,7 +21,7 @@ class GoogleCloudStorageClient:
     def __init__(self):
         self.client: Optional[storage.Client] = None
         # Strip "_local" suffix from bucket name if present
-        bucket_name = os.getenv("GCS_BUCKET_NAME", "budgethq_database_backups")
+        bucket_name = os.getenv("GCS_DB_BACKUP_BUCKET_NAME", "budgethq_database_backups")
         self.bucket_name = bucket_name.replace("_local", "") if bucket_name.endswith("_local") else bucket_name
         self._temp_credentials_file: Optional[str] = None
         self._initialize_service()

@@ -3,7 +3,6 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import List, Optional
 from .. import models, database, auth
-from ..tax_engine import calculate_salary_breakdown
 
 # Pydantic Models for Budget
 class CategoryBase(BaseModel):
@@ -23,21 +22,29 @@ router = APIRouter(prefix="/budget", tags=["budget"])
 async def get_budget(current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(database.get_db)):
     budget = db.query(models.Budget).filter(models.Budget.user_id == current_user.id).first()
 
+    # Get net salary from latest payslip
+    net_salary = None  # Default to None if no data exists
+    
+    latest_payslip = (
+        db.query(models.MonthlyPayslip)
+        .filter(models.MonthlyPayslip.user_id == current_user.id)
+        .order_by(models.MonthlyPayslip.year.desc(), models.MonthlyPayslip.month.desc())
+        .first()
+    )
+    
+    if latest_payslip:
+        net_salary = latest_payslip.net_pay
+    elif budget and budget.salary:
+        # Only use stored budget.salary if it's explicitly set and no payslip exists
+        net_salary = budget.salary
+
     if not budget:
-        return {}
-
-    # Get net salary from Salary table (now stored, not calculated on fly)
-    net_salary = budget.salary # Default to stored value (backward compatibility)
-
-    salary_record = db.query(models.Salary).filter(models.Salary.user_id == current_user.id).first()
-    if salary_record:
-        # Use the stored net_salary if available
-        if hasattr(salary_record, 'net_salary') and salary_record.net_salary:
-            net_salary = salary_record.net_salary
-        # Fallback to old calculation if needed for backward compatibility
-        elif salary_record.items:
-            breakdown = calculate_salary_breakdown(salary_record, salary_record.age or 30, save_to_db=False)
-            net_salary = breakdown["net_pay"]
+        return {
+            "salary": net_salary,
+            "needs": [],
+            "wants": [],
+            "savings": []
+        }
 
     needs = db.query(models.BudgetCategory).filter(models.BudgetCategory.budget_id == budget.id, models.BudgetCategory.type == 'needs').all()
     wants = db.query(models.BudgetCategory).filter(models.BudgetCategory.budget_id == budget.id, models.BudgetCategory.type == 'wants').all()
@@ -60,12 +67,9 @@ async def save_budget(data: BudgetData, current_user: models.User = Depends(auth
         db.commit()
         db.refresh(budget)
 
-
-    # Salary is now derived from the Salary module/table.
-    # We ignore the incoming salary value to prevent overwriting the calculated source of truth.
-    # budget.salary = data.salary
-    # Age is now only stored in Salary table, not Budget
-
+    # Salary is now derived from payslip data
+    # We ignore the incoming salary value
+    
     # Clear existing categories
     db.query(models.BudgetCategory).filter(models.BudgetCategory.budget_id == budget.id).delete()
 
