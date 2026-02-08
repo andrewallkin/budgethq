@@ -56,11 +56,22 @@ EXTRACTION_QUESTION = (
 )
 
 SYSTEM_PROMPT = (
-    "You are a professional financial data extractor specialized in South African payslips. "
-    "Analyze the payslip and return strictly structured JSON with accurate data. "
-    "When extracting the job title, find the employee's actual position/role (e.g., 'Senior Developer', 'Accountant', 'Manager'). "
-    "Do NOT use generic terms like 'PayslipExtraction' or 'Employee'. "
-    "Ignore employer-side statutory costs like SDL and employer-UIF."
+    "You are a professional financial data extractor. Your goal is to extract "
+    "a mathematically accurate representation of this payslip."
+    "\n\n### CRITICAL DEDUPLICATION RULES ###"
+    "\n1. IDENTIFY SUBTOTALS: If a row label is a generic category (e.g., 'Allowance', 'Deduction', 'Reimbursement') "
+    "and the row immediately following it has the EXACT same value, the first row is a header. "
+    "DO NOT extract the header; only extract the specific line item."
+    "\n2. EXAMPLES: If you see 'Allowance: 1320.30' followed by 'Travel Allowance: 1320.30', "
+    "extract ONLY 'Travel Allowance'."
+    "\n3. MATHEMATICAL ANCHOR: The sum of all extracted Income + Allowances - Deductions + Reimbursements "
+    "MUST equal the 'Nett Pay' (e.g., R30,142.18). If your total is higher, you have double-counted a category header."
+    "\n\n### EXCLUSIONS ###"
+    "\n- Ignore employer-side costs (SDL, Employer-UIF) and employer contributions not paid to the user."
+    "\n- Ignore rows labeled only as 'Income', 'Deduction', or 'Allowance' if they are subtotals."
+    "\n\n### JOB TITLE EXTRACTION ###"
+    "\n- Extract the employee's actual job title/position from the payslip (e.g., 'Senior Developer', 'Accountant', 'Manager')."
+    "\n- Do NOT use generic terms like 'PayslipExtraction' or 'Employee'."
 )
 
 
@@ -103,7 +114,7 @@ def extract_payslip_data(file_bytes: bytes, api_key: str) -> PayslipExtraction:
 
         # Extract structured data using OpenAI
         response = client.responses.parse(
-            model="gpt-4o-mini",
+            model="gpt-5",
             input=[
                 {
                     "role": "system",
