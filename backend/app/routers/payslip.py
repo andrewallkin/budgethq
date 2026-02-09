@@ -4,7 +4,7 @@ Payslip router for handling monthly payslip uploads, extraction, and management.
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import Response
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from typing import List, Optional
 from datetime import datetime
 from pydantic import BaseModel
@@ -399,17 +399,37 @@ async def confirm_payslip_upload(
             )
             db.add(payslip_item)
 
-        # Add additional income
-        for item in data.additional_income:
+        # Add additional income (support both description/amount and possible alternate keys)
+        for item in (data.additional_income or []):
+            desc = item.get("description") if isinstance(item, dict) else ""
+            amt = item.get("amount") if isinstance(item, dict) else 0
+            try:
+                amt = float(amt) if amt is not None else 0.0
+            except (TypeError, ValueError):
+                amt = 0.0
+            if desc is None:
+                desc = ""
             additional_income = PayslipAdditionalIncome(
                 payslip_id=payslip.id,
-                description=item["description"],
-                amount=item["amount"],
+                description=desc,
+                amount=amt,
             )
             db.add(additional_income)
 
         db.commit()
-        db.refresh(payslip)
+
+        # Re-load payslip with relationships so response includes items and additional_income
+        payslip = (
+            db.query(MonthlyPayslip)
+            .options(
+                selectinload(MonthlyPayslip.items),
+                selectinload(MonthlyPayslip.additional_income),
+            )
+            .filter(
+                MonthlyPayslip.id == payslip.id,
+            )
+            .one()
+        )
 
         logger.info(
             f"Successfully confirmed and saved payslip for user {current_user.id}, {data.year}-{data.month:02d}"
