@@ -354,13 +354,11 @@ export default function SalaryPage() {
     const isLatest = selectedMonth === latestMonth && selectedYear === latestYear
 
     // Calculate totals dynamically
-    const totalAdditionalIncome = additionalIncome.reduce((sum, item) => sum + item.amount, 0)
-    const totalIncome = payslipData.gross_salary + totalAdditionalIncome
+    const totalAdditionalIncome = additionalIncome.reduce((sum, item) => sum + (item.amount || 0), 0)
     const totalCompanyContrib = companyContributions.reduce((sum, item) => sum + item.amount, 0)
     const totalPersonalDeduct = personalDeductions.reduce((sum, item) => sum + item.amount, 0)
-    
-    // Calculate net pay dynamically based on all deductions
-    const calculatedNetPay = totalIncome - payslipData.paye - payslipData.uif_employee_portion - totalCompanyContrib - totalPersonalDeduct
+    // Total income (display) = base gross + company contributions (benefits) + additional income
+    const totalIncome = payslipData.gross_salary + totalCompanyContrib + totalAdditionalIncome
 
     return (
         <div className="max-w-6xl mx-auto space-y-8 p-4 lg:p-8">
@@ -530,6 +528,9 @@ export default function SalaryPage() {
 
                         <div className="p-6 space-y-4 text-sm">
                             <SummaryRow label="Gross Salary" value={payslipData.gross_salary} isGreen />
+                            {totalCompanyContrib > 0 && (
+                                <SummaryRow label="Company Contributions" value={totalCompanyContrib} isGreen />
+                            )}
                             <SummaryRow label="Additional Income" value={totalAdditionalIncome} isGreen />
                             
                             <div className="border-t border-gray-200 dark:border-gray-700 my-2"></div>
@@ -549,7 +550,7 @@ export default function SalaryPage() {
                             <div className="flex justify-between items-end">
                                 <span className="text-gray-500 font-medium">Net Pay</span>
                                 <span className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                                    {formatCurrency(calculatedNetPay)}
+                                    {formatCurrency(payslipData.net_pay)}
                                 </span>
                             </div>
                         </div>
@@ -886,7 +887,7 @@ function EditableItem({ item, onUpdate, onDelete }) {
                 className="flex-1 bg-transparent border-none focus:ring-2 focus:ring-blue-500/20 rounded px-2 py-1 font-medium text-gray-700 dark:text-gray-200 outline-none transition-all"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                onBlur={() => description !== item.description && onUpdate(item.id, 'description', description)}
+                onBlur={() => description !== item.description && onUpdate?.(item.id, 'description', description)}
                 onKeyDown={(e) => e.key === 'Enter' && e.target.blur()}
             />
             <div className="relative w-32">
@@ -896,7 +897,7 @@ function EditableItem({ item, onUpdate, onDelete }) {
                     className="w-full pl-6 pr-2 py-1 bg-transparent border-none focus:ring-2 focus:ring-blue-500/20 rounded font-mono text-gray-900 dark:text-white text-right outline-none transition-all"
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
-                    onBlur={() => amount !== item.amount && onUpdate(item.id, 'amount', amount)}
+                    onBlur={() => amount !== item.amount && onUpdate?.(item.id, 'amount', amount)}
                     onKeyDown={(e) => e.key === 'Enter' && e.target.blur()}
                 />
             </div>

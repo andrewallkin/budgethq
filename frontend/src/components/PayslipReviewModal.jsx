@@ -31,6 +31,11 @@ export default function PayslipReviewModal({ isOpen, onClose, onConfirm, extract
     const handleConfirm = async () => {
         setConfirming(true)
         try {
+            // Normalize list items so backend always gets { description, amount }
+            const normalizeItems = (list) => (list || []).map((item) => ({
+                description: item?.description ?? '',
+                amount: typeof item?.amount === 'number' ? item.amount : parseFloat(item?.amount) || 0,
+            }))
             const confirmedData = {
                 title,
                 company_name: companyName,
@@ -38,9 +43,9 @@ export default function PayslipReviewModal({ isOpen, onClose, onConfirm, extract
                 paye: parseFloat(paye),
                 uif_employee_portion: parseFloat(uif),
                 net_pay: parseFloat(netPay),  // Send user-confirmed net pay
-                company_contributions: companyContributions,
-                other_deductions: personalDeductions,
-                additional_income: additionalIncome,
+                company_contributions: normalizeItems(companyContributions),
+                other_deductions: normalizeItems(personalDeductions),
+                additional_income: normalizeItems(additionalIncome),
             }
             await onConfirm(confirmedData)
         } finally {
