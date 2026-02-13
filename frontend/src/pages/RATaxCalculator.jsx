@@ -24,36 +24,49 @@ export default function RATaxCalculator() {
 
     const fetchUserData = async () => {
         try {
-            // Fetch salary data for gross income
-            const salaryRes = await axios.get('/api/salary')
-            if (salaryRes.data) {
-                if (salaryRes.data.gross_income !== undefined) {
-                    setSalary(parseFloat(salaryRes.data.gross_income) || 0)
+            // Fetch salary and RA data in parallel so one failure doesn't block the other
+            const [salaryRes, raRes] = await Promise.allSettled([
+                axios.get('/api/salary'),
+                axios.get('/api/ra/default_user'),
+            ])
+
+            // Process salary response
+            if (salaryRes.status === 'fulfilled' && salaryRes.value?.data) {
+                const data = salaryRes.value.data
+                if (data.gross_income !== undefined) {
+                    setSalary(parseFloat(data.gross_income) || 0)
                 }
-                if (salaryRes.data.age !== undefined) {
-                    setAge(parseInt(salaryRes.data.age) || 30)
+                if (data.age !== undefined) {
+                    setAge(parseInt(data.age) || 30)
                 }
             } else {
-                // Fallback if data not available
                 setSalary(0)
                 setAge(30)
+                if (salaryRes.status === 'rejected') {
+                    console.error("Failed to fetch salary data", salaryRes.reason)
+                }
             }
 
-            // Fetch RA data from dedicated endpoint
-            const raRes = await axios.get('/api/ra/default_user')
+            // Process RA response
+            if (raRes.status === 'fulfilled' && raRes.value?.data) {
+                const data = raRes.value.data
+                const latestPortfolioValue = data?.latest_portfolio_value
+                const loadedRAValue =
+                    latestPortfolioValue !== undefined && latestPortfolioValue !== null
+                        ? latestPortfolioValue
+                        : (data?.current_value ?? 0)
+                const loadedRAContribution = data?.monthly_contribution ?? 0
 
-            // Even if no data comes back (new user), we init with 0.
-            // Prefer latest_portfolio_value from RA performance history, fall back to current_value for safety.
-            const latestPortfolioValue = raRes.data?.latest_portfolio_value
-            const loadedRAValue =
-                latestPortfolioValue !== undefined && latestPortfolioValue !== null
-                    ? latestPortfolioValue
-                    : (raRes.data?.current_value ?? 0)
-            const loadedRAContribution = raRes.data?.monthly_contribution ?? 0
-
-            setCurrentRAValue(loadedRAValue)
-            setMonthlyRAContribution(loadedRAContribution)
-            monthlyRAContributionRef.current = loadedRAContribution
+                setCurrentRAValue(loadedRAValue)
+                setMonthlyRAContribution(loadedRAContribution)
+                monthlyRAContributionRef.current = loadedRAContribution
+            } else {
+                setCurrentRAValue(0)
+                setMonthlyRAContribution(0)
+                if (raRes.status === 'rejected') {
+                    console.error("Failed to fetch RA data", raRes.reason)
+                }
+            }
 
             hasLoadedData.current = true
         } catch (err) {
@@ -235,7 +248,7 @@ export default function RATaxCalculator() {
                             readOnly
                             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white cursor-not-allowed"
                         />
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">From your budget settings</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">From your latest payslip (gross + company contributions + additional income)</p>
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
