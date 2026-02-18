@@ -112,8 +112,8 @@ export default function TransactionHistory({ refreshTrigger, onTransactionDelete
     const displayedTransactions = expanded ? transactions : transactions.slice(0, 5)
 
     return (
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
-            <div className="flex items-center justify-between mb-4">
+        <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
                     <History className="w-5 h-5 text-gray-500" />
                     Transaction History
@@ -123,8 +123,9 @@ export default function TransactionHistory({ refreshTrigger, onTransactionDelete
                 </span>
             </div>
 
-            <div className="overflow-x-auto">
-                <table className="w-full">
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2 sm:hidden">Swipe horizontally to see all columns</p>
+            <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+                <table className="w-full min-w-[600px]">
                     <thead>
                         <tr className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider border-b border-gray-200 dark:border-gray-700">
                             <th className="text-left py-3 px-2">Date</th>
@@ -222,7 +223,7 @@ export default function TransactionHistory({ refreshTrigger, onTransactionDelete
             {transactions.length > 5 && (
                 <button
                     onClick={() => setExpanded(!expanded)}
-                    className="mt-4 w-full flex items-center justify-center gap-2 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+                    className="mt-4 w-full flex items-center justify-center gap-2 py-2.5 min-h-[44px] text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
                 >
                     {expanded ? (
                         <>

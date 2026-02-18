@@ -39,7 +39,7 @@ export default function ConfirmModal({
             />
             
             {/* Modal */}
-            <div className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md mx-4 sm:mx-auto overflow-hidden animate-in fade-in zoom-in-95 duration-200">
                 {/* Close button */}
                 <button
                     onClick={onClose}
@@ -82,7 +82,7 @@ export default function ConfirmModal({
                     )}
 
                     {/* Buttons */}
-                    <div className="flex gap-3">
+                    <div className="flex flex-col-reverse sm:flex-row gap-3">
                         <button
                             onClick={onClose}
                             className="flex-1 px-4 py-2.5 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-medium"

@@ -154,10 +154,10 @@ export default function Settings() {
     }
 
     return (
-        <div className="max-w-2xl">
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-8">⚙️ Settings</h1>
+        <div className="max-w-2xl w-full">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-6 sm:mb-8">⚙️ Settings</h1>
 
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 sm:p-6">
                 <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Account Information</h2>
                 
                 {usernameError && (
@@ -177,7 +177,7 @@ export default function Settings() {
                         <label htmlFor="username" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                             Username
                         </label>
-                        <div className="flex gap-2">
+                        <div className="flex flex-col sm:flex-row gap-2">
                             <input
                                 id="username"
                                 type="text"

@@ -12,7 +12,7 @@ import {
 } from 'recharts'
 import { TrendingUp, Edit2, Trash2 } from 'lucide-react'
 import ConfirmModal from '../components/ConfirmModal'
-import { formatCurrency } from '../utils/numberFormatting'
+import { formatCurrency, formatDateSafe } from '../utils/numberFormatting'
 
 const TIME_RANGES = [
     { key: '1y', label: '1Y' },
@@ -254,10 +254,7 @@ export default function RAPerformance() {
         return d.toLocaleDateString('en-ZA', { month: 'short', year: 'numeric' })
     }
 
-    const formatTableMonth = (dateStr) => {
-        if (!dateStr) return ''
-        return new Date(dateStr + 'Z').toLocaleDateString('en-ZA', { month: 'short', year: 'numeric' })
-    }
+    const formatTableMonth = (dateStr) => formatDateSafe(dateStr, { month: 'short', year: 'numeric' })
 
     const hasChartData = chartData.length > 0 && chartData.some((d) => d.portfolio_value != null || d.cumulative_contributions > 0)
 
@@ -296,9 +293,9 @@ export default function RAPerformance() {
     }
 
     return (
-        <div className="space-y-8">
+        <div className="space-y-6 sm:space-y-8">
             <div>
-                <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">📈 RA Performance</h1>
+                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-2">📈 RA Performance</h1>
                 <p className="text-gray-600 dark:text-gray-400">
                     Track your retirement annuity portfolio value and contributions over time.
                 </p>
@@ -346,12 +343,12 @@ export default function RAPerformance() {
                         <TrendingUp className="w-5 h-5" />
                         Portfolio value & contributions over time
                     </h2>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                         {TIME_RANGES.map(({ key, label }) => (
                             <button
                                 key={key}
                                 onClick={() => setSelectedRange(key)}
-                                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                                className={`px-4 py-2.5 min-h-[44px] rounded-lg text-sm font-medium transition-colors ${
                                     selectedRange === key
                                         ? 'bg-blue-600 text-white'
                                         : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
@@ -428,7 +425,7 @@ export default function RAPerformance() {
                                 </p>
                             )}
                         </div>
-                        <div className="grid gap-4 md:grid-cols-3">
+                        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-3">
                             <div className="flex flex-col gap-1">
                                 <label className="text-xs font-medium text-gray-700 dark:text-gray-300">Month</label>
                                 <input
@@ -493,7 +490,7 @@ export default function RAPerformance() {
                 </div>
 
                 {monthlyRows.length > 0 ? (
-                    <div className="overflow-x-auto">
+                    <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 max-w-3xl mx-auto">
                         <table className="w-full text-sm text-left text-gray-700 dark:text-gray-300">
                             <thead>
                                 <tr className="border-b border-gray-200 dark:border-gray-600">

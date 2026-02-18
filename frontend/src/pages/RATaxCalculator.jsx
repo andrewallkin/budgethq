@@ -7,6 +7,7 @@ import { formatCurrency, formatNumber } from '../utils/numberFormatting'
 export default function RATaxCalculator() {
     const [loading, setLoading] = useState(true)
     const [isSaving, setIsSaving] = useState(false)
+    const [isMobile, setIsMobile] = useState(false)
     const hasLoadedData = useRef(false)
     const [hasUserEdited, setHasUserEdited] = useState(false)
     const [salary, setSalary] = useState(0)
@@ -146,6 +147,14 @@ export default function RATaxCalculator() {
         fetchUserData()
     }, [])
 
+    // Responsive chart margins for mobile
+    useEffect(() => {
+        const checkMobile = () => setIsMobile(window.innerWidth < 640)
+        checkMobile()
+        window.addEventListener('resize', checkMobile)
+        return () => window.removeEventListener('resize', checkMobile)
+    }, [])
+
     // Auto-save RA monthly contribution - only after user has explicitly edited data
     useEffect(() => {
         if (!hasLoadedData.current) return
@@ -225,9 +234,9 @@ export default function RATaxCalculator() {
     }
 
     return (
-        <div className="space-y-8">
-            <div className="flex justify-between items-center">
-                <h1 className="text-3xl font-bold text-gray-900 dark:text-white">🏦 Retirement Annuity Tax Calculator</h1>
+        <div className="space-y-6 sm:space-y-8">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">🏦 Retirement Annuity Tax Calculator</h1>
                 <div className="flex items-center gap-4">
                     <div className="text-sm text-gray-500 dark:text-gray-400">
                         {isSaving ? 'Saving...' : 'All changes saved'}
@@ -237,7 +246,7 @@ export default function RATaxCalculator() {
 
             <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
                 <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Input Details</h2>
-                <div className="grid md:grid-cols-4 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
                     <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                             Monthly Gross Salary (R)
@@ -308,7 +317,8 @@ export default function RATaxCalculator() {
                     </div>
 
                     {/* Results Table */}
-                    <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-x-auto">
+                    <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-2 sm:hidden">Swipe horizontally to see all scenarios</p>
                         <table className="w-full min-w-[800px]">
                             <thead>
                                 <tr className="border-b border-gray-200 dark:border-gray-700">
@@ -421,9 +431,9 @@ export default function RATaxCalculator() {
                     {growthData.length > 0 && (
                         <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
                             <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">RA Growth Projection</h2>
-                            <div className="h-96 w-full">
+                            <div className="h-96 w-full min-w-0">
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <LineChart data={growthData} margin={{ top: 5, right: 30, left: 120, bottom: 40 }}>
+                                    <LineChart data={growthData} margin={{ top: 5, right: 20, left: isMobile ? 50 : 120, bottom: 40 }}>
                                         <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" className="dark:stroke-gray-700" />
                                         <XAxis
                                             dataKey="year"
@@ -441,7 +451,8 @@ export default function RATaxCalculator() {
                                         <YAxis
                                             stroke="#6b7280"
                                             className="dark:stroke-gray-400"
-                                            tick={{ fill: '#6b7280', fontSize: 12 }}
+                                            width={isMobile ? 45 : 60}
+                                            tick={{ fill: '#6b7280', fontSize: isMobile ? 10 : 12 }}
                                             tickFormatter={(value) => {
                                                 if (value >= 1000000) {
                                                     return `R${(value / 1000000).toFixed(1)}M`
@@ -450,13 +461,13 @@ export default function RATaxCalculator() {
                                                 }
                                                 return `R${value}`
                                             }}
-                                            label={{
+                                            label={!isMobile ? {
                                                 value: 'Portfolio Value (R)',
                                                 angle: -90,
                                                 position: 'left',
                                                 offset: 10,
                                                 style: { fill: '#6b7280', fontSize: 14, textAnchor: 'middle' }
-                                            }}
+                                            } : undefined}
                                         />
                                         <Tooltip
                                             contentStyle={{

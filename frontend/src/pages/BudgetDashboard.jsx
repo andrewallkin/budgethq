@@ -190,13 +190,13 @@ export default function BudgetDashboard() {
     if (loading) return <div>Loading...</div>
 
     return (
-        <div className="space-y-8">
-            <div className="flex justify-between items-center">
-                <h1 className="text-3xl font-bold text-gray-900 dark:text-white">💰 Budget Dashboard</h1>
+        <div className="space-y-6 sm:space-y-8">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">💰 Budget Dashboard</h1>
                 <div className="flex items-center gap-4">
                     <button
                         onClick={() => setShowSavingsCalculator(true)}
-                        className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                        className="flex items-center gap-2 px-4 py-2.5 min-h-[44px] bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
                     >
                         <Calculator className="w-4 h-4" />
                         Savings Calculator
@@ -211,7 +211,7 @@ export default function BudgetDashboard() {
                 {/* Column 1: Income, Summary, and Budget Breakdown */}
                 <div className="md:col-span-1 space-y-6">
                     {/* Income Card */}
-                    <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
+                    <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
                         <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Income Details</h2>
                         <div className="space-y-4">
                             <div>
@@ -239,7 +239,7 @@ export default function BudgetDashboard() {
 
                     {/* Payslip & Tax Info Card */}
                     {latestPayslip && (
-                        <div className="bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 p-6 rounded-xl shadow-sm border border-purple-200 dark:border-purple-800 transition-colors">
+                        <div className="bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 p-4 sm:p-6 rounded-xl shadow-sm border border-purple-200 dark:border-purple-800 transition-colors">
                             <div className="flex justify-between items-center mb-4">
                                 <h2 className="text-lg font-semibold text-gray-900 dark:text-white">💰 Payslip Info</h2>
                                 <Link to="/salary" className="text-xs text-purple-600 dark:text-purple-400 hover:underline font-medium">
@@ -283,7 +283,7 @@ export default function BudgetDashboard() {
                     )}
 
                     {/* Summary Stats Card */}
-                    <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
+                    <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
                         <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Summary</h2>
                         <div className="space-y-4">
                             <SummaryItem label="Total Needs" value={totalNeeds} color="text-red-600 dark:text-red-400" percentage={calculatePercentage(totalNeeds)} />
@@ -302,9 +302,9 @@ export default function BudgetDashboard() {
 
                     {/* Overall Budget Breakdown Chart */}
                     {salary > 0 && (
-                        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
+                        <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
                             <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Budget Breakdown</h2>
-                            <div className="h-64">
+                            <div className="h-64 min-h-[200px]">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <PieChart>
                                         <Pie
@@ -329,9 +329,10 @@ export default function BudgetDashboard() {
                                             itemStyle={{ color: '#f3f4f6' }}
                                         />
                                         <Legend
+                                            layout="vertical"
                                             verticalAlign="bottom"
-                                            height={36}
-                                            wrapperStyle={{ color: '#9ca3af' }}
+                                            height={80}
+                                            wrapperStyle={{ color: '#9ca3af', overflow: 'hidden', maxWidth: '100%' }}
                                             formatter={(value, entry) => {
                                                 const data = chartData.find(d => d.name === value)
                                                 return data ? `${value} (${data.percentage.toFixed(1)}%)` : value
@@ -363,7 +364,7 @@ export default function BudgetDashboard() {
                             ))}
                         </div>
 
-                        <div className="p-6">
+                        <div className="p-4 sm:p-6">
                             <CategoryList
                                 type={activeTab}
                                 items={activeTab === 'needs' ? needs : activeTab === 'wants' ? wants : savings}
@@ -376,9 +377,9 @@ export default function BudgetDashboard() {
                     </div>
 
                     {/* Category Specific Chart */}
-                    <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
+                    <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
                         <h2 className="text-lg font-semibold mb-4 capitalize text-gray-900 dark:text-white">{activeTab} Breakdown</h2>
-                        <div className="h-80">
+                        <div className="h-64 sm:h-80 min-h-[200px]">
                             <ResponsiveContainer width="100%" height="100%">
                                 <PieChart>
                                     <Pie
@@ -420,9 +421,9 @@ export default function BudgetDashboard() {
                                     />
                                     <Legend
                                         layout="vertical"
-                                        verticalAlign="middle"
-                                        align="right"
-                                        wrapperStyle={{ paddingLeft: "20px", color: '#9ca3af' }}
+                                        verticalAlign="bottom"
+                                        height={80}
+                                        wrapperStyle={{ color: '#9ca3af', overflow: 'hidden', maxWidth: '100%' }}
                                         formatter={(value, entry, index) => {
                                             const categoryItems = activeTab === 'needs' ? needs : activeTab === 'wants' ? wants : savings
                                             const categoryTotal = categoryItems.reduce((sum, item) => sum + item.amount, 0)
@@ -535,32 +536,29 @@ const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => 
             >
                 <button
                     onClick={() => toggleGroup(groupName)}
-                    className="w-full flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+                    className="w-full flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors text-left"
                 >
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                         {isCollapsed ? (
-                            <ChevronRight className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                            <ChevronRight className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
                         ) : (
-                            <ChevronDown className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                            <ChevronDown className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
                         )}
-                        <Folder className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                        <Folder className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
                         <span className="font-semibold text-blue-900 dark:text-blue-100">{displayName}</span>
                         <span className="text-sm text-blue-700 dark:text-blue-300">
                             ({groupItems.length} {groupItems.length === 1 ? 'item' : 'items'})
                         </span>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-shrink-0">
                         <span className="font-semibold text-blue-900 dark:text-blue-100">
                             {formatCurrency(total, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </span>
                         <span className="text-sm text-blue-700 dark:text-blue-300">
-                        (
-                            {formatNumber(calculatePercentage(total), {
+                            ({formatNumber(calculatePercentage(total), {
                                 minimumFractionDigits: 1,
                                 maximumFractionDigits: 1,
-                            })}
-                            %
-                        )
+                            })}%)
                         </span>
                     </div>
                 </button>
@@ -580,28 +578,25 @@ const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => 
         const groupValue = editingGroup[index] !== undefined ? editingGroup[index] : (item.group || '')
 
         return (
-            <div key={index} className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors group">
+            <div key={index} className="flex flex-wrap sm:flex-nowrap items-center gap-2 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors group">
                 <input
                     type="text"
                     value={item.name}
                     onChange={(e) => onUpdate(index, 'name', e.target.value)}
-                    className="flex-1 bg-transparent border-none focus:ring-0 p-0 font-medium text-gray-900 dark:text-white"
+                    className="flex-1 min-w-[120px] w-full sm:w-auto bg-transparent border-none focus:ring-0 p-0 font-medium text-gray-900 dark:text-white break-words"
                 />
-                <div className="relative">
+                <div className="relative flex-1 sm:flex-initial min-w-0">
                     <input
                         type="text"
                         list={`group-edit-list-${type}-${index}`}
                         placeholder="Group..."
                         value={groupValue}
                         onChange={(e) => {
-                            // Update local state only, don't trigger onUpdate yet
                             setEditingGroup(prev => ({ ...prev, [index]: e.target.value }))
                         }}
                         onBlur={(e) => {
-                            // Save to parent state only when user leaves the field
                             const finalValue = e.target.value.trim() || null
                             onUpdate(index, 'group', finalValue)
-                            // Clear local editing state
                             setEditingGroup(prev => {
                                 const newState = { ...prev }
                                 delete newState[index]
@@ -609,12 +604,11 @@ const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => 
                             })
                         }}
                         onKeyDown={(e) => {
-                            // Save on Enter key as well
                             if (e.key === 'Enter') {
                                 e.target.blur()
                             }
                         }}
-                        className="w-32 px-2 py-1 text-xs bg-white dark:bg-gray-600 border border-gray-200 dark:border-gray-500 rounded text-gray-900 dark:text-white"
+                        className="w-full sm:w-32 px-2 py-1 text-xs bg-white dark:bg-gray-600 border border-gray-200 dark:border-gray-500 rounded text-gray-900 dark:text-white"
                     />
                     <datalist id={`group-edit-list-${type}-${index}`}>
                         {allGroups.map(group => (
@@ -622,7 +616,7 @@ const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => 
                         ))}
                     </datalist>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-shrink-0">
                     <span className="text-gray-500 dark:text-gray-400 text-sm">R</span>
                     <input
                         type="number"
@@ -640,7 +634,7 @@ const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => 
                 </div>
                 <button
                     onClick={() => onRemove(index)}
-                    className="text-gray-400 hover:text-red-500 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="p-2 -m-2 text-gray-400 hover:text-red-500 dark:hover:text-red-400 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
                 >
                     <Trash2 className="w-4 h-4" />
                 </button>
@@ -650,16 +644,16 @@ const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => 
 
     return (
         <div className="space-y-3">
-            <div className="flex gap-2 flex-wrap">
+            <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2">
                 <input
                     type="text"
                     placeholder="Category name..."
                     value={newName}
                     onChange={(e) => setNewName(e.target.value)}
                     onKeyPress={handleKeyPress}
-                    className="flex-1 min-w-[150px] px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors"
+                    className="flex-1 min-w-0 w-full sm:min-w-[150px] px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors"
                 />
-                <div className="flex items-center gap-2 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700">
+                <div className="flex items-center gap-2 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 sm:w-auto w-full">
                     <span className="text-gray-500 dark:text-gray-400 text-sm">R</span>
                     <input
                         type="number"
@@ -668,10 +662,10 @@ const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => 
                         onChange={(e) => setNewAmount(e.target.value.replace(/,/g, ''))}
                         onKeyPress={handleKeyPress}
                         onFocus={(e) => e.target.select()}
-                        className="w-24 bg-transparent border-none focus:ring-0 p-0 text-right text-gray-900 dark:text-white"
+                        className="w-24 min-w-0 flex-1 sm:flex-initial bg-transparent border-none focus:ring-0 p-0 text-right text-gray-900 dark:text-white"
                     />
                 </div>
-                <div className="relative">
+                <div className="relative w-full sm:w-auto">
                     <input
                         type="text"
                         list={`group-list-${type}`}
@@ -679,7 +673,7 @@ const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => 
                         value={newGroup}
                         onChange={(e) => setNewGroup(e.target.value)}
                         onKeyPress={handleKeyPress}
-                        className="w-40 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors"
+                        className="w-full sm:w-40 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors"
                     />
                     <datalist id={`group-list-${type}`}>
                         {allGroups.map(group => (
@@ -689,7 +683,7 @@ const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => 
                 </div>
                 <button
                     onClick={handleAdd}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-1"
+                    className="px-4 py-2.5 min-h-[44px] bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-1"
                 >
                     <Plus className="w-4 h-4" />
                     Add

@@ -282,7 +282,7 @@ export default function PortfolioChart() {
                     Portfolio Performance
                 </h2>
 
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3">
                     {/* Refresh button */}
                     <button
                         onClick={fetchHistory}
@@ -307,7 +307,7 @@ export default function PortfolioChart() {
                     </button>
 
                     {/* Time range selector */}
-                    <div className="flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+                    <div className="flex flex-wrap bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
                         {TIME_RANGES.map(({ key, label }) => (
                             <button
                                 key={key}
@@ -379,7 +379,7 @@ export default function PortfolioChart() {
 
             {/* Chart */}
             {!loading && !error && chartData.length > 0 && (
-                <div className="h-80">
+                <div className="h-64 sm:h-80 min-h-[200px]">
                     <ResponsiveContainer width="100%" height="100%">
                         <AreaChart
                             data={processedData}

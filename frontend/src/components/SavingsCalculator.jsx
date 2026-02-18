@@ -50,9 +50,9 @@ export default function SavingsCalculator({ isOpen, onClose }) {
     if (!isOpen) return null
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-                <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-6 flex justify-between items-center">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-4xl w-full mx-4 max-h-[85vh] overflow-hidden flex flex-col">
+                <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-4 sm:p-6 flex justify-between items-center shrink-0">
                     <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Savings Calculator</h2>
                     <button
                         onClick={onClose}
@@ -62,9 +62,9 @@ export default function SavingsCalculator({ isOpen, onClose }) {
                     </button>
                 </div>
 
-                <div className="p-6 space-y-6">
+                <div className="p-4 sm:p-6 space-y-6 overflow-y-auto">
                     {/* Input Fields */}
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                 Initial Amount (R)
@@ -141,7 +141,7 @@ export default function SavingsCalculator({ isOpen, onClose }) {
                     </div>
 
                     {/* Results Summary */}
-                    <div className="grid grid-cols-3 gap-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
                         <div>
                             <div className="text-sm text-gray-600 dark:text-gray-400">Projected Final Amount</div>
                             <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">

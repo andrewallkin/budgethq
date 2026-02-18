@@ -15,7 +15,7 @@ import ConfirmModal from '../components/ConfirmModal'
 import PortfolioChart from '../components/PortfolioChart'
 import GainLossIndicator from '../components/GainLossIndicator'
 import HoldingDetailsModal from '../components/HoldingDetailsModal'
-import { formatCurrency, formatNumber } from '../utils/numberFormatting'
+import { formatCurrency, formatNumber, formatDateSafe } from '../utils/numberFormatting'
 
 
 export default function TFSAPortfolio() {
@@ -479,10 +479,10 @@ export default function TFSAPortfolio() {
     if (loading) return <div className="p-8 text-center text-gray-500">Loading...</div>
 
     return (
-        <div className="space-y-8">
+        <div className="space-y-6 sm:space-y-8">
             {/* Header */}
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                <h1 className="text-3xl font-bold text-gray-900 dark:text-white">📈 TFSA Portfolio</h1>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">📈 TFSA Portfolio</h1>
                 <div className="flex flex-wrap items-center gap-3">
                     <PriceRefreshIndicator onRefresh={fetchHoldings} />
                     <div className="flex items-center gap-2">
@@ -512,8 +512,8 @@ export default function TFSAPortfolio() {
             </div>
 
             {/* Portfolio Total Value & Performance */}
-            <div className="bg-gradient-to-r from-emerald-500 to-teal-600 p-6 rounded-xl shadow-lg">
-                <div className="grid md:grid-cols-3 gap-6">
+            <div className="bg-gradient-to-r from-emerald-500 to-teal-600 p-4 sm:p-6 rounded-xl shadow-lg">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div>
                         <h2 className="text-sm font-medium text-emerald-100 uppercase tracking-wide">Portfolio Value</h2>
                         <p className="mt-2 text-4xl font-bold text-white">
@@ -551,7 +551,7 @@ export default function TFSAPortfolio() {
             <PortfolioChart />
 
             {/* TFSA Contribution Tracking */}
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
+            <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
                 <div className="flex items-center justify-between mb-4">
                     <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
                         <PiggyBank className="w-5 h-5 text-blue-500" />
@@ -562,7 +562,7 @@ export default function TFSAPortfolio() {
                     </span>
                 </div>
 
-                <div className="grid md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* Annual Contributions */}
                     <div className="space-y-3">
                         <div className="flex items-center justify-between">
@@ -572,7 +572,7 @@ export default function TFSAPortfolio() {
                             </span>
                         </div>
 
-                        <div className="flex gap-2 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                        <div className="flex flex-col sm:flex-row gap-2 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                             <div className="flex items-center flex-1">
                                 <span className="mr-1 text-gray-500 dark:text-gray-400 text-sm">R</span>
                                 <input
@@ -606,7 +606,7 @@ export default function TFSAPortfolio() {
                                             {formatCurrency(deposit.amount, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                                         </span>
                                             <span className="text-gray-500 dark:text-gray-400 text-xs">
-                                                {new Date(deposit.date).toLocaleDateString('en-ZA')}
+                                                {formatDateSafe(deposit.date, { day: 'numeric', month: 'short', year: 'numeric' })}
                                             </span>
                                         </div>
                                         <button
@@ -653,7 +653,7 @@ export default function TFSAPortfolio() {
                             </span>
                         </div>
 
-                        <div className="flex gap-2 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                        <div className="flex flex-col sm:flex-row gap-2 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                             <input
                                 type="text"
                                 value={newHistoricalYear}
@@ -737,9 +737,10 @@ export default function TFSAPortfolio() {
 
             {/* Holdings Table */}
             {holdings.length > 0 && (
-                <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
+                <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
                     <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Holdings</h2>
-                    <div className="overflow-x-auto">
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-2 sm:hidden">Swipe horizontally to see all columns</p>
+                    <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
                         <table className="w-full">
                             <thead>
                                 <tr className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider border-b border-gray-200 dark:border-gray-700">
@@ -993,7 +994,7 @@ export default function TFSAPortfolio() {
 
             {/* Rebalancing */}
             {rebalanceData && holdings.length > 0 && (
-                <div className="grid md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
                         <div className="flex justify-between items-center mb-4">
                             <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Rebalancing Plan</h2>
@@ -1035,15 +1036,15 @@ export default function TFSAPortfolio() {
 
                     <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
                         <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Allocation Overview</h2>
-                        <div className="h-64">
-                            <ResponsiveContainer width="100%" height="100%">
+                        <div className="min-h-[280px] sm:h-64">
+                            <ResponsiveContainer width="100%" height={280}>
                                 <PieChart>
                                     <Pie
                                         data={currentAllocationData}
                                         cx="50%"
-                                        cy="50%"
-                                        innerRadius={60}
-                                        outerRadius={80}
+                                        cy="45%"
+                                        innerRadius={50}
+                                        outerRadius={70}
                                         paddingAngle={2}
                                         dataKey="value"
                                     >
@@ -1058,7 +1059,12 @@ export default function TFSAPortfolio() {
                                         contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#f3f4f6' }}
                                         itemStyle={{ color: '#f3f4f6' }}
                                     />
-                                    <Legend layout="vertical" verticalAlign="middle" align="right" wrapperStyle={{ paddingLeft: "20px", color: '#9ca3af' }} />
+                                    <Legend
+                                        layout="horizontal"
+                                        verticalAlign="bottom"
+                                        height={60}
+                                        wrapperStyle={{ overflow: 'hidden', maxWidth: '100%', color: '#9ca3af' }}
+                                    />
                                 </PieChart>
                             </ResponsiveContainer>
                         </div>
