@@ -58,9 +58,21 @@ export const formatPercent = (value, options) => {
  */
 export const formatDateSafe = (dateStr, options = { month: 'short', year: 'numeric' }) => {
     if (dateStr == null || dateStr === '') return '—'
-    const normalized = dateStr.includes('Z') ? dateStr : dateStr + 'T00:00:00'
+    const normalized = dateStr.includes('T') ? dateStr : dateStr.replace(/Z$/, '') + 'T00:00:00'
     const d = new Date(normalized)
     if (isNaN(d.getTime())) return '—'
-    return d.toLocaleDateString(DEFAULT_LOCALE, options)
+    try {
+        return d.toLocaleDateString(DEFAULT_LOCALE, options)
+    } catch {
+        // Fallback for mobile browsers where toLocaleDateString may fail
+        const y = d.getFullYear()
+        const m = String(d.getMonth() + 1).padStart(2, '0')
+        const day = String(d.getDate()).padStart(2, '0')
+        if (options.day !== undefined && options.month === 'short') {
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+            return `${day} ${months[d.getMonth()]} ${y}`
+        }
+        return `${y}-${m}-${day}`
+    }
 }
 

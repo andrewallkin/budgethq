@@ -1,9 +1,9 @@
-import { X, TrendingUp, TrendingDown, Target, Calendar, Edit2, Check, X as XIcon } from 'lucide-react'
+import { X, TrendingUp, TrendingDown, Target, Calendar, Edit2, Check, X as XIcon, Trash2 } from 'lucide-react'
 import GainLossIndicator from './GainLossIndicator'
 import { useState } from 'react'
 import axios from 'axios'
 
-export default function HoldingDetailsModal({ isOpen, onClose, holding, onHoldingUpdate, totalPortfolioValue }) {
+export default function HoldingDetailsModal({ isOpen, onClose, holding, onHoldingUpdate, totalPortfolioValue, onEdit, onBuySell, onDelete }) {
     const [isEditingCostBasis, setIsEditingCostBasis] = useState(false)
     const [editedCostBasis, setEditedCostBasis] = useState('')
     const [isSaving, setIsSaving] = useState(false)
@@ -97,7 +97,7 @@ export default function HoldingDetailsModal({ isOpen, onClose, holding, onHoldin
                 <div className="p-6 space-y-6">
                     {/* Current Value & Performance */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="bg-gray-50 dark:bg-gray-700/50 p-6 rounded-lg">
+                        <div className="bg-gray-50 dark:bg-gray-700/50 p-6 rounded-lg text-left">
                             <div className="flex items-center gap-2 mb-3">
                                 <span className="text-lg">💰</span>
                                 <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Current Value</span>
@@ -107,7 +107,7 @@ export default function HoldingDetailsModal({ isOpen, onClose, holding, onHoldin
                             </div>
                         </div>
 
-                        <div className="bg-gray-50 dark:bg-gray-700/50 p-6 rounded-lg">
+                        <div className="bg-gray-50 dark:bg-gray-700/50 p-6 rounded-lg text-left">
                             <div className="flex items-center gap-2 mb-3">
                                 {isPositive ? (
                                     <TrendingUp className="w-5 h-5 text-green-500" />
@@ -126,6 +126,39 @@ export default function HoldingDetailsModal({ isOpen, onClose, holding, onHoldin
                             </div>
                         </div>
                     </div>
+
+                    {/* Action buttons - visible on mobile when table actions are hidden */}
+                    {(onEdit || onBuySell || onDelete) && (
+                        <div className="flex flex-wrap gap-2 sm:hidden">
+                            {onEdit && (
+                                <button
+                                    onClick={() => { onClose(); onEdit(holding); }}
+                                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                                >
+                                    <Edit2 className="w-4 h-4" />
+                                    Edit Target
+                                </button>
+                            )}
+                            {onBuySell && (
+                                <button
+                                    onClick={() => { onClose(); onBuySell(holding); }}
+                                    className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
+                                >
+                                    <TrendingUp className="w-4 h-4" />
+                                    Buy/Sell
+                                </button>
+                            )}
+                            {onDelete && (
+                                <button
+                                    onClick={() => { onClose(); onDelete(holding); }}
+                                    className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium"
+                                >
+                                    <Trash2 className="w-4 h-4" />
+                                    Delete
+                                </button>
+                            )}
+                        </div>
+                    )}
 
                     {/* Detailed Information */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -192,6 +225,7 @@ export default function HoldingDetailsModal({ isOpen, onClose, holding, onHoldin
                                                 <span className="mr-1 text-gray-500 dark:text-gray-400 text-sm">R</span>
                                                 <input
                                                     type="number"
+                                                    inputMode="decimal"
                                                     value={editedCostBasis}
                                                     onChange={(e) => setEditedCostBasis(e.target.value)}
                                                     className="w-24 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white"

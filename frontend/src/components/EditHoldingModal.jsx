@@ -104,6 +104,7 @@ export default function EditHoldingModal({ isOpen, onClose, holding, onSuccess }
                         <div className="flex items-center gap-2">
                             <input
                                 type="number"
+                                inputMode="decimal"
                                 step="0.1"
                                 min="0"
                                 max="100"

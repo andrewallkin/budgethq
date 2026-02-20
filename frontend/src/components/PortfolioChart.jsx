@@ -257,7 +257,7 @@ export default function PortfolioChart() {
 
     if (chartData.length === 0 && !loading) {
         return (
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
+            <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-600 transition-colors">
                 <div className="flex items-center justify-between mb-4">
                     <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
                         <TrendingUp className="w-5 h-5 text-emerald-500" />
@@ -274,7 +274,7 @@ export default function PortfolioChart() {
     }
 
     return (
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
+        <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-600 transition-colors">
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
@@ -326,30 +326,30 @@ export default function PortfolioChart() {
 
             {/* Summary cards */}
             {summary && (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                    <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4 mb-6">
+                    <div className="p-2 sm:p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                         <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Period Start</p>
-                        <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                        <p className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
                             {formatCurrency(summary.period_start_value)}
                         </p>
                     </div>
-                    <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                    <div className="p-2 sm:p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                         <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Period End</p>
-                        <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                        <p className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
                             {formatCurrency(summary.period_end_value)}
                         </p>
                     </div>
-                    <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                    <div className="p-2 sm:p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                         <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Change</p>
-                        <p className={`text-lg font-semibold flex items-center gap-1 ${summary.period_change >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
+                        <p className={`text-base sm:text-lg font-semibold flex items-center gap-1 ${summary.period_change >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
                             }`}>
                             {summary.period_change >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
                             {summary.period_change >= 0 ? '+' : ''}{formatCurrency(summary.period_change)}
                         </p>
                     </div>
-                    <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                    <div className="p-2 sm:p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                         <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Return</p>
-                        <p className={`text-lg font-semibold ${summary.period_change_percent >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
+                        <p className={`text-base sm:text-lg font-semibold ${summary.period_change_percent >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
                             }`}>
                             {summary.period_change_percent >= 0 ? '+' : ''}{summary.period_change_percent.toFixed(2)}%
                         </p>
@@ -383,7 +383,7 @@ export default function PortfolioChart() {
                     <ResponsiveContainer width="100%" height="100%">
                         <AreaChart
                             data={processedData}
-                            margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                            margin={{ top: 10, right: 5, left: 0, bottom: 0 }}
                         >
                             <defs>
                                 <linearGradient id="colorContributions" x1="0" y1="0" x2="0" y2="1">
