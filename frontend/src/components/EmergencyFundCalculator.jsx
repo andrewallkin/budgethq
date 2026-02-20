@@ -98,7 +98,7 @@ export default function EmergencyFundCalculator({ needsTotal, emergencyFundData,
     }, [currentFund, targetAmount, progress, monthsCovered, targetMonths, targetType])
 
     return (
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
+        <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
             <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Emergency Fund</h2>
 
             <div className="space-y-4">
@@ -170,7 +170,7 @@ export default function EmergencyFundCalculator({ needsTotal, emergencyFundData,
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         Goal Type
                     </label>
-                    <div className="flex gap-4">
+                    <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                         <label className="flex items-center">
                             <input
                                 type="radio"

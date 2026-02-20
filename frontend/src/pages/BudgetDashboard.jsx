@@ -1,6 +1,35 @@
 import { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts'
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
+
+function useIsMobile(breakpoint = 640) {
+    const [isMobile, setIsMobile] = useState(false)
+    useEffect(() => {
+        const mq = window.matchMedia(`(min-width: ${breakpoint}px)`)
+        const handler = () => setIsMobile(!mq.matches)
+        handler()
+        mq.addEventListener('change', handler)
+        return () => mq.removeEventListener('change', handler)
+    }, [breakpoint])
+    return isMobile
+}
+
+function ChartLegend({ payload, formatter }) {
+    if (!payload || payload.length === 0) return null
+    return (
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-4 min-h-[60px] text-gray-500 dark:text-gray-400 text-sm">
+            {payload.map((entry, index) => (
+                <div key={index} className="flex items-center gap-2">
+                    <span
+                        className="w-3 h-3 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: entry.color }}
+                    />
+                    <span>{formatter ? formatter(entry.value, entry, index) : entry.value}</span>
+                </div>
+            ))}
+        </div>
+    )
+}
 import { Plus, Trash2, TrendingUp, ChevronDown, ChevronRight, Folder, Calculator } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import SavingsCalculator from '../components/SavingsCalculator'
@@ -30,6 +59,7 @@ const CATEGORY_COLORS = [
 ]
 
 export default function BudgetDashboard() {
+    const isMobile = useIsMobile(640)
     const [loading, setLoading] = useState(true)
     const [salary, setSalary] = useState(0)
     const [needs, setNeeds] = useState([])
@@ -190,13 +220,13 @@ export default function BudgetDashboard() {
     if (loading) return <div>Loading...</div>
 
     return (
-        <div className="space-y-8">
-            <div className="flex justify-between items-center">
-                <h1 className="text-3xl font-bold text-gray-900 dark:text-white">💰 Budget Dashboard</h1>
+        <div className="space-y-6 sm:space-y-8">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">💰 Budget Dashboard</h1>
                 <div className="flex items-center gap-4">
                     <button
                         onClick={() => setShowSavingsCalculator(true)}
-                        className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                        className="flex items-center gap-2 px-4 py-2.5 min-h-[44px] bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
                     >
                         <Calculator className="w-4 h-4" />
                         Savings Calculator
@@ -207,11 +237,25 @@ export default function BudgetDashboard() {
                 </div>
             </div>
 
+            {/* Summary bar (mobile only) - non-sticky to avoid overlap with charts */}
+            <div className="lg:hidden -mx-4 px-4 py-2 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 shadow-sm">
+                <div className="flex justify-between items-center text-sm">
+                    <span className="text-gray-600 dark:text-gray-400">Remaining</span>
+                    <span className={`font-semibold ${remaining >= 0 ? 'text-gray-900 dark:text-white' : 'text-red-600 dark:text-red-400'}`}>
+                        {formatCurrency(remaining, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                </div>
+                <div className="flex justify-between items-center text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    <span>Allocated: {formatCurrency(totalSpent, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
+                    <span>Income: {formatCurrency(netIncome, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
+                </div>
+            </div>
+
             <div className="grid md:grid-cols-3 gap-6">
                 {/* Column 1: Income, Summary, and Budget Breakdown */}
                 <div className="md:col-span-1 space-y-6">
                     {/* Income Card */}
-                    <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
+                    <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
                         <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Income Details</h2>
                         <div className="space-y-4">
                             <div>
@@ -226,7 +270,7 @@ export default function BudgetDashboard() {
                                         type="text"
                                         value={formatCurrency(salary, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                         readOnly
-                                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white cursor-not-allowed"
+                                        className="w-full px-3 py-3 min-h-[44px] border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white cursor-not-allowed"
                                     />
                                 ) : (
                                     <div className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 italic">
@@ -239,7 +283,7 @@ export default function BudgetDashboard() {
 
                     {/* Payslip & Tax Info Card */}
                     {latestPayslip && (
-                        <div className="bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 p-6 rounded-xl shadow-sm border border-purple-200 dark:border-purple-800 transition-colors">
+                        <div className="bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 p-4 sm:p-6 rounded-xl shadow-sm border border-purple-200 dark:border-purple-800 transition-colors">
                             <div className="flex justify-between items-center mb-4">
                                 <h2 className="text-lg font-semibold text-gray-900 dark:text-white">💰 Payslip Info</h2>
                                 <Link to="/salary" className="text-xs text-purple-600 dark:text-purple-400 hover:underline font-medium">
@@ -283,36 +327,38 @@ export default function BudgetDashboard() {
                     )}
 
                     {/* Summary Stats Card */}
-                    <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
+                    <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
                         <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Summary</h2>
                         <div className="space-y-4">
                             <SummaryItem label="Total Needs" value={totalNeeds} color="text-red-600 dark:text-red-400" percentage={calculatePercentage(totalNeeds)} />
                             <SummaryItem label="Total Wants" value={totalWants} color="text-blue-600 dark:text-blue-400" percentage={calculatePercentage(totalWants)} />
                             <SummaryItem label="Total Savings" value={totalSavings} color="text-green-600 dark:text-green-400" percentage={calculatePercentage(totalSavings)} />
-                            <div className="pt-4 border-t border-gray-100 dark:border-gray-700">
-                                <SummaryItem
-                                    label="Remaining"
-                                    value={remaining}
-                                    color={remaining >= 0 ? "text-gray-900 dark:text-white" : "text-red-600 dark:text-red-400"}
-                                    percentage={calculatePercentage(Math.max(0, remaining))}
-                                />
-                            </div>
+                            {!isMobile && (
+                                <div className="pt-4 border-t border-gray-100 dark:border-gray-700">
+                                    <SummaryItem
+                                        label="Remaining"
+                                        value={remaining}
+                                        color={remaining >= 0 ? "text-gray-900 dark:text-white" : "text-red-600 dark:text-red-400"}
+                                        percentage={calculatePercentage(Math.max(0, remaining))}
+                                    />
+                                </div>
+                            )}
                         </div>
                     </div>
 
                     {/* Overall Budget Breakdown Chart */}
                     {salary > 0 && (
-                        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
+                        <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors scroll-mt-32 lg:scroll-mt-0">
                             <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Budget Breakdown</h2>
-                            <div className="h-64">
-                                <ResponsiveContainer width="100%" height="100%">
+                            <div>
+                                <ResponsiveContainer width="100%" height={isMobile ? 180 : 220}>
                                     <PieChart>
                                         <Pie
                                             data={chartData}
                                             cx="50%"
                                             cy="50%"
-                                            innerRadius={60}
-                                            outerRadius={80}
+                                            innerRadius={isMobile ? 35 : 60}
+                                            outerRadius={isMobile ? 50 : 80}
                                             paddingAngle={5}
                                             dataKey="value"
                                         >
@@ -328,17 +374,18 @@ export default function BudgetDashboard() {
                                             contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#f3f4f6' }}
                                             itemStyle={{ color: '#f3f4f6' }}
                                         />
-                                        <Legend
-                                            verticalAlign="bottom"
-                                            height={36}
-                                            wrapperStyle={{ color: '#9ca3af' }}
-                                            formatter={(value, entry) => {
-                                                const data = chartData.find(d => d.name === value)
-                                                return data ? `${value} (${data.percentage.toFixed(1)}%)` : value
-                                            }}
-                                        />
                                     </PieChart>
                                 </ResponsiveContainer>
+                                <ChartLegend
+                                    payload={chartData.map((d, i) => ({
+                                        value: d.name,
+                                        color: COLORS[d.name],
+                                    }))}
+                                    formatter={(value) => {
+                                        const data = chartData.find(d => d.name === value)
+                                        return data ? `${value} (${data.percentage.toFixed(1)}%)` : value
+                                    }}
+                                />
                             </div>
                         </div>
                     )}
@@ -353,8 +400,8 @@ export default function BudgetDashboard() {
                                 <button
                                     key={tab}
                                     onClick={() => setActiveTab(tab)}
-                                    className={`flex-1 py-4 text-sm font-medium capitalize transition-colors ${activeTab === tab
-                                        ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
+                                    className={`flex-1 py-4 text-sm font-medium capitalize transition-colors rounded-t-lg ${activeTab === tab
+                                        ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
                                         : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'
                                         }`}
                                 >
@@ -363,7 +410,7 @@ export default function BudgetDashboard() {
                             ))}
                         </div>
 
-                        <div className="p-6">
+                        <div className="p-4 sm:p-6">
                             <CategoryList
                                 type={activeTab}
                                 items={activeTab === 'needs' ? needs : activeTab === 'wants' ? wants : savings}
@@ -376,66 +423,63 @@ export default function BudgetDashboard() {
                     </div>
 
                     {/* Category Specific Chart */}
-                    <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
+                    <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors scroll-mt-32 lg:scroll-mt-0">
                         <h2 className="text-lg font-semibold mb-4 capitalize text-gray-900 dark:text-white">{activeTab} Breakdown</h2>
-                        <div className="h-80">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <PieChart>
-                                    <Pie
-                                        data={(() => {
-                                            const categoryItems = activeTab === 'needs' ? needs : activeTab === 'wants' ? wants : savings
-                                            const categoryTotal = categoryItems.reduce((sum, item) => sum + item.amount, 0)
-                                            return categoryItems
-                                                .map(item => ({
-                                                    name: item.name,
-                                                    value: item.amount,
-                                                    percentage: categoryTotal > 0 ? (item.amount / categoryTotal) * 100 : 0
-                                                }))
-                                                .filter(d => d.value > 0)
-                                        })()}
-                                        cx="50%"
-                                        cy="50%"
-                                        innerRadius={60}
-                                        outerRadius={80}
-                                        paddingAngle={5}
-                                        dataKey="value"
-                                    >
-                                        {(() => {
-                                            const categoryItems = activeTab === 'needs' ? needs : activeTab === 'wants' ? wants : savings
-                                            return categoryItems
-                                                .map(item => ({ name: item.name, value: item.amount }))
-                                                .filter(d => d.value > 0)
-                                                .map((entry, index) => (
-                                                    <Cell key={`cell-${index}`} fill={CATEGORY_COLORS[index % CATEGORY_COLORS.length]} stroke="none" />
-                                                ))
-                                        })()}
-                                    </Pie>
-                                    <Tooltip
-                                        formatter={(value, name, props) => {
-                                            const percentage = props.payload.percentage || 0
-                                            return [`R ${value.toFixed(2)} (${percentage.toFixed(1)}%)`, name]
-                                        }}
-                                        contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#f3f4f6' }}
-                                        itemStyle={{ color: '#f3f4f6' }}
-                                    />
-                                    <Legend
-                                        layout="vertical"
-                                        verticalAlign="middle"
-                                        align="right"
-                                        wrapperStyle={{ paddingLeft: "20px", color: '#9ca3af' }}
-                                        formatter={(value, entry, index) => {
-                                            const categoryItems = activeTab === 'needs' ? needs : activeTab === 'wants' ? wants : savings
-                                            const categoryTotal = categoryItems.reduce((sum, item) => sum + item.amount, 0)
-                                            const item = categoryItems.find(i => i.name === value)
-                                            if (item && categoryTotal > 0) {
-                                                const percentage = (item.amount / categoryTotal) * 100
-                                                return `${value} (${percentage.toFixed(1)}%)`
-                                            }
-                                            return value
-                                        }}
-                                    />
-                                </PieChart>
-                            </ResponsiveContainer>
+                        <div>
+                            {(() => {
+                                const categoryItems = activeTab === 'needs' ? needs : activeTab === 'wants' ? wants : savings
+                                const categoryTotal = categoryItems.reduce((sum, item) => sum + item.amount, 0)
+                                const categoryChartData = categoryItems
+                                    .map(item => ({
+                                        name: item.name,
+                                        value: item.amount,
+                                        percentage: categoryTotal > 0 ? (item.amount / categoryTotal) * 100 : 0
+                                    }))
+                                    .filter(d => d.value > 0)
+                                return (
+                                    <>
+                                        <ResponsiveContainer width="100%" height={isMobile ? 180 : 250}>
+                                            <PieChart>
+                                                <Pie
+                                                    data={categoryChartData}
+                                                    cx="50%"
+                                                    cy="50%"
+                                                    innerRadius={isMobile ? 35 : 60}
+                                                    outerRadius={isMobile ? 50 : 80}
+                                                    paddingAngle={5}
+                                                    dataKey="value"
+                                                >
+                                                    {categoryChartData.map((entry, index) => (
+                                                        <Cell key={`cell-${index}`} fill={CATEGORY_COLORS[index % CATEGORY_COLORS.length]} stroke="none" />
+                                                    ))}
+                                                </Pie>
+                                                <Tooltip
+                                                    formatter={(value, name, props) => {
+                                                        const percentage = props.payload.percentage || 0
+                                                        return [`R ${value.toFixed(2)} (${percentage.toFixed(1)}%)`, name]
+                                                    }}
+                                                    contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#f3f4f6' }}
+                                                    itemStyle={{ color: '#f3f4f6' }}
+                                                />
+                                            </PieChart>
+                                        </ResponsiveContainer>
+                                        <ChartLegend
+                                            payload={categoryChartData.map((d, i) => ({
+                                                value: d.name,
+                                                color: CATEGORY_COLORS[i % CATEGORY_COLORS.length],
+                                            }))}
+                                            formatter={(value) => {
+                                                const item = categoryItems.find(i => i.name === value)
+                                                if (item && categoryTotal > 0) {
+                                                    const percentage = (item.amount / categoryTotal) * 100
+                                                    return `${value} (${percentage.toFixed(1)}%)`
+                                                }
+                                                return value
+                                            }}
+                                        />
+                                    </>
+                                )
+                            })()}
                         </div>
                     </div>
 
@@ -535,37 +579,34 @@ const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => 
             >
                 <button
                     onClick={() => toggleGroup(groupName)}
-                    className="w-full flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+                    className="w-full flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors text-left"
                 >
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
                         {isCollapsed ? (
-                            <ChevronRight className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                            <ChevronRight className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
                         ) : (
-                            <ChevronDown className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                            <ChevronDown className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
                         )}
-                        <Folder className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                        <span className="font-semibold text-blue-900 dark:text-blue-100">{displayName}</span>
-                        <span className="text-sm text-blue-700 dark:text-blue-300">
+                        <Folder className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                        <span className="font-semibold text-blue-900 dark:text-blue-100 break-words min-w-0">{displayName}</span>
+                        <span className="text-sm text-blue-700 dark:text-blue-300 flex-shrink-0">
                             ({groupItems.length} {groupItems.length === 1 ? 'item' : 'items'})
                         </span>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-shrink-0 self-end sm:self-auto">
                         <span className="font-semibold text-blue-900 dark:text-blue-100">
                             {formatCurrency(total, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </span>
                         <span className="text-sm text-blue-700 dark:text-blue-300">
-                        (
-                            {formatNumber(calculatePercentage(total), {
+                            ({formatNumber(calculatePercentage(total), {
                                 minimumFractionDigits: 1,
                                 maximumFractionDigits: 1,
-                            })}
-                            %
-                        )
+                            })}%)
                         </span>
                     </div>
                 </button>
                 {!isCollapsed && (
-                    <div className="mt-2 space-y-2 ml-4">
+                    <div className="mt-0 ml-4 border-l-2 border-gray-200 dark:border-gray-600 pl-3">
                         {groupItems.map((item) => renderCategoryItem(item, item.originalIndex))}
                     </div>
                 )}
@@ -580,87 +621,84 @@ const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => 
         const groupValue = editingGroup[index] !== undefined ? editingGroup[index] : (item.group || '')
 
         return (
-            <div key={index} className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors group">
-                <input
-                    type="text"
-                    value={item.name}
-                    onChange={(e) => onUpdate(index, 'name', e.target.value)}
-                    className="flex-1 bg-transparent border-none focus:ring-0 p-0 font-medium text-gray-900 dark:text-white"
-                />
-                <div className="relative">
+            <div key={index} className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 py-3 border-b border-gray-200 dark:border-gray-600 last:border-b-0 group">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
                     <input
                         type="text"
-                        list={`group-edit-list-${type}-${index}`}
-                        placeholder="Group..."
-                        value={groupValue}
-                        onChange={(e) => {
-                            // Update local state only, don't trigger onUpdate yet
-                            setEditingGroup(prev => ({ ...prev, [index]: e.target.value }))
-                        }}
-                        onBlur={(e) => {
-                            // Save to parent state only when user leaves the field
-                            const finalValue = e.target.value.trim() || null
-                            onUpdate(index, 'group', finalValue)
-                            // Clear local editing state
-                            setEditingGroup(prev => {
-                                const newState = { ...prev }
-                                delete newState[index]
-                                return newState
-                            })
-                        }}
-                        onKeyDown={(e) => {
-                            // Save on Enter key as well
-                            if (e.key === 'Enter') {
-                                e.target.blur()
-                            }
-                        }}
-                        className="w-32 px-2 py-1 text-xs bg-white dark:bg-gray-600 border border-gray-200 dark:border-gray-500 rounded text-gray-900 dark:text-white"
+                        value={item.name}
+                        onChange={(e) => onUpdate(index, 'name', e.target.value)}
+                        className="flex-1 min-w-0 min-h-[44px] py-2 bg-transparent border-none focus:ring-0 text-gray-900 dark:text-white font-medium"
                     />
-                    <datalist id={`group-edit-list-${type}-${index}`}>
-                        {allGroups.map(group => (
-                            <option key={group} value={group} />
-                        ))}
-                    </datalist>
+                    <div className="relative flex-shrink-0 hidden sm:block">
+                        <input
+                            type="text"
+                            list={`group-edit-list-${type}-${index}`}
+                            placeholder="Group..."
+                            value={groupValue}
+                            onChange={(e) => {
+                                setEditingGroup(prev => ({ ...prev, [index]: e.target.value }))
+                            }}
+                            onBlur={(e) => {
+                                const finalValue = e.target.value.trim() || null
+                                onUpdate(index, 'group', finalValue)
+                                setEditingGroup(prev => {
+                                    const newState = { ...prev }
+                                    delete newState[index]
+                                    return newState
+                                })
+                            }}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    e.target.blur()
+                                }
+                            }}
+                            className="w-full sm:w-32 px-2 py-1.5 min-h-[44px] text-xs bg-white dark:bg-gray-600 border border-gray-200 dark:border-gray-500 rounded text-gray-900 dark:text-white"
+                        />
+                        <datalist id={`group-edit-list-${type}-${index}`}>
+                            {allGroups.map(group => (
+                                <option key={group} value={group} />
+                            ))}
+                        </datalist>
+                    </div>
                 </div>
-                <div className="flex items-center gap-2">
-                    <span className="text-gray-500 dark:text-gray-400 text-sm">R</span>
-                    <input
-                        type="number"
-                        value={item.amount}
-                        onChange={(e) => onUpdate(index, 'amount', e.target.value.replace(/,/g, ''))}
-                        onFocus={(e) => e.target.select()}
-                        className="w-24 bg-white dark:bg-gray-600 border border-gray-200 dark:border-gray-500 rounded px-2 py-1 text-right text-gray-900 dark:text-white"
-                    />
+                <div className="flex items-center gap-2 flex-shrink-0 self-center">
+                    <div className="flex items-center border border-gray-200 dark:border-gray-500 rounded bg-white dark:bg-gray-600 min-h-[44px]">
+                        <span className="pl-3 text-gray-500 dark:text-gray-400 text-sm">R</span>
+                        <input
+                            type="number"
+                            value={item.amount}
+                            onChange={(e) => onUpdate(index, 'amount', e.target.value.replace(/,/g, ''))}
+                            onFocus={(e) => e.target.select()}
+                            className="w-24 min-h-[44px] pl-1 pr-2 py-2 bg-transparent border-none focus:ring-0 text-right text-gray-900 dark:text-white"
+                        />
+                    </div>
                     <span className="text-xs text-gray-500 dark:text-gray-400 min-w-[50px] text-right">
-                        (
-                            {formatNumber(percentage, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
-                            %
-                        )
+                        ({formatNumber(percentage, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%)
                     </span>
+                    <button
+                        onClick={() => onRemove(index)}
+                        className="p-2 -m-2 text-gray-400 hover:text-red-500 dark:hover:text-red-400 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
+                    >
+                        <Trash2 className="w-4 h-4" />
+                    </button>
                 </div>
-                <button
-                    onClick={() => onRemove(index)}
-                    className="text-gray-400 hover:text-red-500 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                    <Trash2 className="w-4 h-4" />
-                </button>
             </div>
         )
     }
 
     return (
         <div className="space-y-3">
-            <div className="flex gap-2 flex-wrap">
+            <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2">
                 <input
                     type="text"
                     placeholder="Category name..."
                     value={newName}
                     onChange={(e) => setNewName(e.target.value)}
                     onKeyPress={handleKeyPress}
-                    className="flex-1 min-w-[150px] px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors"
+                    className="flex-1 min-w-0 w-full sm:min-w-[150px] px-3 py-3 min-h-[44px] border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors"
                 />
-                <div className="flex items-center gap-2 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700">
-                    <span className="text-gray-500 dark:text-gray-400 text-sm">R</span>
+                <div className="flex items-center border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 sm:w-auto w-full min-h-[44px]">
+                    <span className="pl-3 text-gray-500 dark:text-gray-400 text-sm">R</span>
                     <input
                         type="number"
                         placeholder="0"
@@ -668,10 +706,10 @@ const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => 
                         onChange={(e) => setNewAmount(e.target.value.replace(/,/g, ''))}
                         onKeyPress={handleKeyPress}
                         onFocus={(e) => e.target.select()}
-                        className="w-24 bg-transparent border-none focus:ring-0 p-0 text-right text-gray-900 dark:text-white"
+                        className="w-24 min-w-0 flex-1 sm:flex-initial pl-1 pr-3 py-3 bg-transparent border-none focus:ring-0 text-right text-gray-900 dark:text-white"
                     />
                 </div>
-                <div className="relative">
+                <div className="relative w-full sm:w-auto">
                     <input
                         type="text"
                         list={`group-list-${type}`}
@@ -679,7 +717,7 @@ const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => 
                         value={newGroup}
                         onChange={(e) => setNewGroup(e.target.value)}
                         onKeyPress={handleKeyPress}
-                        className="w-40 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors"
+                        className="w-full sm:w-40 px-3 py-3 min-h-[44px] border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors"
                     />
                     <datalist id={`group-list-${type}`}>
                         {allGroups.map(group => (
@@ -689,7 +727,7 @@ const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => 
                 </div>
                 <button
                     onClick={handleAdd}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-1"
+                    className="px-4 py-2.5 min-h-[44px] text-base bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-1"
                 >
                     <Plus className="w-4 h-4" />
                     Add

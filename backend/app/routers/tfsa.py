@@ -60,7 +60,7 @@ async def get_tfsa_contributions(
             {
                 "id": d.id,
                 "amount": d.amount,
-                "date": (d.deposit_date.isoformat() + "Z") if d.deposit_date else None
+                "date": d.deposit_date.isoformat() if d.deposit_date else None
             }
             for d in deposits
         ]

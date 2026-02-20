@@ -138,9 +138,9 @@ export default function EmergencySavings() {
     }
 
     return (
-        <div className="space-y-8">
-            <div className="flex justify-between items-center">
-                <h1 className="text-3xl font-bold text-gray-900 dark:text-white">🛡️ Emergency Savings</h1>
+        <div className="space-y-6 sm:space-y-8">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">🛡️ Emergency Savings</h1>
                 <div className="flex items-center gap-4">
                     <div className="text-sm text-gray-500 dark:text-gray-400">
                         {isSaving ? 'Saving...' : 'All changes saved'}

@@ -54,15 +54,15 @@ export default function EditHoldingModal({ isOpen, onClose, holding, onSuccess }
     if (!isOpen || !holding) return null
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md mx-4 sm:mx-auto overflow-hidden">
                 {/* Header */}
                 <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-blue-500 to-indigo-600">
                     <div>
                         <h2 className="text-xl font-bold text-white">
                             Edit Target Percentage
                         </h2>
-                        <p className="text-white/80 text-sm mt-1">{holding.etf_name}</p>
+                        <p className="text-white/80 text-sm mt-1">{isBond ? holding.bond_name : holding.etf_name}</p>
                     </div>
                     <button
                         onClick={onClose}
@@ -104,6 +104,7 @@ export default function EditHoldingModal({ isOpen, onClose, holding, onSuccess }
                         <div className="flex items-center gap-2">
                             <input
                                 type="number"
+                                inputMode="decimal"
                                 step="0.1"
                                 min="0"
                                 max="100"

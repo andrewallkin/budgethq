@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Routes, Route, Link, useLocation, Navigate } from 'react-router-dom'
-import { LayoutDashboard, PieChart, Home, Moon, Sun, LogOut, Settings as SettingsIcon, ChevronLeft, ChevronRight, Calculator, Shield, TrendingUp } from 'lucide-react'
+import { LayoutDashboard, PieChart, Home, Moon, Sun, LogOut, Settings as SettingsIcon, ChevronLeft, ChevronRight, Calculator, Shield, TrendingUp, Menu } from 'lucide-react'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import BudgetDashboard from './pages/BudgetDashboard'
 import TFSAPortfolio from './pages/TFSAPortfolio'
@@ -33,6 +33,12 @@ function AppContent() {
         const saved = localStorage.getItem('sidebarCollapsed')
         return saved ? JSON.parse(saved) : false
     })
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+
+    // Close mobile menu when route changes
+    useEffect(() => {
+        setIsMobileMenuOpen(false)
+    }, [location.pathname])
 
     useEffect(() => {
         if (darkMode) {
@@ -68,21 +74,20 @@ function AppContent() {
         )
     }
 
-    return (
-        <div className="flex h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
-            {/* Sidebar */}
-            <div className={`${isSidebarCollapsed ? 'w-16' : 'w-64'} bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col transition-all duration-300 ease-in-out overflow-hidden`}>
-                <div className={`p-6 flex ${isSidebarCollapsed ? 'justify-center' : 'justify-between'} items-center`}>
-                    {!isSidebarCollapsed && (
-                        <h1 className="text-xl font-bold text-gray-800 dark:text-white">📊 BudgetHQ</h1>
-                    )}
-                    <div className={`flex items-center gap-2 ${isSidebarCollapsed ? 'flex-col' : ''}`}>
+    const SidebarContent = ({ collapsed, isMobile }) => (
+        <>
+            <div className={`p-6 flex ${collapsed && !isMobile ? 'justify-center' : 'justify-between'} items-center`}>
+                {(!collapsed || isMobile) && (
+                    <h1 className="text-xl font-bold text-gray-800 dark:text-white">📊 BudgetHQ</h1>
+                )}
+                {!isMobile && (
+                    <div className={`flex items-center gap-2 ${collapsed ? 'flex-col' : ''}`}>
                         <button
-                            onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+                            onClick={() => setIsSidebarCollapsed(!collapsed)}
                             className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 transition-colors"
-                            title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
                         >
-                            {isSidebarCollapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
+                            {collapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
                         </button>
                         <button
                             onClick={() => setDarkMode(!darkMode)}
@@ -92,54 +97,107 @@ function AppContent() {
                             {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
                         </button>
                     </div>
-                </div>
-                <nav className={`flex-1 ${isSidebarCollapsed ? 'px-2' : 'px-4'} space-y-2`}>
-                    {navItems.map((item) => {
-                        const Icon = item.icon
-                        const isActive = location.pathname === item.path
-                        return (
-                            <Link
-                                key={item.path}
-                                to={item.path}
-                                className={`flex items-center ${isSidebarCollapsed ? 'justify-center px-2' : 'px-4'} py-3 rounded-lg transition-colors ${isActive
-                                    ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
-                                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                                    }`}
-                                title={isSidebarCollapsed ? item.label : ''}
-                            >
-                                <Icon className={`w-5 h-5 ${isSidebarCollapsed ? '' : 'mr-3'}`} />
-                                {!isSidebarCollapsed && (
-                                    <span className="font-medium">{item.label}</span>
-                                )}
-                            </Link>
-                        )
-                    })}
-                </nav>
-
-                {/* User info and logout */}
-                {user && (
-                    <div className={`p-4 border-t border-gray-200 dark:border-gray-700 ${isSidebarCollapsed ? 'flex justify-center' : ''}`}>
-                        <div className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between'}`}>
-                            {!isSidebarCollapsed && (
-                                <div className="text-sm">
-                                    <p className="font-medium text-gray-900 dark:text-white">{user.username}</p>
-                                </div>
-                            )}
-                            <button
-                                onClick={logout}
-                                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 transition-colors"
-                                title="Logout"
-                            >
-                                <LogOut className="w-5 h-5" />
-                            </button>
-                        </div>
-                    </div>
                 )}
             </div>
+            <nav className={`flex-1 ${collapsed && !isMobile ? 'px-2' : 'px-4'} space-y-2`}>
+                {navItems.map((item) => {
+                    const Icon = item.icon
+                    const isActive = location.pathname === item.path
+                    return (
+                        <Link
+                            key={item.path}
+                            to={item.path}
+                            className={`flex items-center ${collapsed && !isMobile ? 'justify-center px-2' : 'px-4'} py-3 rounded-lg transition-colors ${isActive
+                                ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
+                                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                                }`}
+                            title={collapsed && !isMobile ? item.label : ''}
+                        >
+                            <Icon className={`w-5 h-5 ${collapsed && !isMobile ? '' : 'mr-3'}`} />
+                            {(!collapsed || isMobile) && (
+                                <span className="font-medium">{item.label}</span>
+                            )}
+                        </Link>
+                    )
+                })}
+            </nav>
+            {user && (
+                <div className={`p-4 border-t border-gray-200 dark:border-gray-700 ${collapsed && !isMobile ? 'flex justify-center' : ''}`}>
+                    <div className={`flex items-center ${collapsed && !isMobile ? 'justify-center' : 'justify-between'}`}>
+                        {(!collapsed || isMobile) && (
+                            <div className="text-sm">
+                                <p className="font-medium text-gray-900 dark:text-white truncate">{user.username}</p>
+                            </div>
+                        )}
+                        <button
+                            onClick={logout}
+                            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 transition-colors"
+                            title="Logout"
+                        >
+                            <LogOut className="w-5 h-5" />
+                        </button>
+                    </div>
+                </div>
+            )}
+        </>
+    )
+
+    return (
+        <div className="flex h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
+            {/* Mobile header bar */}
+            <header className="lg:hidden fixed top-0 left-0 right-0 h-14 z-30 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between px-5 sm:px-6">
+                <button
+                    onClick={() => setIsMobileMenuOpen(true)}
+                    className="p-2 min-w-[44px] min-h-[44px] rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 transition-colors flex items-center justify-center"
+                    title="Open menu"
+                >
+                    <Menu className="w-6 h-6" />
+                </button>
+                <h1 className="text-lg font-bold text-gray-800 dark:text-white">📊 BudgetHQ</h1>
+                <div className="flex items-center gap-1">
+                    <button
+                        onClick={() => setDarkMode(!darkMode)}
+                        className="p-2 min-w-[44px] min-h-[44px] rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 transition-colors flex items-center justify-center"
+                        title={darkMode ? 'Light mode' : 'Dark mode'}
+                    >
+                        {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+                    </button>
+                    <button
+                        onClick={logout}
+                        className="p-2 min-w-[44px] min-h-[44px] rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 transition-colors flex items-center justify-center"
+                        title="Logout"
+                    >
+                        <LogOut className="w-5 h-5" />
+                    </button>
+                </div>
+            </header>
+
+            {/* Mobile drawer backdrop */}
+            {isMobileMenuOpen && (
+                <div
+                    className="lg:hidden fixed inset-0 bg-black/50 z-40"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    aria-hidden="true"
+                />
+            )}
+
+            {/* Mobile drawer */}
+            <aside
+                className={`lg:hidden fixed inset-y-0 left-0 w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 z-50 flex flex-col transform transition-transform duration-300 ease-in-out ${
+                    isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
+                }`}
+            >
+                <SidebarContent collapsed={false} isMobile />
+            </aside>
+
+            {/* Desktop sidebar */}
+            <aside className={`hidden lg:flex ${isSidebarCollapsed ? 'w-16' : 'w-64'} bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex-col transition-all duration-300 ease-in-out overflow-hidden shrink-0`}>
+                <SidebarContent collapsed={isSidebarCollapsed} isMobile={false} />
+            </aside>
 
             {/* Main Content */}
-            <div className="flex-1 overflow-y-auto">
-                <div className="p-8">
+            <div className="flex-1 overflow-y-auto pt-14 lg:pt-0">
+                <div className="p-4 sm:p-6 lg:p-8">
                     <Routes>
                         <Route path="/" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
                         <Route path="/budget" element={<ProtectedRoute><BudgetDashboard /></ProtectedRoute>} />
@@ -158,18 +216,18 @@ function AppContent() {
 
 function HomePage() {
     return (
-        <div className="space-y-8 max-w-6xl mx-auto">
+        <div className="space-y-6 sm:space-y-8 max-w-6xl mx-auto">
             <div>
-                <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-3">Welcome to BudgetHQ – Your Financial Dashboard</h1>
-                <p className="text-lg text-gray-600 dark:text-gray-400">
+                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 dark:text-white mb-3">Welcome to BudgetHQ – Your Financial Dashboard</h1>
+                <p className="text-base sm:text-lg text-gray-600 dark:text-gray-400">
                     Take control of your finances with powerful budgeting and portfolio management tools.
                 </p>
             </div>
 
-            <div className="grid lg:grid-cols-2 gap-8">
+            <div className="grid lg:grid-cols-2 gap-6 sm:gap-8">
                 {/* Salary Page Card */}
                 <div className="flex flex-col h-full bg-gradient-to-br from-rose-50 to-rose-100 dark:from-rose-900/20 dark:to-rose-800/20 rounded-2xl shadow-lg border border-rose-200 dark:border-rose-800 overflow-hidden hover:shadow-xl transition-all">
-                    <div className="p-8 flex-1 flex flex-col">
+                    <div className="p-4 sm:p-6 lg:p-8 flex-1 flex flex-col">
                         <div className="flex items-center mb-6">
                             <div className="p-4 bg-rose-600 rounded-xl">
                                 <Calculator className="w-8 h-8 text-white" />
@@ -224,7 +282,7 @@ function HomePage() {
 
                 {/* Budget Dashboard Card */}
                 <div className="flex flex-col h-full bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 rounded-2xl shadow-lg border border-blue-200 dark:border-blue-800 overflow-hidden hover:shadow-xl transition-all">
-                    <div className="p-8 flex-1 flex flex-col">
+                    <div className="p-4 sm:p-6 lg:p-8 flex-1 flex flex-col">
                         <div className="flex items-center mb-6">
                             <div className="p-4 bg-blue-600 rounded-xl">
                                 <LayoutDashboard className="w-8 h-8 text-white" />
@@ -279,7 +337,7 @@ function HomePage() {
 
                 {/* TFSA Portfolio Card */}
                 <div className="flex flex-col h-full bg-gradient-to-br from-emerald-50 to-emerald-100 dark:from-emerald-900/20 dark:to-emerald-800/20 rounded-2xl shadow-lg border border-emerald-200 dark:border-emerald-800 overflow-hidden hover:shadow-xl transition-all">
-                    <div className="p-8 flex-1 flex flex-col">
+                    <div className="p-4 sm:p-6 lg:p-8 flex-1 flex flex-col">
                         <div className="flex items-center mb-6">
                             <div className="p-4 bg-emerald-600 rounded-xl">
                                 <PieChart className="w-8 h-8 text-white" />
@@ -334,7 +392,7 @@ function HomePage() {
 
                 {/* Emergency Savings Card */}
                 <div className="flex flex-col h-full bg-gradient-to-br from-amber-50 to-amber-100 dark:from-amber-900/20 dark:to-amber-800/20 rounded-2xl shadow-lg border border-amber-200 dark:border-amber-800 overflow-hidden hover:shadow-xl transition-all">
-                    <div className="p-8 flex-1 flex flex-col">
+                    <div className="p-4 sm:p-6 lg:p-8 flex-1 flex flex-col">
                         <div className="flex items-center mb-6">
                             <div className="p-4 bg-amber-600 rounded-xl">
                                 <Shield className="w-8 h-8 text-white" />
@@ -389,7 +447,7 @@ function HomePage() {
 
                 {/* RA Performance Card */}
                 <div className="flex flex-col h-full bg-gradient-to-br from-indigo-50 to-indigo-100 dark:from-indigo-900/20 dark:to-indigo-800/20 rounded-2xl shadow-lg border border-indigo-200 dark:border-indigo-800 overflow-hidden hover:shadow-xl transition-all">
-                    <div className="p-8 flex-1 flex flex-col">
+                    <div className="p-4 sm:p-6 lg:p-8 flex-1 flex flex-col">
                         <div className="flex items-center mb-6">
                             <div className="p-4 bg-indigo-600 rounded-xl">
                                 <TrendingUp className="w-8 h-8 text-white" />
@@ -436,7 +494,7 @@ function HomePage() {
 
                 {/* RA Tax Calculator Card */}
                 <div className="flex flex-col h-full bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20 rounded-2xl shadow-lg border border-purple-200 dark:border-purple-800 overflow-hidden hover:shadow-xl transition-all">
-                    <div className="p-8 flex-1 flex flex-col">
+                    <div className="p-4 sm:p-6 lg:p-8 flex-1 flex flex-col">
                         <div className="flex items-center mb-6">
                             <div className="p-4 bg-purple-600 rounded-xl">
                                 <Calculator className="w-8 h-8 text-white" />

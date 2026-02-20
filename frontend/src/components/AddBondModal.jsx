@@ -79,8 +79,8 @@ export default function AddBondModal({ isOpen, onClose, onSuccess }) {
     if (!isOpen) return null
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg mx-4 sm:mx-auto max-h-[90vh] overflow-hidden flex flex-col">
                 {/* Header */}
                 <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
                     <div>
@@ -100,7 +100,7 @@ export default function AddBondModal({ isOpen, onClose, onSuccess }) {
                 </div>
 
                 {/* Content */}
-                <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
+                <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1 min-h-0">
                     {/* Bond Name */}
                     <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -116,7 +116,7 @@ export default function AddBondModal({ isOpen, onClose, onSuccess }) {
                     </div>
 
                     {/* Current Value and Target % in 2 columns */}
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                 Current Value <span className="text-red-500">*</span>

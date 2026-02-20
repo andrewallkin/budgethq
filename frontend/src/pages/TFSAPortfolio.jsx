@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts'
-import { Plus, Trash2, Calculator, TrendingUp, TrendingDown, PiggyBank, Upload, Edit2, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts'
+import { Plus, Trash2, Calculator, TrendingUp, TrendingDown, PiggyBank, Upload, Edit2, ArrowUpDown, ArrowUp, ArrowDown, Layers } from 'lucide-react'
 
 // Import new components
 import CSVUploadModal from '../components/CSVUploadModal'
@@ -15,7 +15,7 @@ import ConfirmModal from '../components/ConfirmModal'
 import PortfolioChart from '../components/PortfolioChart'
 import GainLossIndicator from '../components/GainLossIndicator'
 import HoldingDetailsModal from '../components/HoldingDetailsModal'
-import { formatCurrency, formatNumber } from '../utils/numberFormatting'
+import { formatCurrency, formatNumber, formatDateSafe } from '../utils/numberFormatting'
 
 
 export default function TFSAPortfolio() {
@@ -479,41 +479,41 @@ export default function TFSAPortfolio() {
     if (loading) return <div className="p-8 text-center text-gray-500">Loading...</div>
 
     return (
-        <div className="space-y-8">
+        <div className="space-y-6 sm:space-y-8">
             {/* Header */}
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                <h1 className="text-3xl font-bold text-gray-900 dark:text-white">📈 TFSA Portfolio</h1>
-                <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">📈 TFSA Portfolio</h1>
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                     <PriceRefreshIndicator onRefresh={fetchHoldings} />
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-row gap-2 sm:gap-3 flex-1 sm:flex-initial">
                         <button
                             onClick={() => setShowCSVModal(true)}
-                            className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                            className="flex-1 min-w-0 flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
                         >
-                            <Upload className="w-4 h-4" />
-                            Import CSV
+                            <Upload className="w-4 h-4 shrink-0" />
+                            <span className="truncate">Import CSV</span>
                         </button>
                         <button
                             onClick={() => setShowAddETFModal(true)}
-                            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                            className="flex-1 min-w-0 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                         >
-                            <Plus className="w-4 h-4" />
-                            Add ETF
+                            <Plus className="w-4 h-4 shrink-0" />
+                            <span className="truncate">Add ETF</span>
                         </button>
                         <button
                             onClick={() => setShowAddBondModal(true)}
-                            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                            className="flex-1 min-w-0 flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
                         >
-                            <Plus className="w-4 h-4" />
-                            Add Bond
+                            <Plus className="w-4 h-4 shrink-0" />
+                            <span className="truncate">Add Bond</span>
                         </button>
                     </div>
                 </div>
             </div>
 
             {/* Portfolio Total Value & Performance */}
-            <div className="bg-gradient-to-r from-emerald-500 to-teal-600 p-6 rounded-xl shadow-lg">
-                <div className="grid md:grid-cols-3 gap-6">
+            <div className="bg-gradient-to-r from-emerald-500 to-teal-600 p-4 sm:p-6 rounded-xl shadow-lg">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div>
                         <h2 className="text-sm font-medium text-emerald-100 uppercase tracking-wide">Portfolio Value</h2>
                         <p className="mt-2 text-4xl font-bold text-white">
@@ -551,7 +551,7 @@ export default function TFSAPortfolio() {
             <PortfolioChart />
 
             {/* TFSA Contribution Tracking */}
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
+            <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-600 transition-colors">
                 <div className="flex items-center justify-between mb-4">
                     <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
                         <PiggyBank className="w-5 h-5 text-blue-500" />
@@ -562,7 +562,7 @@ export default function TFSAPortfolio() {
                     </span>
                 </div>
 
-                <div className="grid md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* Annual Contributions */}
                     <div className="space-y-3">
                         <div className="flex items-center justify-between">
@@ -572,11 +572,12 @@ export default function TFSAPortfolio() {
                             </span>
                         </div>
 
-                        <div className="flex gap-2 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                        <div className="flex flex-col sm:flex-row gap-2 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                             <div className="flex items-center flex-1">
                                 <span className="mr-1 text-gray-500 dark:text-gray-400 text-sm">R</span>
                                 <input
                                     type="number"
+                                    inputMode="decimal"
                                     value={newDepositAmount}
                                     onChange={(e) => setNewDepositAmount(e.target.value)}
                                     placeholder="Amount"
@@ -601,12 +602,12 @@ export default function TFSAPortfolio() {
                             <div className="space-y-1.5">
                                 {deposits.sort((a, b) => new Date(a.date) - new Date(b.date)).map((deposit) => (
                                     <div key={deposit.id} className="flex items-center justify-between p-2 bg-blue-50 dark:bg-blue-900/20 rounded text-sm">
-                                        <div className="flex items-center gap-2">
-                                        <span className="font-medium text-blue-700 dark:text-blue-400">
-                                            {formatCurrency(deposit.amount, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                                        </span>
-                                            <span className="text-gray-500 dark:text-gray-400 text-xs">
-                                                {new Date(deposit.date).toLocaleDateString('en-ZA')}
+                                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                                            <span className="font-medium text-blue-700 dark:text-blue-400 shrink-0">
+                                                {formatCurrency(deposit.amount, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                            </span>
+                                            <span className="text-gray-500 dark:text-gray-400 text-xs whitespace-nowrap shrink-0">
+                                                {formatDateSafe(deposit.date, { day: 'numeric', month: 'short', year: 'numeric' })}
                                             </span>
                                         </div>
                                         <button
@@ -621,15 +622,15 @@ export default function TFSAPortfolio() {
                         )}
 
                         <div>
-                            <div className="flex justify-between text-xs mb-1">
+                            <div className="flex justify-between text-sm mb-1">
                                 <span className="text-gray-600 dark:text-gray-400">
                                     {formatCurrency(annualContributions, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                                 </span>
-                                <span className={`font-medium ${contributionsRemaining < 0 ? 'text-red-500' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                                <span className={`font-bold ${contributionsRemaining < 0 ? 'text-red-500' : 'text-emerald-600 dark:text-emerald-400'}`}>
                                     {formatCurrency(contributionsRemaining, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} left
                                 </span>
                             </div>
-                            <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                            <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden mb-1">
                                 <div
                                     className={`h-full rounded-full transition-all duration-500 ${contributionPercentUsed >= 100 ? 'bg-red-500' :
                                         contributionPercentUsed >= 80 ? 'bg-yellow-500' :
@@ -638,7 +639,7 @@ export default function TFSAPortfolio() {
                                     style={{ width: `${Math.min(contributionPercentUsed, 100)}%` }}
                                 />
                             </div>
-                            <div className="text-center mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                            <div className="text-center text-sm text-gray-500 dark:text-gray-400">
                                 {formatNumber(contributionPercentUsed, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}% used
                             </div>
                         </div>
@@ -653,7 +654,7 @@ export default function TFSAPortfolio() {
                             </span>
                         </div>
 
-                        <div className="flex gap-2 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                        <div className="flex flex-col sm:flex-row gap-2 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                             <input
                                 type="text"
                                 value={newHistoricalYear}
@@ -665,6 +666,7 @@ export default function TFSAPortfolio() {
                                 <span className="mr-1 text-gray-500 dark:text-gray-400 text-sm">R</span>
                                 <input
                                     type="number"
+                                    inputMode="decimal"
                                     value={newHistoricalAmount}
                                     onChange={(e) => setNewHistoricalAmount(e.target.value)}
                                     placeholder="Amount"
@@ -712,7 +714,7 @@ export default function TFSAPortfolio() {
                             </div>
 
                             <div>
-                                <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden mb-1">
+                                <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden mb-2">
                                     <div
                                         className={`h-full rounded-full transition-all duration-500 ${lifetimePercentUsed >= 100 ? 'bg-red-500' :
                                             lifetimePercentUsed >= 80 ? 'bg-yellow-500' :
@@ -721,11 +723,11 @@ export default function TFSAPortfolio() {
                                         style={{ width: `${Math.min(lifetimePercentUsed, 100)}%` }}
                                     />
                                 </div>
-                                <div className="flex justify-between text-xs">
+                                <div className="flex justify-between items-baseline gap-2 text-sm">
                                     <span className="text-gray-600 dark:text-gray-400">
                                         {formatNumber(lifetimePercentUsed, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}% used
                                     </span>
-                                    <span className={`font-medium ${lifetimeRemaining < 0 ? 'text-red-500' : 'text-purple-600 dark:text-purple-400'}`}>
+                                    <span className={`font-bold ${lifetimeRemaining < 0 ? 'text-red-500' : 'text-purple-600 dark:text-purple-400'}`}>
                                         {formatCurrency(lifetimeRemaining, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} left
                                     </span>
                                 </div>
@@ -737,15 +739,19 @@ export default function TFSAPortfolio() {
 
             {/* Holdings Table */}
             {holdings.length > 0 && (
-                <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
-                    <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Holdings</h2>
+                <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-600 transition-colors">
+                    <h2 className="text-lg font-semibold mb-1 text-gray-900 dark:text-white flex items-center gap-2">
+                        <Layers className="w-5 h-5 text-blue-500" />
+                        Holdings
+                    </h2>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mb-3 sm:hidden">Swipe horizontally to see all columns</p>
                     <div className="overflow-x-auto">
-                        <table className="w-full">
+                        <table className="w-full min-w-max">
                             <thead>
                                 <tr className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider border-b border-gray-200 dark:border-gray-700">
                                     <th
                                         onClick={() => handleSort('name')}
-                                        className="text-left py-3 px-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors w-1/4"
+                                        className="text-left py-3 px-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
                                     >
                                         <div className="flex items-center gap-1">
                                             Name
@@ -754,7 +760,7 @@ export default function TFSAPortfolio() {
                                     </th>
                                     <th
                                         onClick={() => handleSort('value')}
-                                        className="text-right py-3 px-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors w-1/4"
+                                        className="text-right py-3 px-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
                                     >
                                         <div className="flex items-center justify-end gap-1">
                                             Value
@@ -763,14 +769,14 @@ export default function TFSAPortfolio() {
                                     </th>
                                     <th
                                         onClick={() => handleSort('gain_loss')}
-                                        className="text-center py-3 px-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors w-1/3"
+                                        className="text-center py-3 px-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
                                     >
                                         <div className="flex items-center justify-center gap-1">
                                             Gain/Loss
                                             <SortIcon column="gain_loss" />
                                         </div>
                                     </th>
-                                    <th className="text-center py-3 px-2 w-1/6">Actions</th>
+                                    <th className="text-center py-3 px-2">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
@@ -780,37 +786,36 @@ export default function TFSAPortfolio() {
                                             key={`${h.type}-${h.id}`}
                                             className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer"
                                             onClick={(e) => {
-                                                // Don't trigger row click if clicking on action buttons
                                                 if (e.target.closest('button')) return
                                                 setSelectedHolding(h)
                                                 setShowDetailsModal(true)
                                             }}
                                         >
-                                            <td className="py-3 px-2 w-1/4">
+                                            <td className="py-3 px-2">
                                                 <div className="flex items-center gap-2">
                                                     <div className="font-medium text-gray-900 dark:text-white truncate">
                                                         {h.type === 'ETF' ? h.etf_name : h.bond_name}
                                                     </div>
                                                     {h.type === 'BOND' && (
-                                                        <span className="px-1.5 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium rounded">
+                                                        <span className="px-1.5 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium rounded shrink-0">
                                                             BOND
                                                         </span>
                                                     )}
                                                 </div>
                                             </td>
-                                            <td className="py-3 px-2 text-right font-semibold text-gray-900 dark:text-white w-1/4">
+                                            <td className="py-3 px-2 text-right font-semibold text-gray-900 dark:text-white">
                                                 {formatCurrency(h.type === 'ETF' ? h.total_value : h.current_value || 0, {
                                                     minimumFractionDigits: 2,
                                                     maximumFractionDigits: 2,
                                                 })}
                                             </td>
-                                            <td className="py-3 px-2 text-center w-1/3">
+                                            <td className="py-3 px-2 text-center">
                                                 <GainLossIndicator
                                                     percentage={h.gain_loss_percentage}
                                                     amount={h.gain_loss_amount}
                                                 />
                                             </td>
-                                            <td className="py-3 px-2 w-1/6" onClick={(e) => e.stopPropagation()}>
+                                            <td className="py-3 px-2" onClick={(e) => e.stopPropagation()}>
                                                 <div className="flex items-center justify-center gap-1">
                                                     <button
                                                         onClick={() => handleEdit(h)}
@@ -851,32 +856,32 @@ export default function TFSAPortfolio() {
             )}
 
             {holdings.length === 0 && (
-                <div className="bg-white dark:bg-gray-800 p-12 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 text-center">
+                <div className="bg-white dark:bg-gray-800 p-12 rounded-xl shadow-sm border border-gray-200 dark:border-gray-600 text-center">
                     <div className="text-6xl mb-4">📊</div>
                     <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">No Holdings Yet</h3>
                     <p className="text-gray-500 dark:text-gray-400 mb-6">
                         Get started by importing a CSV file, adding ETFs, or adding government bonds.
                     </p>
-                    <div className="flex justify-center gap-3">
+                    <div className="flex flex-row gap-2 sm:gap-3 flex-wrap justify-center">
                         <button
                             onClick={() => setShowCSVModal(true)}
-                            className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                            className="flex-1 sm:flex-initial min-w-0 flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
                         >
-                            <Upload className="w-4 h-4" />
+                            <Upload className="w-4 h-4 shrink-0" />
                             Import CSV
                         </button>
                         <button
                             onClick={() => setShowAddETFModal(true)}
-                            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                            className="flex-1 sm:flex-initial min-w-0 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                         >
-                            <Plus className="w-4 h-4" />
+                            <Plus className="w-4 h-4 shrink-0" />
                             Add ETF
                         </button>
                         <button
                             onClick={() => setShowAddBondModal(true)}
-                            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                            className="flex-1 sm:flex-initial min-w-0 flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
                         >
-                            <Plus className="w-4 h-4" />
+                            <Plus className="w-4 h-4 shrink-0" />
                             Add Bond
                         </button>
                     </div>
@@ -894,21 +899,30 @@ export default function TFSAPortfolio() {
 
             {/* Target vs Actual Bar Chart */}
             {holdings.length > 0 && (
-                <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
+                <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-600 transition-colors">
                     <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Target vs Actual Allocation</h2>
-                    <div style={{ height: Math.max(300, holdings.length * 80) }}>
+                    <div className="flex justify-center gap-6 mb-3 text-sm text-gray-500 dark:text-gray-400">
+                        <span className="flex items-center gap-2">
+                            <span className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: '#6366f1' }} />
+                            Target
+                        </span>
+                        <span className="flex items-center gap-2">
+                            <span className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: '#10b981' }} />
+                            Actual
+                        </span>
+                    </div>
+                    <div style={{ height: Math.max(300, holdings.length * 60) }}>
                         <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={targetVsActualData} layout="vertical" margin={{ left: 20, right: 30, top: 20, bottom: 20 }}>
+                            <BarChart data={targetVsActualData} layout="horizontal" margin={{ left: 10, right: 20, top: 30, bottom: 80 }}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                                <XAxis type="number" domain={[0, 'dataMax']} unit="%" tick={{ fill: '#9ca3af' }} />
-                                <YAxis type="category" dataKey="name" tick={{ fill: '#9ca3af', fontSize: 12 }} width={120} />
+                                <XAxis type="category" dataKey="name" tick={{ fill: '#9ca3af', fontSize: 11 }} angle={-45} textAnchor="end" height={60} interval={0} />
+                                <YAxis type="number" domain={[0, 'dataMax']} unit="%" tick={{ fill: '#9ca3af', fontSize: 12 }} width={40} />
                                 <Tooltip
                                     contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#f3f4f6' }}
                                     formatter={(value, name) => [`${value}%`, name === 'Target' ? 'Target' : 'Actual']}
                                 />
-                                <Legend wrapperStyle={{ color: '#9ca3af' }} />
-                                <Bar dataKey="target" name="Target" fill="#6366f1" radius={[0, 4, 4, 0]} />
-                                <Bar dataKey="actual" name="Actual" fill="#10b981" radius={[0, 4, 4, 0]} />
+                                <Bar dataKey="target" name="Target" fill="#6366f1" radius={[0, 0, 4, 4]} />
+                                <Bar dataKey="actual" name="Actual" fill="#10b981" radius={[0, 0, 4, 4]} />
                             </BarChart>
                         </ResponsiveContainer>
                     </div>
@@ -933,7 +947,7 @@ export default function TFSAPortfolio() {
 
             {/* What If Calculator */}
             {holdings.length > 0 && (
-                <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
+                <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-600 transition-colors">
                     <div className="flex items-center gap-2 mb-4">
                         <Calculator className="w-5 h-5 text-purple-500" />
                         <h2 className="text-lg font-semibold text-gray-900 dark:text-white">"What If" Calculator</h2>
@@ -948,6 +962,7 @@ export default function TFSAPortfolio() {
                             <span className="mr-1 text-gray-500 dark:text-gray-400">R</span>
                             <input
                                 type="number"
+                                inputMode="decimal"
                                 value={whatIfAmount}
                                 onChange={(e) => setWhatIfAmount(e.target.value)}
                                 placeholder="Enter amount"
@@ -993,14 +1008,15 @@ export default function TFSAPortfolio() {
 
             {/* Rebalancing */}
             {rebalanceData && holdings.length > 0 && (
-                <div className="grid md:grid-cols-2 gap-6">
-                    <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-600 transition-colors">
                         <div className="flex justify-between items-center mb-4">
                             <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Rebalancing Plan</h2>
                             <div className="flex items-center gap-2">
                                 <span className="text-sm text-gray-500 dark:text-gray-400">Threshold:</span>
                                 <input
                                     type="number"
+                                    inputMode="decimal"
                                     value={threshold}
                                     onChange={(e) => setThreshold(parseFloat(e.target.value))}
                                     className="w-16 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
@@ -1014,7 +1030,11 @@ export default function TFSAPortfolio() {
                                 {rebalanceData.actions.map((action, i) => (
                                     <div key={i} className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-sm transition-colors">
                                         <div className="font-medium text-blue-900 dark:text-blue-300 mb-1">Step {action.action_num}</div>
-                                        <div className="flex justify-between items-center text-blue-800 dark:text-blue-200">
+                                        <div className="sm:hidden flex flex-col gap-1 text-blue-800 dark:text-blue-200">
+                                            <div><span className="text-blue-600 dark:text-blue-400">Sell:</span> <b>{action.sell_etf}</b></div>
+                                            <div><span className="text-blue-600 dark:text-blue-400">Buy:</span> <b>{action.buy_etf}</b></div>
+                                        </div>
+                                        <div className="hidden sm:flex justify-between items-center text-blue-800 dark:text-blue-200">
                                             <span>Sell <b>{action.sell_etf}</b></span>
                                             <span>→</span>
                                             <span>Buy <b>{action.buy_etf}</b></span>
@@ -1033,17 +1053,17 @@ export default function TFSAPortfolio() {
                         )}
                     </div>
 
-                    <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
+                    <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-600 transition-colors">
                         <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Allocation Overview</h2>
-                        <div className="h-64">
-                            <ResponsiveContainer width="100%" height="100%">
+                        <div className="min-h-[280px] sm:h-64">
+                            <ResponsiveContainer width="100%" height={280}>
                                 <PieChart>
                                     <Pie
                                         data={currentAllocationData}
                                         cx="50%"
-                                        cy="50%"
-                                        innerRadius={60}
-                                        outerRadius={80}
+                                        cy="40%"
+                                        innerRadius={50}
+                                        outerRadius={70}
                                         paddingAngle={2}
                                         dataKey="value"
                                     >
@@ -1058,9 +1078,19 @@ export default function TFSAPortfolio() {
                                         contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#f3f4f6' }}
                                         itemStyle={{ color: '#f3f4f6' }}
                                     />
-                                    <Legend layout="vertical" verticalAlign="middle" align="right" wrapperStyle={{ paddingLeft: "20px", color: '#9ca3af' }} />
                                 </PieChart>
                             </ResponsiveContainer>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-4 flex-wrap">
+                            {currentAllocationData.map((entry, index) => (
+                                <div key={index} className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                                    <div
+                                        className="w-3 h-3 rounded-full shrink-0"
+                                        style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                                    />
+                                    <span className="truncate" title={entry.name}>{entry.name}</span>
+                                </div>
+                            ))}
                         </div>
                     </div>
                 </div>
@@ -1140,6 +1170,9 @@ export default function TFSAPortfolio() {
                 holding={selectedHolding}
                 onHoldingUpdate={handleHoldingUpdate}
                 totalPortfolioValue={totalValue}
+                onEdit={handleEdit}
+                onBuySell={handleBuySell}
+                onDelete={handleDeleteClick}
             />
 
         </div>

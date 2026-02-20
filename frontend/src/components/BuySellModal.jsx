@@ -164,8 +164,8 @@ export default function BuySellModal({ isOpen, onClose, holding, onSuccess }) {
         : isBond && holding.current_value - (parseFloat(amount) || 0)
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md mx-4 sm:mx-auto max-h-[90vh] overflow-y-auto">
                 {/* Header */}
                 <div className={`p-6 ${
                     transactionType === 'BUY'
