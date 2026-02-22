@@ -18,6 +18,7 @@ from .sheets_service import get_sheets_service
 from .utils import get_sast_now
 from . import models
 from . import history
+from .investec_sync import sync_investec_accounts, sync_investec_transactions
 
 
 # Initialize logger
@@ -271,7 +272,25 @@ def start_scheduler():
         name='Clean up old hourly data (90 day retention)',
         replace_existing=True
     )
-    
+
+    # Job 6: Sync Investec account balances every hour
+    scheduler.add_job(
+        sync_investec_accounts,
+        trigger=CronTrigger(hour='*/1'),
+        id='sync_investec_accounts',
+        name='Sync Investec account balances',
+        replace_existing=True
+    )
+
+    # Job 7: Sync Investec transactions every 15 minutes
+    scheduler.add_job(
+        sync_investec_transactions,
+        trigger=CronTrigger(minute='*/15'),
+        id='sync_investec_transactions',
+        name='Sync Investec transactions',
+        replace_existing=True
+    )
+
     scheduler.start()
 
     logger.info("Background scheduler started with the following jobs:")
@@ -280,6 +299,8 @@ def start_scheduler():
     logger.info("  - Daily summary: daily at 17:30 SAST (15:30 UTC)")
     logger.info("  - Monthly summary: 1st of month at 00:00 UTC")
     logger.info("  - Data cleanup: Sundays at 03:00 SAST (01:00 UTC)")
+    logger.info("  - Investec account sync: every hour")
+    logger.info("  - Investec transaction sync: every 15 minutes")
 
 
 def stop_scheduler():

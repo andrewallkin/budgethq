@@ -4,11 +4,17 @@ from pydantic import BaseModel
 from typing import List, Optional
 from .. import models, database, auth
 
+BUDGET_TRANSACTION_CATEGORIES = [
+    "groceries_household", "bills", "subscriptions", "transport",
+    "lifestyle_misc", "savings", "loan_repayment", "transfers", "uncategorized"
+]
+
 # Pydantic Models for Budget
 class CategoryBase(BaseModel):
     name: str
     amount: float
-    group: Optional[str] = None
+    transaction_category: Optional[str] = "uncategorized"
+    excluded: Optional[bool] = False
 
 class BudgetData(BaseModel):
     salary: float
@@ -52,9 +58,9 @@ async def get_budget(current_user: models.User = Depends(auth.get_current_user),
 
     return {
         "salary": net_salary,
-        "needs": [{"name": c.name, "amount": c.amount, "group": c.group} for c in needs],
-        "wants": [{"name": c.name, "amount": c.amount, "group": c.group} for c in wants],
-        "savings": [{"name": c.name, "amount": c.amount, "group": c.group} for c in savings]
+        "needs": [{"name": c.name, "amount": c.amount, "transaction_category": c.transaction_category or "uncategorized", "excluded": c.excluded or False} for c in needs],
+        "wants": [{"name": c.name, "amount": c.amount, "transaction_category": c.transaction_category or "uncategorized", "excluded": c.excluded or False} for c in wants],
+        "savings": [{"name": c.name, "amount": c.amount, "transaction_category": c.transaction_category or "uncategorized", "excluded": c.excluded or False} for c in savings]
     }
 
 @router.post("/default_user")
@@ -73,13 +79,24 @@ async def save_budget(data: BudgetData, current_user: models.User = Depends(auth
     # Clear existing categories
     db.query(models.BudgetCategory).filter(models.BudgetCategory.budget_id == budget.id).delete()
 
+    def _normalize_category(cat: Optional[str]) -> str:
+        if not cat or cat not in BUDGET_TRANSACTION_CATEGORIES:
+            return "uncategorized"
+        return cat
+
     # Add new categories
     for item in data.needs:
-        db.add(models.BudgetCategory(budget_id=budget.id, type='needs', name=item.name, amount=item.amount, group=item.group))
+        tc = _normalize_category(item.transaction_category)
+        excluded = item.excluded or False
+        db.add(models.BudgetCategory(budget_id=budget.id, type='needs', name=item.name, amount=item.amount, transaction_category=tc, excluded=excluded))
     for item in data.wants:
-        db.add(models.BudgetCategory(budget_id=budget.id, type='wants', name=item.name, amount=item.amount, group=item.group))
+        tc = _normalize_category(item.transaction_category)
+        excluded = item.excluded or False
+        db.add(models.BudgetCategory(budget_id=budget.id, type='wants', name=item.name, amount=item.amount, transaction_category=tc, excluded=excluded))
     for item in data.savings:
-        db.add(models.BudgetCategory(budget_id=budget.id, type='savings', name=item.name, amount=item.amount, group=item.group))
+        tc = _normalize_category(item.transaction_category)
+        excluded = item.excluded or False
+        db.add(models.BudgetCategory(budget_id=budget.id, type='savings', name=item.name, amount=item.amount, transaction_category=tc, excluded=excluded))
 
     db.commit()
     return {"status": "success"}

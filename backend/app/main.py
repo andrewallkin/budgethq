@@ -22,6 +22,7 @@ from .routers.admin import router as admin_router
 from .routers.calculations import router as calculations_router
 from .routers.payslip import router as payslip_router
 from .routers.salary import router as salary_router
+from .routers.investec import router as investec_router
 
 # Configure logging on startup
 configure_logging()
@@ -72,4 +73,5 @@ app.include_router(admin_router, prefix="/api")
 app.include_router(calculations_router, prefix="/api")
 app.include_router(payslip_router, prefix="/api/payslip", tags=["payslip"])
 app.include_router(salary_router, prefix="/api")
+app.include_router(investec_router)
 
