@@ -8,7 +8,7 @@ Handles all Investec integration endpoints:
 - Categorization rules
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from pydantic import BaseModel, Field
@@ -118,6 +118,23 @@ class CategorizationRuleResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class ApplyRulesRequest(BaseModel):
+    """Optional body for apply-to-existing to accept conflict resolutions."""
+    accepted_conflict_ids: Optional[List[int]] = None
+
+
+class ConflictPreviewItem(BaseModel):
+    """A transaction that would receive a different category from a rule."""
+    id: int
+    description: str
+    amount: float
+    transaction_date: datetime
+    current_category: Optional[str]
+    proposed_category: str
+    rule_id: int
+    rule_pattern: str
 
 
 # =====================================================
@@ -869,6 +886,76 @@ def _matches_rule_pattern(description: str, pattern: str) -> bool:
         return pattern.lower() in description.lower()
 
 
+def _get_matching_rule(description: str, rules: list) -> Optional[tuple]:
+    """
+    Return (rule, proposed_category) for the first matching rule, or None.
+    Rules should be sorted by priority desc.
+    """
+    for rule in rules:
+        if _matches_rule_pattern(description, rule.pattern):
+            return (rule, rule.category)
+    return None
+
+
+@router.get("/rules/apply-to-existing/preview")
+async def preview_apply_rules_to_all(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Preview what would happen when applying rules to all transactions.
+    Returns uncategorized count and conflicts (already-categorized transactions
+    that would receive a different category from a rule).
+    Includes manually re-categorized transactions (user_corrected) in conflict detection.
+    No database writes.
+    """
+    rules = db.query(models.CategorizationRule).filter(
+        models.CategorizationRule.user_id == current_user.id,
+        models.CategorizationRule.is_active == True
+    ).order_by(models.CategorizationRule.priority.desc()).all()
+
+    # Uncategorized: only non-user-corrected (we won't overwrite explicit "leave uncategorized")
+    uncategorized_txns = db.query(models.BankTransaction).filter(
+        models.BankTransaction.user_id == current_user.id,
+        models.BankTransaction.user_corrected == False,
+        models.BankTransaction.category == None
+    ).all()
+
+    # All categorized transactions (including user_corrected) for conflict detection
+    categorized_txns = db.query(models.BankTransaction).filter(
+        models.BankTransaction.user_id == current_user.id,
+        models.BankTransaction.category.isnot(None)
+    ).all()
+
+    uncategorized_count = 0
+    for txn in uncategorized_txns:
+        if _get_matching_rule(txn.description, rules):
+            uncategorized_count += 1
+
+    conflicts: List[ConflictPreviewItem] = []
+    for txn in categorized_txns:
+        match = _get_matching_rule(txn.description, rules)
+        if not match:
+            continue
+        rule, proposed_category = match
+        if txn.category != proposed_category:
+            conflicts.append(ConflictPreviewItem(
+                id=txn.id,
+                description=txn.description,
+                amount=txn.amount,
+                transaction_date=txn.transaction_date,
+                current_category=txn.category,
+                proposed_category=proposed_category,
+                rule_id=rule.id,
+                rule_pattern=rule.pattern
+            ))
+
+    return {
+        "uncategorized_count": uncategorized_count,
+        "conflicts": [c.model_dump() for c in conflicts]
+    }
+
+
 @router.post("/rules/{rule_id}/apply-to-existing")
 async def apply_single_rule_to_existing_transactions(
     rule_id: int,
@@ -911,27 +998,16 @@ async def apply_single_rule_to_existing_transactions(
 
 @router.post("/rules/apply-to-existing")
 async def apply_rules_to_existing_transactions(
+    request: Optional[ApplyRulesRequest] = Body(default=None),
     current_user: models.User = Depends(auth.get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     Re-categorize uncategorized transactions using current active rules.
-    Only affects uncategorized transactions; AI and manually categorized are preserved.
+    Optionally apply accepted conflict resolutions (transactions that were
+    already categorized but user accepted the rule's proposed category).
     """
-    # Get uncategorized transactions that can be re-categorized
-    transactions = db.query(models.BankTransaction).filter(
-        models.BankTransaction.user_id == current_user.id,
-        models.BankTransaction.user_corrected == False,
-        models.BankTransaction.category == None
-    ).all()
-
-    if not transactions:
-        return {
-            "message": "No transactions to categorize",
-            "total": 0,
-            "categorized": 0,
-            "uncategorized": 0
-        }
+    accepted_conflict_ids = (request.accepted_conflict_ids if request else None) or []
 
     # Load active rules (sorted by priority)
     rules = db.query(models.CategorizationRule).filter(
@@ -939,25 +1015,47 @@ async def apply_rules_to_existing_transactions(
         models.CategorizationRule.is_active == True
     ).order_by(models.CategorizationRule.priority.desc()).all()
 
-    categorized_count = 0
+    # 1. Apply to uncategorized transactions
+    uncategorized_txns = db.query(models.BankTransaction).filter(
+        models.BankTransaction.user_id == current_user.id,
+        models.BankTransaction.user_corrected == False,
+        models.BankTransaction.category == None
+    ).all()
 
-    for txn in transactions:
-        # Try to match against rules
-        matched = False
+    categorized_count = 0
+    for txn in uncategorized_txns:
         for rule in rules:
             if _matches_rule_pattern(txn.description, rule.pattern):
                 txn.category = rule.category
                 txn.ai_category_confidence = 1.0
                 rule.usage_count += 1
                 categorized_count += 1
-                matched = True
                 break
+
+    # 2. Apply accepted conflict resolutions (include user_corrected - user explicitly accepted)
+    conflicts_resolved = 0
+    if accepted_conflict_ids:
+        accepted_set = set(accepted_conflict_ids)
+        conflict_txns = db.query(models.BankTransaction).filter(
+            models.BankTransaction.user_id == current_user.id,
+            models.BankTransaction.id.in_(accepted_set)
+        ).all()
+
+        for txn in conflict_txns:
+            match = _get_matching_rule(txn.description, rules)
+            if match:
+                rule, proposed_category = match
+                txn.category = proposed_category
+                txn.ai_category_confidence = 1.0
+                rule.usage_count += 1
+                conflicts_resolved += 1
 
     db.commit()
 
     return {
         "message": "Rules applied successfully",
-        "total": len(transactions),
+        "total": len(uncategorized_txns),
         "categorized": categorized_count,
-        "uncategorized": len(transactions) - categorized_count
+        "uncategorized": len(uncategorized_txns) - categorized_count,
+        "conflicts_resolved": conflicts_resolved
     }

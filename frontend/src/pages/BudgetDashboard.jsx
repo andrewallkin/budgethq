@@ -14,7 +14,7 @@ function useIsMobile(breakpoint = 640) {
     return isMobile
 }
 
-import { Plus, Trash2, Calculator } from 'lucide-react'
+import { Plus, Trash2, Calculator, BarChart2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import SavingsCalculator from '../components/SavingsCalculator'
 import ChartLegend from '../components/ChartLegend'
@@ -528,15 +528,6 @@ const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => 
         return (
             <div key={index} className={`flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 py-3 border-b border-gray-200 dark:border-gray-600 last:border-b-0 group ${isExcluded ? 'opacity-60' : ''}`}>
                 <div className="flex items-center gap-2 min-w-0 flex-1">
-                    <label className="flex items-center gap-1.5 flex-shrink-0" title="Exclude from Budget Analysis (transaction comparison)">
-                        <input
-                            type="checkbox"
-                            checked={isExcluded}
-                            onChange={(e) => onUpdate(index, 'excluded', e.target.checked)}
-                            className="rounded border-gray-300 dark:border-gray-600 text-gray-600 focus:ring-blue-500"
-                        />
-                        <span className="text-xs text-gray-500 dark:text-gray-400 sr-only sm:not-sr-only">Excl. from analysis</span>
-                    </label>
                     <input
                         type="text"
                         value={item.name}
@@ -571,6 +562,14 @@ const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => 
                             `(${formatNumber(percentage, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%)`
                         )}
                     </span>
+                    <button
+                        type="button"
+                        onClick={() => onUpdate(index, 'excluded', !isExcluded)}
+                        title="Exclude from Budget Analysis (transaction comparison)"
+                        className={`p-2 -m-2 transition-opacity opacity-100 sm:opacity-0 sm:group-hover:opacity-100 ${isExcluded ? 'text-amber-500 dark:text-amber-400' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'}`}
+                    >
+                        <BarChart2 className="w-4 h-4" />
+                    </button>
                     <button
                         onClick={() => onRemove(index)}
                         className="p-2 -m-2 text-gray-400 hover:text-red-500 dark:hover:text-red-400 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"

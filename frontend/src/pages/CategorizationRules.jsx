@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import axios from 'axios'
 import { Plus, Trash2, AlertTriangle, ChevronDown, ChevronRight, HelpCircle, Play } from 'lucide-react'
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, CATEGORIES, CATEGORY_LABELS } from '../utils/transactionCategories'
+import { formatCurrency, formatDateSafe } from '../utils/numberFormatting'
 
 export default function CategorizationRules() {
     const [loading, setLoading] = useState(true)
@@ -22,6 +23,10 @@ export default function CategorizationRules() {
     const [applying, setApplying] = useState(false)
     const [applyResults, setApplyResults] = useState(null)
     const [runningRuleId, setRunningRuleId] = useState(null)
+    const [applyMode, setApplyMode] = useState('uncategorized') // 'uncategorized' | 'all'
+    const [applyPreview, setApplyPreview] = useState(null) // { uncategorized_count, conflicts }
+    const [showConflictModal, setShowConflictModal] = useState(false)
+    const [acceptedConflictIds, setAcceptedConflictIds] = useState(new Set())
 
     useEffect(() => {
         fetchRules()
@@ -106,20 +111,62 @@ export default function CategorizationRules() {
         }
     }
 
-    const handleApplyRules = async () => {
+    const handleApplyRules = async (acceptedIds = []) => {
         setApplying(true)
         setError('')
 
         try {
-            const response = await axios.post('/api/investec/rules/apply-to-existing')
+            const payload = acceptedIds.length > 0 ? { accepted_conflict_ids: acceptedIds } : {}
+            const response = await axios.post('/api/investec/rules/apply-to-existing', payload)
             setShowApplyModal(false)
+            setShowConflictModal(false)
+            setApplyPreview(null)
+            setAcceptedConflictIds(new Set())
             setApplyResults(response.data)
         } catch (err) {
             setError(err.response?.data?.detail || 'Failed to apply rules')
             setShowApplyModal(false)
+            setShowConflictModal(false)
         } finally {
             setApplying(false)
         }
+    }
+
+    const handleApplyRulesToAll = async () => {
+        setApplying(true)
+        setError('')
+        try {
+            const response = await axios.get('/api/investec/rules/apply-to-existing/preview')
+            setApplyPreview(response.data)
+            setApplyMode('all')
+            const hasConflicts = response.data.conflicts?.length > 0
+            const hasUncategorized = (response.data.uncategorized_count ?? 0) > 0
+            if (hasConflicts) {
+                setAcceptedConflictIds(new Set())
+                setShowConflictModal(true)
+            } else if (hasUncategorized) {
+                setShowApplyModal(true)
+            } else {
+                setSuccess('No transactions to categorize')
+            }
+        } catch (err) {
+            setError(err.response?.data?.detail || 'Failed to load preview')
+        } finally {
+            setApplying(false)
+        }
+    }
+
+    const toggleConflictAccept = (id) => {
+        setAcceptedConflictIds(prev => {
+            const next = new Set(prev)
+            if (next.has(id)) next.delete(id)
+            else next.add(id)
+            return next
+        })
+    }
+
+    const handleApplyFromConflictModal = () => {
+        handleApplyRules(Array.from(acceptedConflictIds))
     }
 
     if (loading) {
@@ -235,14 +282,15 @@ export default function CategorizationRules() {
                     Apply Rules to Past Transactions
                 </h2>
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                    Re-categorize uncategorized transactions using your current active rules.
-                    AI and manually categorized transactions will not be affected.
+                    Re-categorize transactions using your current active rules.
+                    Already-categorized transactions that conflict with rules will be flagged for review.
                 </p>
                 <button
-                    onClick={() => setShowApplyModal(true)}
-                    className="px-4 py-2.5 min-h-[44px] bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                    onClick={handleApplyRulesToAll}
+                    disabled={applying}
+                    className="px-4 py-2.5 min-h-[44px] bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50"
                 >
-                    Apply Rules to Uncategorized
+                    {applying ? 'Loading...' : 'Apply Rules'}
                 </button>
             </div>
 
@@ -526,22 +574,114 @@ export default function CategorizationRules() {
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
                     <div className="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-md w-full">
                         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                            Apply Rules to Uncategorized?
+                            {applyMode === 'uncategorized' ? 'Apply Rules to Uncategorized?' : 'Apply Rules?'}
                         </h3>
                         <p className="text-gray-700 dark:text-gray-300 mb-6">
-                            This will re-categorize uncategorized transactions using your current active rules.
-                            AI and manually categorized transactions will not be affected.
+                            {applyMode === 'uncategorized'
+                                ? 'This will re-categorize uncategorized transactions using your current active rules. AI and manually categorized transactions will not be affected.'
+                                : `This will apply rules to ${applyPreview?.uncategorized_count ?? 0} uncategorized transaction(s). No conflicts were found.`}
                         </p>
                         <div className="flex gap-3">
                             <button
-                                onClick={handleApplyRules}
+                                onClick={() => handleApplyRules([])}
                                 disabled={applying}
                                 className="flex-1 px-4 py-2.5 min-h-[44px] bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
                             >
                                 {applying ? 'Applying...' : 'Apply Rules'}
                             </button>
                             <button
-                                onClick={() => setShowApplyModal(false)}
+                                onClick={() => {
+                                    setShowApplyModal(false)
+                                    setApplyPreview(null)
+                                }}
+                                disabled={applying}
+                                className="flex-1 px-4 py-2.5 min-h-[44px] border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Conflict Review Modal */}
+            {showConflictModal && applyPreview?.conflicts?.length > 0 && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+                    <div className="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-4xl w-full my-8 max-h-[90vh] overflow-hidden flex flex-col">
+                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                            Review Conflicts
+                        </h3>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                            These transactions are already categorized but would receive a different category from a rule.
+                            Accept or reject each change. Uncategorized transactions ({applyPreview.uncategorized_count}) will be auto-applied.
+                        </p>
+                        <div className="overflow-auto flex-1 min-h-0 border border-gray-200 dark:border-gray-600 rounded-lg">
+                            <table className="w-full text-sm">
+                                <thead className="bg-gray-50 dark:bg-gray-700/50 sticky top-0">
+                                    <tr>
+                                        <th className="px-4 py-2 text-left font-medium text-gray-600 dark:text-gray-400">Description</th>
+                                        <th className="px-4 py-2 text-right font-medium text-gray-600 dark:text-gray-400">Amount</th>
+                                        <th className="px-4 py-2 text-left font-medium text-gray-600 dark:text-gray-400">Date</th>
+                                        <th className="px-4 py-2 text-left font-medium text-gray-600 dark:text-gray-400">Current</th>
+                                        <th className="px-4 py-2 text-left font-medium text-gray-600 dark:text-gray-400">Proposed</th>
+                                        <th className="px-4 py-2 text-center font-medium text-gray-600 dark:text-gray-400">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                                    {applyPreview.conflicts.map((c) => (
+                                        <tr key={c.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
+                                            <td className="px-4 py-2 text-gray-900 dark:text-white truncate max-w-[200px]" title={c.description}>
+                                                {c.description}
+                                            </td>
+                                            <td className="px-4 py-2 text-right text-gray-900 dark:text-white">
+                                                {formatCurrency(Math.abs(c.amount))}
+                                            </td>
+                                            <td className="px-4 py-2 text-gray-600 dark:text-gray-400">
+                                                {formatDateSafe(c.transaction_date, { day: 'numeric', month: 'short', year: 'numeric' })}
+                                            </td>
+                                            <td className="px-4 py-2">
+                                                <span className="px-2 py-0.5 rounded text-xs bg-gray-100 dark:bg-gray-700">
+                                                    {CATEGORY_LABELS[c.current_category] || c.current_category || '—'}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-2">
+                                                <span className="px-2 py-0.5 rounded text-xs bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300">
+                                                    {CATEGORY_LABELS[c.proposed_category] || c.proposed_category}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-2 text-center">
+                                                <label className="flex items-center justify-center gap-2 cursor-pointer">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={acceptedConflictIds.has(c.id)}
+                                                        onChange={() => toggleConflictAccept(c.id)}
+                                                        className="rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500"
+                                                    />
+                                                    <span className="text-xs text-gray-600 dark:text-gray-400">Accept</span>
+                                                </label>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mt-3">
+                            {acceptedConflictIds.size} of {applyPreview.conflicts.length} accepted. Will apply {applyPreview.uncategorized_count} uncategorized + {acceptedConflictIds.size} conflicts.
+                        </p>
+                        <div className="flex gap-3 mt-4">
+                            <button
+                                onClick={handleApplyFromConflictModal}
+                                disabled={applying}
+                                className="flex-1 px-4 py-2.5 min-h-[44px] bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                            >
+                                {applying ? 'Applying...' : 'Apply Rules'}
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setShowConflictModal(false)
+                                    setApplyPreview(null)
+                                    setAcceptedConflictIds(new Set())
+                                }}
                                 disabled={applying}
                                 className="flex-1 px-4 py-2.5 min-h-[44px] border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
                             >
@@ -561,14 +701,19 @@ export default function CategorizationRules() {
                         </h3>
                         <div className="space-y-2 mb-6">
                             <p className="text-gray-700 dark:text-gray-300">
-                                <strong>Total transactions:</strong> {applyResults.total}
+                                <strong>Uncategorized processed:</strong> {applyResults.total}
                             </p>
                             <p className="text-green-600 dark:text-green-400">
                                 <strong>Categorized:</strong> {applyResults.categorized}
                             </p>
                             <p className="text-gray-600 dark:text-gray-400">
-                                <strong>Uncategorized:</strong> {applyResults.uncategorized}
+                                <strong>Remaining uncategorized:</strong> {applyResults.uncategorized}
                             </p>
+                            {applyResults.conflicts_resolved > 0 && (
+                                <p className="text-indigo-600 dark:text-indigo-400">
+                                    <strong>Conflicts resolved:</strong> {applyResults.conflicts_resolved}
+                                </p>
+                            )}
                         </div>
                         <button
                             onClick={() => {
