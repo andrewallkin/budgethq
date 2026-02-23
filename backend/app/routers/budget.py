@@ -1,8 +1,10 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import List, Optional
 from .. import models, database, auth
+from datetime import date
+from ..budget_period import get_period_dates_for_end_month, get_current_period
 
 BUDGET_TRANSACTION_CATEGORIES = [
     "groceries_household", "bills", "subscriptions", "transport",
@@ -21,6 +23,12 @@ class BudgetData(BaseModel):
     needs: List[CategoryBase]
     wants: List[CategoryBase]
     savings: List[CategoryBase]
+    budget_period_start_day: Optional[int] = None
+
+
+class BudgetSettingsUpdate(BaseModel):
+    budget_period_start_day: Optional[int] = None
+
 
 router = APIRouter(prefix="/budget", tags=["budget"])
 
@@ -49,18 +57,22 @@ async def get_budget(current_user: models.User = Depends(auth.get_current_user),
             "salary": net_salary,
             "needs": [],
             "wants": [],
-            "savings": []
+            "savings": [],
+            "budget_period_start_day": 1
         }
 
     needs = db.query(models.BudgetCategory).filter(models.BudgetCategory.budget_id == budget.id, models.BudgetCategory.type == 'needs').all()
     wants = db.query(models.BudgetCategory).filter(models.BudgetCategory.budget_id == budget.id, models.BudgetCategory.type == 'wants').all()
     savings = db.query(models.BudgetCategory).filter(models.BudgetCategory.budget_id == budget.id, models.BudgetCategory.type == 'savings').all()
 
+    start_day = budget.budget_period_start_day if budget.budget_period_start_day is not None else 1
+
     return {
         "salary": net_salary,
         "needs": [{"name": c.name, "amount": c.amount, "transaction_category": c.transaction_category or "uncategorized", "excluded": c.excluded or False} for c in needs],
         "wants": [{"name": c.name, "amount": c.amount, "transaction_category": c.transaction_category or "uncategorized", "excluded": c.excluded or False} for c in wants],
-        "savings": [{"name": c.name, "amount": c.amount, "transaction_category": c.transaction_category or "uncategorized", "excluded": c.excluded or False} for c in savings]
+        "savings": [{"name": c.name, "amount": c.amount, "transaction_category": c.transaction_category or "uncategorized", "excluded": c.excluded or False} for c in savings],
+        "budget_period_start_day": start_day
     }
 
 @router.post("/default_user")
@@ -75,7 +87,15 @@ async def save_budget(data: BudgetData, current_user: models.User = Depends(auth
 
     # Salary is now derived from payslip data
     # We ignore the incoming salary value
-    
+
+    # Update budget_period_start_day if provided
+    if data.budget_period_start_day is not None:
+        start_day = data.budget_period_start_day
+        if 1 <= start_day <= 31:
+            budget.budget_period_start_day = start_day
+        else:
+            budget.budget_period_start_day = 1
+
     # Clear existing categories
     db.query(models.BudgetCategory).filter(models.BudgetCategory.budget_id == budget.id).delete()
 
@@ -100,3 +120,62 @@ async def save_budget(data: BudgetData, current_user: models.User = Depends(auth
 
     db.commit()
     return {"status": "success"}
+
+
+@router.patch("/default_user")
+async def update_budget_settings(
+    data: BudgetSettingsUpdate,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db),
+):
+    """Update budget settings (e.g. budget_period_start_day) without replacing categories."""
+    budget = db.query(models.Budget).filter(models.Budget.user_id == current_user.id).first()
+    if not budget:
+        budget = models.Budget(user_id=current_user.id)
+        db.add(budget)
+        db.commit()
+        db.refresh(budget)
+
+    if data.budget_period_start_day is not None:
+        start_day = data.budget_period_start_day
+        budget.budget_period_start_day = start_day if 1 <= start_day <= 31 else 1
+
+    db.commit()
+    return {"status": "success"}
+
+
+@router.get("/period")
+async def get_budget_period(
+    year: int = Query(..., ge=2000, le=2100),
+    month: int = Query(..., ge=1, le=12),
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db),
+):
+    """
+    Get from_date and to_date for the budget period that ends in the given month.
+    Uses the user's budget_period_start_day (default 1 = calendar month).
+    """
+    budget = db.query(models.Budget).filter(models.Budget.user_id == current_user.id).first()
+    start_day = budget.budget_period_start_day if budget and budget.budget_period_start_day is not None else 1
+    from_date, to_date = get_period_dates_for_end_month(year, month, start_day)
+    return {"from_date": from_date.isoformat(), "to_date": to_date.isoformat()}
+
+
+@router.get("/period/current")
+async def get_current_budget_period(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db),
+):
+    """
+    Get from_date and to_date for the budget period containing today.
+    Also returns end_year and end_month for the period (for month picker display).
+    """
+    budget = db.query(models.Budget).filter(models.Budget.user_id == current_user.id).first()
+    start_day = budget.budget_period_start_day if budget and budget.budget_period_start_day is not None else 1
+    from_date, to_date = get_current_period(date.today(), start_day)
+    return {
+        "from_date": from_date.isoformat(),
+        "to_date": to_date.isoformat(),
+        "end_year": to_date.year,
+        "end_month": to_date.month,
+    }

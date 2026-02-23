@@ -42,6 +42,13 @@ export default function Settings() {
     const [syncingHistorical, setSyncingHistorical] = useState(null)
     const [syncSuccess, setSyncSuccess] = useState('')
 
+    // Budget period settings
+    const [budgetPeriodStartDay, setBudgetPeriodStartDay] = useState(1)
+    const [budgetPeriodLoading, setBudgetPeriodLoading] = useState(false)
+    const [budgetPeriodSaving, setBudgetPeriodSaving] = useState(false)
+    const [budgetPeriodError, setBudgetPeriodError] = useState('')
+    const [budgetPeriodSuccess, setBudgetPeriodSuccess] = useState('')
+
     // Initialize username from user
     useEffect(() => {
         if (user?.username) {
@@ -74,6 +81,41 @@ export default function Settings() {
     useEffect(() => {
         fetchConnectionStatus()
     }, [])
+
+    // Fetch budget period on mount
+    useEffect(() => {
+        const fetchBudgetPeriod = async () => {
+            setBudgetPeriodLoading(true)
+            try {
+                const response = await axios.get('/api/budget/default_user')
+                setBudgetPeriodStartDay(response.data.budget_period_start_day ?? 1)
+            } catch (err) {
+                // No budget yet - use default
+                setBudgetPeriodStartDay(1)
+            } finally {
+                setBudgetPeriodLoading(false)
+            }
+        }
+        fetchBudgetPeriod()
+    }, [])
+
+    const handleBudgetPeriodSave = async (e) => {
+        e.preventDefault()
+        setBudgetPeriodError('')
+        setBudgetPeriodSuccess('')
+        setBudgetPeriodSaving(true)
+        try {
+            await axios.patch('/api/budget/default_user', {
+                budget_period_start_day: Math.max(1, Math.min(31, budgetPeriodStartDay)) || 1
+            })
+            setBudgetPeriodSuccess('Budget period saved')
+            setTimeout(() => setBudgetPeriodSuccess(''), 3000)
+        } catch (err) {
+            setBudgetPeriodError(err.response?.data?.detail || 'Failed to save budget period')
+        } finally {
+            setBudgetPeriodSaving(false)
+        }
+    }
 
     const handleInvestecConnect = async (e) => {
         e.preventDefault()
@@ -600,6 +642,47 @@ export default function Settings() {
                     </>
                 )}
                 </div>
+            </div>
+
+            {/* Budget Preferences */}
+            <div className="mt-8 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 sm:p-6">
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Budget Preferences</h2>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+                    Day of month when your budget period starts. E.g., 22 = period runs 22nd to 21st (for payday on 20th).
+                </p>
+                {budgetPeriodLoading ? (
+                    <p className="text-gray-600 dark:text-gray-400">Loading...</p>
+                ) : (
+                    <form onSubmit={handleBudgetPeriodSave} className="flex flex-col sm:flex-row gap-4 items-end">
+                        <div>
+                            <label htmlFor="budget-period-start" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                Budget period start day
+                            </label>
+                            <input
+                                id="budget-period-start"
+                                type="number"
+                                min={1}
+                                max={31}
+                                value={budgetPeriodStartDay}
+                                onChange={(e) => setBudgetPeriodStartDay(parseInt(e.target.value, 10) || 1)}
+                                className="w-24 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                            />
+                        </div>
+                        <button
+                            type="submit"
+                            disabled={budgetPeriodSaving}
+                            className="px-4 py-2.5 min-h-[44px] bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                        >
+                            {budgetPeriodSaving ? 'Saving...' : 'Save'}
+                        </button>
+                    </form>
+                )}
+                {budgetPeriodError && (
+                    <p className="mt-3 text-sm text-red-600 dark:text-red-400">{budgetPeriodError}</p>
+                )}
+                {budgetPeriodSuccess && (
+                    <p className="mt-3 text-sm text-green-600 dark:text-green-400">{budgetPeriodSuccess}</p>
+                )}
             </div>
 
             {/* Budget Categories */}

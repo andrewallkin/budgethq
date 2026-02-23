@@ -6,32 +6,51 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 import { INCOME_CATEGORIES, CATEGORY_COLORS, CATEGORY_LABELS } from '../utils/transactionCategories'
 import ChartLegend from '../components/ChartLegend'
 
+function formatPeriodRange(fromDate, toDate) {
+    const from = new Date(fromDate)
+    const to = new Date(toDate)
+    const opts = { day: 'numeric', month: 'short', year: 'numeric' }
+    return `${from.toLocaleDateString('en-ZA', opts)} – ${to.toLocaleDateString('en-ZA', opts)}`
+}
+
 export default function BudgetAnalysis() {
     const [loading, setLoading] = useState(true)
     const [budget, setBudget] = useState(null)
     const [transactions, setTransactions] = useState([])
     const [error, setError] = useState('')
+    const [periodRange, setPeriodRange] = useState(null) // { from_date, to_date } for display
 
-    const [selectedMonth, setSelectedMonth] = useState(() => {
-        const now = new Date()
-        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-    })
+    const [selectedMonth, setSelectedMonth] = useState(null)
 
     useEffect(() => {
+        if (selectedMonth === null) {
+            axios.get('/api/budget/period/current')
+                .then((res) => {
+                    const m = String(res.data.end_month).padStart(2, '0')
+                    setSelectedMonth(`${res.data.end_year}-${m}`)
+                })
+                .catch(() => {
+                    const now = new Date()
+                    setSelectedMonth(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`)
+                })
+            return
+        }
         fetchData()
     }, [selectedMonth])
 
     const fetchData = async () => {
         setLoading(true)
+        setError('')
         try {
             // Fetch budget data
             const budgetResponse = await axios.get('/api/budget/default_user')
             setBudget(budgetResponse.data)
 
-            // Fetch transactions for selected month
-            const [year, month] = selectedMonth.split('-')
-            const fromDate = `${year}-${month}-01`
-            const toDate = new Date(year, month, 0).toISOString().split('T')[0] // Last day of month
+            // Get period dates (uses user's budget_period_start_day)
+            const [year, month] = selectedMonth.split('-').map(Number)
+            const periodResponse = await axios.get(`/api/budget/period?year=${year}&month=${month}`)
+            const { from_date: fromDate, to_date: toDate } = periodResponse.data
+            setPeriodRange({ from_date: fromDate, to_date: toDate })
 
             const txnResponse = await axios.get(`/api/investec/transactions?from_date=${fromDate}&to_date=${toDate}&limit=500`)
             setTransactions(txnResponse.data)
@@ -42,9 +61,16 @@ export default function BudgetAnalysis() {
         }
     }
 
-    const handleCurrentMonth = () => {
-        const now = new Date()
-        setSelectedMonth(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`)
+    const handleCurrentMonth = async () => {
+        try {
+            const response = await axios.get('/api/budget/period/current')
+            const m = String(response.data.end_month).padStart(2, '0')
+            setSelectedMonth(`${response.data.end_year}-${m}`)
+        } catch (err) {
+            // Fallback to calendar month
+            const now = new Date()
+            setSelectedMonth(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`)
+        }
     }
 
     // Calculate actual spending per category
@@ -136,7 +162,7 @@ export default function BudgetAnalysis() {
         value: item.actual
     })).filter(item => item.value > 0)
 
-    if (loading) {
+    if (selectedMonth === null || loading) {
         return (
             <div className="flex items-center justify-center h-64">
                 <div className="text-gray-600 dark:text-gray-400">Loading budget analysis...</div>
@@ -147,16 +173,23 @@ export default function BudgetAnalysis() {
     return (
         <div className="space-y-6 sm:space-y-8">
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
-                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
-                    Budget Analysis
-                </h1>
+                <div>
+                    <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
+                        Budget Analysis
+                    </h1>
+                    {periodRange && budget?.budget_period_start_day !== 1 && (
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                            {formatPeriodRange(periodRange.from_date, periodRange.to_date)}
+                        </p>
+                    )}
+                </div>
 
                 <div className="flex gap-3">
                     <button
                         onClick={handleCurrentMonth}
                         className="px-4 py-2.5 min-h-[44px] border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                     >
-                        Current Month
+                        {budget?.budget_period_start_day !== 1 ? 'Current Period' : 'Current Month'}
                     </button>
                     <input
                         type="month"

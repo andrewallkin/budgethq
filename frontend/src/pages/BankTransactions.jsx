@@ -430,11 +430,9 @@ export default function BankTransactions() {
                                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wider">
                                     Date
                                 </th>
+                                <th className="w-4 px-1 py-3" />
                                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wider">
                                     Description
-                                </th>
-                                <th className="px-4 py-3 text-center text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wider w-20 whitespace-nowrap">
-                                    Status
                                 </th>
                                 <th className="px-4 py-3 text-right text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wider">
                                     Amount
@@ -466,17 +464,18 @@ export default function BankTransactions() {
                                                 year: 'numeric'
                                             })}
                                         </td>
+                                        <td className="w-4 px-1 py-3 text-center">
+                                            {txn.status === 'PENDING' && (
+                                                <span
+                                                    className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500/70 dark:bg-amber-400/60"
+                                                    title="Pending"
+                                                />
+                                            )}
+                                        </td>
                                         <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
                                             <div className="max-w-xs truncate" title={txn.description}>
                                                 {txn.description}
                                             </div>
-                                        </td>
-                                        <td className="px-4 py-3 whitespace-nowrap text-center w-20">
-                                            {txn.status === 'PENDING' && (
-                                                <span className="inline-block px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">
-                                                    Pending
-                                                </span>
-                                            )}
                                         </td>
                                         <td className={`px-4 py-3 whitespace-nowrap text-sm text-right font-semibold ${
                                             txn.transaction_type === 'CREDIT'

@@ -66,6 +66,9 @@ export default function BudgetDashboard() {
     // Savings Calculator
     const [showSavingsCalculator, setShowSavingsCalculator] = useState(false)
 
+    // Budget period (for non-calendar periods)
+    const [currentPeriodLabel, setCurrentPeriodLabel] = useState(null)
+
     // Load data on mount
     useEffect(() => {
         fetchData()
@@ -100,9 +103,10 @@ export default function BudgetDashboard() {
 
     const fetchData = async () => {
         try {
-            const [budgetRes, portfolioRes] = await Promise.all([
+            const [budgetRes, portfolioRes, periodRes] = await Promise.all([
                 axios.get('/api/budget/default_user'),
-                axios.get('/api/portfolio')
+                axios.get('/api/portfolio'),
+                axios.get('/api/budget/period/current').catch(() => null)
             ])
 
             if (budgetRes.data && Object.keys(budgetRes.data).length > 0) {
@@ -122,6 +126,17 @@ export default function BudgetDashboard() {
                 const total = portfolioRes.data.reduce((sum, etf) => sum + (etf.Current_Value || 0), 0)
                 setPortfolioTotal(total)
                 setPortfolioEtfCount(portfolioRes.data.length)
+            }
+
+            // Show period label when using non-calendar period
+            const startDay = budgetRes.data?.budget_period_start_day ?? 1
+            if (startDay !== 1 && periodRes?.data?.from_date && periodRes?.data?.to_date) {
+                const from = new Date(periodRes.data.from_date)
+                const to = new Date(periodRes.data.to_date)
+                const opts = { day: 'numeric', month: 'short', year: 'numeric' }
+                setCurrentPeriodLabel(`${from.toLocaleDateString('en-ZA', opts)} – ${to.toLocaleDateString('en-ZA', opts)}`)
+            } else {
+                setCurrentPeriodLabel(null)
             }
         } catch (err) {
             console.error("Failed to fetch data", err)
@@ -207,8 +222,13 @@ export default function BudgetDashboard() {
     return (
         <div className="space-y-6 sm:space-y-8">
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
-                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">💰 Budget Dashboard</h1>
-                <div className="flex items-center gap-4">
+                <div>
+                    <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">💰 Budget Dashboard</h1>
+                    {currentPeriodLabel && (
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Current period: {currentPeriodLabel}</p>
+                    )}
+                </div>
+                <div className="flex items-center gap-4 shrink-0">
                     <button
                         onClick={() => setShowSavingsCalculator(true)}
                         className="flex items-center gap-2 px-4 py-2.5 min-h-[44px] bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"

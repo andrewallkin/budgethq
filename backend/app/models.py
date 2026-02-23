@@ -70,6 +70,7 @@ class Budget(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
     salary = Column(Float, default=0)
+    budget_period_start_day = Column(Integer, nullable=True, default=1)  # 1-31, 1 = calendar month
 
     owner = relationship("User", back_populates="budget")
     categories = relationship("BudgetCategory", back_populates="budget")
