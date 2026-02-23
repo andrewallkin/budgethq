@@ -5,7 +5,8 @@ import {
     EMERGENCY_FUND_SOURCES,
     getEmergencyFundAccount,
     canUseBankSync,
-    applyBankSyncedFund
+    applyBankSyncedFund,
+    computeEffectiveEmergencyFund
 } from '../utils/emergencyFundSource'
 
 export default function EmergencySavings() {
@@ -34,6 +35,9 @@ export default function EmergencySavings() {
 
     // Needs total from budget for computing monthly expenses (read-only)
     const [needsTotal, setNeedsTotal] = useState(0)
+
+    // Manual bank accounts (for emergency fund total when is_emergency_savings)
+    const [manualAccounts, setManualAccounts] = useState([])
 
     // Load data on mount
     useEffect(() => {
@@ -139,6 +143,14 @@ export default function EmergencySavings() {
                 setEmergencyAccount(null)
             }
 
+            // Fetch manual bank accounts (for emergency fund total)
+            try {
+                const manualRes = await axios.get('/api/manual-accounts')
+                setManualAccounts(manualRes.data || [])
+            } catch (e) {
+                setManualAccounts([])
+            }
+
             // Set fundSource only after Investec state is known - otherwise the useEffect
             // would immediately reset bank_sync to manual because bankSyncAvailable is
             // still false while Investec is loading
@@ -187,9 +199,16 @@ export default function EmergencySavings() {
 
     const handleEmergencyFundSave = (data) => {
         setHasUserEdited(true)
+        // Manual accounts contribute to displayed total; we only store the "manual" portion in current_fund
+        const manualEmergencyTotal = manualAccounts
+            .filter((a) => a.is_emergency_savings)
+            .reduce((sum, a) => sum + (a.balance || 0), 0)
+        const userEnteredTotal = data.current_emergency_fund ?? 0
+        const manualPortionToStore = Math.max(0, userEnteredTotal - manualEmergencyTotal)
+
         // Convert from component's field names to API field names
         const apiData = {
-            current_fund: data.current_emergency_fund ?? 0,
+            current_fund: manualPortionToStore,
             monthly_deposit: data.monthly_emergency_deposit ?? 0,
             target_type: data.emergency_target_type,
             target_months: data.emergency_target_months,
@@ -201,9 +220,17 @@ export default function EmergencySavings() {
 
     if (loading) return <div className="p-8 text-center text-gray-500">Loading...</div>
 
+    // Compute effective total from manual value, bank sync, and manual accounts marked as EF
+    const effectiveCurrentFund = computeEffectiveEmergencyFund({
+        fundSource,
+        fundSourceManualValue: emergencyFundData.current_fund,
+        bankSyncBalance: emergencyAccount?.available_balance,
+        manualAccounts
+    })
+
     // Convert API field names to component's expected field names
     const componentData = {
-        current_emergency_fund: emergencyFundData.current_fund,
+        current_emergency_fund: effectiveCurrentFund,
         monthly_emergency_deposit: emergencyFundData.monthly_deposit,
         emergency_target_type: emergencyFundData.target_type,
         emergency_target_months: emergencyFundData.target_months,

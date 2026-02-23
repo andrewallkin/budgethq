@@ -41,6 +41,7 @@ class User(Base):
 
     # Investec integration relationships
     investec_accounts = relationship("InvestecAccount", back_populates="owner", foreign_keys="InvestecAccount.user_id", cascade="all, delete-orphan")
+    manual_bank_accounts = relationship("ManualBankAccount", back_populates="owner", cascade="all, delete-orphan")
     bank_transactions = relationship("BankTransaction", back_populates="owner", cascade="all, delete-orphan")
     categorization_rules = relationship("CategorizationRule", back_populates="owner", cascade="all, delete-orphan")
     emergency_fund_account = relationship("InvestecAccount", foreign_keys=[emergency_fund_account_id], post_update=True)
@@ -484,6 +485,23 @@ class BankTransaction(Base):
     # Relationships
     owner = relationship("User", back_populates="bank_transactions")
     account = relationship("InvestecAccount", back_populates="transactions")
+
+
+class ManualBankAccount(Base):
+    """User-created manual bank account with balance-only updates (no transaction sync)"""
+    __tablename__ = "manual_bank_accounts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+
+    name = Column(String)
+    balance = Column(Float, default=0)
+    is_emergency_savings = Column(Boolean, default=False)
+
+    created_at = Column(DateTime, default=get_sast_now)
+    updated_at = Column(DateTime, default=get_sast_now, onupdate=get_sast_now)
+
+    owner = relationship("User", back_populates="manual_bank_accounts")
 
 
 class CategorizationRule(Base):
