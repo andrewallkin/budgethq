@@ -169,6 +169,7 @@ async def store_credentials(
     current_user.investec_client_id = encrypt_api_key(credentials.client_id)
     current_user.investec_client_secret = encrypt_api_key(credentials.client_secret)
     current_user.investec_api_key = encrypt_api_key(credentials.api_key)
+    current_user.has_investec_account = True
 
     db.commit()
 

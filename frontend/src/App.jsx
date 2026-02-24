@@ -29,7 +29,7 @@ function ProtectedRoute({ children }) {
 
 function AppContent() {
     const location = useLocation()
-    const { user, logout } = useAuth()
+    const { user, logout, showInvestecNav } = useAuth()
     const [darkMode, setDarkMode] = useState(() => {
         const saved = localStorage.getItem('darkMode')
         return saved ? JSON.parse(saved) : window.matchMedia('(prefers-color-scheme: dark)').matches
@@ -134,6 +134,7 @@ function AppContent() {
             <nav className={`flex-1 ${collapsed && !isMobile ? 'px-2' : 'px-4'} space-y-2`}>
                 {navItems.map((item) => {
                     if (item.children) {
+                        if (!showInvestecNav) return null
                         const GroupIcon = item.icon
                         const isInvestecActive = location.pathname.startsWith('/investec')
                         const showExpanded = investecExpanded && (!collapsed || isMobile)
