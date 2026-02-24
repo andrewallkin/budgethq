@@ -1,8 +1,18 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { AlertCircle, CheckCircle } from 'lucide-react'
 import { formatCurrency, formatNumber } from '../utils/numberFormatting'
+import { EMERGENCY_FUND_SOURCES } from '../utils/emergencyFundSource'
 
-export default function EmergencyFundCalculator({ needsTotal, emergencyFundData, onSave }) {
+export default function EmergencyFundCalculator({
+    needsTotal,
+    emergencyFundData,
+    onSave,
+    fundSource = EMERGENCY_FUND_SOURCES.MANUAL,
+    onFundSourceChange,
+    bankSyncAvailable = false,
+    hasInvestecCredentials = false,
+    bankSyncMeta = {}
+}) {
     // Initialize state from props or defaults
     const [currentFund, setCurrentFund] = useState(emergencyFundData?.current_emergency_fund || 0)
     const [monthlyDeposit, setMonthlyDeposit] = useState(emergencyFundData?.monthly_emergency_deposit || 0)
@@ -105,20 +115,80 @@ export default function EmergencyFundCalculator({ needsTotal, emergencyFundData,
                 {/* Input Fields */}
                 <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Current Emergency Fund Source
+                    </label>
+                    <div className="space-y-2">
+                        <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                            <input
+                                type="radio"
+                                name="emergencyFundSource"
+                                value={EMERGENCY_FUND_SOURCES.MANUAL}
+                                checked={fundSource === EMERGENCY_FUND_SOURCES.MANUAL}
+                                onChange={() => onFundSourceChange?.(EMERGENCY_FUND_SOURCES.MANUAL)}
+                            />
+                            <span>Manual input</span>
+                        </label>
+                        <label className={`flex items-center gap-2 text-sm ${bankSyncAvailable ? 'text-gray-700 dark:text-gray-300' : 'text-gray-400 dark:text-gray-500'}`}>
+                            <input
+                                type="radio"
+                                name="emergencyFundSource"
+                                value={EMERGENCY_FUND_SOURCES.BANK_SYNC}
+                                checked={fundSource === EMERGENCY_FUND_SOURCES.BANK_SYNC}
+                                onChange={() => onFundSourceChange?.(EMERGENCY_FUND_SOURCES.BANK_SYNC)}
+                                disabled={!bankSyncAvailable}
+                            />
+                            <span>Sync from Emergency Savings account</span>
+                        </label>
+                    </div>
+                    {!hasInvestecCredentials && (
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                            Connect Investec in Settings to enable bank sync.
+                        </p>
+                    )}
+                    {hasInvestecCredentials && !bankSyncAvailable && (
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                            Select an Emergency Savings account on the Bank Accounts page to enable sync.
+                        </p>
+                    )}
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         Current Emergency Fund (R)
                     </label>
                     <input
                         type="number"
                         value={currentFund === 0 ? '' : currentFund}
                         onChange={(e) => {
+                            if (fundSource !== EMERGENCY_FUND_SOURCES.MANUAL) return
                             setUserHasEdited(true)
                             const val = e.target.value === '' ? 0 : parseFloat(e.target.value) || 0
                             setCurrentFund(val)
                         }}
                         onFocus={(e) => e.target.select()}
                         placeholder="0"
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                        disabled={fundSource !== EMERGENCY_FUND_SOURCES.MANUAL}
+                        className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white ${
+                            fundSource === EMERGENCY_FUND_SOURCES.MANUAL
+                                ? 'focus:ring-2 focus:ring-blue-500'
+                                : 'opacity-70 cursor-not-allowed'
+                        }`}
                     />
+                    {fundSource === EMERGENCY_FUND_SOURCES.BANK_SYNC && (
+                        <div className="mt-2 p-3 rounded-lg bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800">
+                            <div className="text-xs text-teal-900 dark:text-teal-100">
+                                Using available balance from{' '}
+                                <span className="font-semibold">
+                                    {bankSyncMeta.referenceName || bankSyncMeta.accountName || 'your Emergency Savings account'}
+                                </span>
+                                {bankSyncMeta.balanceUpdatedAt && (
+                                    <span className="ml-1 text-teal-700 dark:text-teal-300">
+                                        (last updated: {new Date(bankSyncMeta.balanceUpdatedAt).toLocaleString()})
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 <div>

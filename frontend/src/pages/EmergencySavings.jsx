@@ -1,12 +1,22 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import axios from 'axios'
 import EmergencyFundCalculator from '../components/EmergencyFundCalculator'
+import {
+    EMERGENCY_FUND_SOURCES,
+    getEmergencyFundAccount,
+    canUseBankSync,
+    applyBankSyncedFund,
+    computeEffectiveEmergencyFund
+} from '../utils/emergencyFundSource'
 
 export default function EmergencySavings() {
     const [loading, setLoading] = useState(true)
     const [isSaving, setIsSaving] = useState(false)
     const hasLoadedData = useRef(false)
     const [hasUserEdited, setHasUserEdited] = useState(false)
+    const [emergencyAccount, setEmergencyAccount] = useState(null)
+    const [hasInvestecCredentials, setHasInvestecCredentials] = useState(false)
+    const [fundSource, setFundSource] = useState(EMERGENCY_FUND_SOURCES.MANUAL)
 
     // Emergency Fund data - uses new field names matching API
     const [emergencyFundData, setEmergencyFundData] = useState({
@@ -26,13 +36,16 @@ export default function EmergencySavings() {
     // Needs total from budget for computing monthly expenses (read-only)
     const [needsTotal, setNeedsTotal] = useState(0)
 
+    // Manual bank accounts (for emergency fund total when is_emergency_savings)
+    const [manualAccounts, setManualAccounts] = useState([])
+
     // Load data on mount
     useEffect(() => {
         fetchData()
     }, [])
 
     // Save function - saves ONLY to emergency-savings endpoint
-    const saveData = useCallback(async () => {
+    const saveData = useCallback(async (fundSourceOverride) => {
         if (!hasLoadedData.current) {
             console.log('EmergencySavings: Not saving - data not loaded yet')
             return
@@ -54,7 +67,8 @@ export default function EmergencySavings() {
                 monthly_deposit: latestEmergencyData.monthly_deposit ?? 0,
                 target_type: latestEmergencyData.target_type,
                 target_months: latestEmergencyData.target_months,
-                target_value: latestEmergencyData.target_value
+                target_value: latestEmergencyData.target_value,
+                fund_source: fundSourceOverride ?? fundSource
             })
             console.log('EmergencySavings: Save successful')
         } catch (err) {
@@ -62,7 +76,7 @@ export default function EmergencySavings() {
         } finally {
             setIsSaving(false)
         }
-    }, [loading])
+    }, [loading, fundSource])
 
     // Auto-save when user edits
     useEffect(() => {
@@ -91,6 +105,7 @@ export default function EmergencySavings() {
             // Fetch emergency savings data from dedicated endpoint
             const emergencyRes = await axios.get('/api/emergency-savings/default_user')
 
+            let savedFundSource = EMERGENCY_FUND_SOURCES.MANUAL
             if (emergencyRes.data) {
                 const loadedEmergencyData = {
                     current_fund: emergencyRes.data.current_fund ?? 0,
@@ -101,7 +116,50 @@ export default function EmergencySavings() {
                 }
                 setEmergencyFundData(loadedEmergencyData)
                 emergencyFundDataRef.current = loadedEmergencyData
+                const apiSource = emergencyRes.data.fund_source
+                savedFundSource =
+                    apiSource === EMERGENCY_FUND_SOURCES.BANK_SYNC
+                        ? EMERGENCY_FUND_SOURCES.BANK_SYNC
+                        : EMERGENCY_FUND_SOURCES.MANUAL
             }
+
+            // Fetch Investec connection and account state for optional bank sync
+            let hasCredentials = false
+            let efAccount = null
+            try {
+                const credentialsRes = await axios.get('/api/investec/credentials/status')
+                hasCredentials = Boolean(credentialsRes.data?.is_connected)
+                setHasInvestecCredentials(hasCredentials)
+
+                if (hasCredentials) {
+                    const accountsRes = await axios.get('/api/investec/accounts')
+                    efAccount = getEmergencyFundAccount(accountsRes.data)
+                    setEmergencyAccount(efAccount || null)
+                } else {
+                    setEmergencyAccount(null)
+                }
+            } catch (e) {
+                setHasInvestecCredentials(false)
+                setEmergencyAccount(null)
+            }
+
+            // Fetch manual bank accounts (for emergency fund total)
+            try {
+                const manualRes = await axios.get('/api/manual-accounts')
+                setManualAccounts(manualRes.data || [])
+            } catch (e) {
+                setManualAccounts([])
+            }
+
+            // Set fundSource only after Investec state is known - otherwise the useEffect
+            // would immediately reset bank_sync to manual because bankSyncAvailable is
+            // still false while Investec is loading
+            const bankSyncOk = Boolean(hasCredentials && efAccount)
+            const resolvedSource =
+                savedFundSource === EMERGENCY_FUND_SOURCES.BANK_SYNC && !bankSyncOk
+                    ? EMERGENCY_FUND_SOURCES.MANUAL
+                    : savedFundSource
+            setFundSource(resolvedSource)
 
             hasLoadedData.current = true
         } catch (err) {
@@ -112,11 +170,45 @@ export default function EmergencySavings() {
         }
     }
 
+    const bankSyncAvailable = canUseBankSync({
+        hasInvestecCredentials,
+        emergencyAccount
+    })
+
+    useEffect(() => {
+        if (!bankSyncAvailable && fundSource !== EMERGENCY_FUND_SOURCES.MANUAL) {
+            setFundSource(EMERGENCY_FUND_SOURCES.MANUAL)
+            saveData(EMERGENCY_FUND_SOURCES.MANUAL)
+        }
+    }, [bankSyncAvailable, fundSource, saveData])
+
+    const handleFundSourceChange = (source) => {
+        if (source === EMERGENCY_FUND_SOURCES.BANK_SYNC && !bankSyncAvailable) return
+        setFundSource(source)
+
+        if (source === EMERGENCY_FUND_SOURCES.BANK_SYNC && emergencyAccount) {
+            const newData = applyBankSyncedFund(
+                emergencyFundDataRef.current,
+                emergencyAccount
+            )
+            emergencyFundDataRef.current = newData
+            setEmergencyFundData(newData)
+        }
+        saveData(source)
+    }
+
     const handleEmergencyFundSave = (data) => {
         setHasUserEdited(true)
+        // Manual accounts contribute to displayed total; we only store the "manual" portion in current_fund
+        const manualEmergencyTotal = manualAccounts
+            .filter((a) => a.is_emergency_savings)
+            .reduce((sum, a) => sum + (a.balance || 0), 0)
+        const userEnteredTotal = data.current_emergency_fund ?? 0
+        const manualPortionToStore = Math.max(0, userEnteredTotal - manualEmergencyTotal)
+
         // Convert from component's field names to API field names
         const apiData = {
-            current_fund: data.current_emergency_fund ?? 0,
+            current_fund: manualPortionToStore,
             monthly_deposit: data.monthly_emergency_deposit ?? 0,
             target_type: data.emergency_target_type,
             target_months: data.emergency_target_months,
@@ -128,9 +220,17 @@ export default function EmergencySavings() {
 
     if (loading) return <div className="p-8 text-center text-gray-500">Loading...</div>
 
+    // Compute effective total from manual value, bank sync, and manual accounts marked as EF
+    const effectiveCurrentFund = computeEffectiveEmergencyFund({
+        fundSource,
+        fundSourceManualValue: emergencyFundData.current_fund,
+        bankSyncBalance: emergencyAccount?.available_balance,
+        manualAccounts
+    })
+
     // Convert API field names to component's expected field names
     const componentData = {
-        current_emergency_fund: emergencyFundData.current_fund,
+        current_emergency_fund: effectiveCurrentFund,
         monthly_emergency_deposit: emergencyFundData.monthly_deposit,
         emergency_target_type: emergencyFundData.target_type,
         emergency_target_months: emergencyFundData.target_months,
@@ -152,6 +252,15 @@ export default function EmergencySavings() {
                 needsTotal={needsTotal}
                 emergencyFundData={componentData}
                 onSave={handleEmergencyFundSave}
+                fundSource={fundSource}
+                onFundSourceChange={handleFundSourceChange}
+                bankSyncAvailable={bankSyncAvailable}
+                hasInvestecCredentials={hasInvestecCredentials}
+                bankSyncMeta={{
+                    accountName: emergencyAccount?.account_name,
+                    referenceName: emergencyAccount?.reference_name,
+                    balanceUpdatedAt: emergencyAccount?.balance_updated_at
+                }}
             />
         </div>
     )

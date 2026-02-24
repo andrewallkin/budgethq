@@ -106,181 +106,9 @@ def update_password_for_local_dev(db_config):
                 logger.info(f"Password update completed for {username} (verification: user exists)")
             else:
                 logger.warning(f"Could not verify password update for {username}")
-            # If we can't determine, try a SELECT to verify
-            verify_cmd = [
-                "psql",
-                "-h", db_config["host"],
-                "-p", db_config["port"],
-                "-U", db_config["user"],
-                "-d", db_config["database"],
-                "-t", "-c", f"SELECT COUNT(*) FROM users WHERE username = '{escaped_username}';"
-            ]
-            verify_result = subprocess.run(verify_cmd, check=True, capture_output=True, text=True)
-            if verify_result.stdout.strip() == "1":
-                logger.info(f"Password update completed for {username} (verification: user exists)")
-            else:
-                logger.warning(f"Could not verify password update for {username}")
-            
+
     except Exception as e:
         logger.warning(f"Could not update password for local development: {e}")
-
-
-def filter_sql_by_username(sql_lines, target_username, data_statement_types=None):
-    """Always restore full backup, then clean up unwanted user data afterwards."""
-    # Restore the full backup - cleanup happens afterwards
-    return sql_lines
-
-
-def cleanup_non_target_user_data(db_config, target_username):
-    """Find target user and delete all data for other users."""
-    logger.info(f"Finding user '{target_username}' and removing other user data")
-
-    try:
-        # Set PGPASSWORD for psql commands
-        os.environ["PGPASSWORD"] = db_config["password"]
-
-        # First, find the target user's ID
-        find_user_cmd = [
-            "psql",
-            "-h", db_config["host"],
-            "-p", db_config["port"],
-            "-U", db_config["user"],
-            "-d", db_config["database"],
-            "-t", "-c", f"SELECT id FROM users WHERE username = '{target_username}' LIMIT 1;"
-        ]
-
-        result = subprocess.run(find_user_cmd, capture_output=True, text=True)
-        target_user_id = result.stdout.strip()
-
-        if not target_user_id:
-            logger.error(f"Could not find user ID for '{target_username}' in restored database")
-            return False
-
-        target_user_id = int(target_user_id)
-        logger.info(f"Found target user ID: {target_user_id} for '{target_username}'")
-
-        # Check total users before cleanup
-        count_users_cmd = [
-            "psql",
-            "-h", db_config["host"],
-            "-p", db_config["port"],
-            "-U", db_config["user"],
-            "-d", db_config["database"],
-            "-t", "-c", "SELECT COUNT(*) FROM users;"
-        ]
-        count_result = subprocess.run(count_users_cmd, capture_output=True, text=True)
-        total_users_before = int(count_result.stdout.strip()) if count_result.stdout.strip().isdigit() else 0
-        logger.info(f"Total users in database before cleanup: {total_users_before}")
-
-        # Dynamically discover all tables with user_id columns (except users table)
-        discover_tables_cmd = [
-            "psql",
-            "-h", db_config["host"],
-            "-p", db_config["port"],
-            "-U", db_config["user"],
-            "-d", db_config["database"],
-            "-t", "-c", """
-                SELECT DISTINCT t.table_name
-                FROM information_schema.columns c
-                JOIN information_schema.tables t ON c.table_name = t.table_name
-                WHERE c.column_name = 'user_id'
-                  AND t.table_schema = 'public'
-                  AND t.table_type = 'BASE TABLE'
-                  AND t.table_name != 'users'
-                ORDER BY t.table_name;
-            """
-        ]
-
-        result = subprocess.run(discover_tables_cmd, capture_output=True, text=True)
-        user_related_tables = [line.strip() for line in result.stdout.strip().split('\n') if line.strip()]
-
-
-        # Use reverse alphabetical order for cleanup
-        cleanup_tables = sorted(user_related_tables, reverse=True)
-        deleted_counts = {}
-
-        # Delete from each table where user_id != target_user_id
-        for table in cleanup_tables:
-            delete_cmd = [
-                "psql",
-                "-h", db_config["host"],
-                "-p", db_config["port"],
-                "-U", db_config["user"],
-                "-d", db_config["database"],
-                "-t", "-c", f"DELETE FROM {table} WHERE user_id != {target_user_id};"
-            ]
-
-            result = subprocess.run(delete_cmd, capture_output=True, text=True)
-            affected_rows = result.stdout.strip()
-
-            # Parse psql output - it returns "DELETE X" format
-            if result.returncode == 0 and affected_rows.startswith('DELETE '):
-                count_str = affected_rows.split(' ')[1]
-                if count_str.isdigit():
-                    deleted_counts[table] = int(count_str)
-                else:
-                    logger.warning(f"Unexpected DELETE output from {table}: '{affected_rows}'")
-                    deleted_counts[table] = 0
-            else:
-                logger.error(f"DELETE from {table} failed - return code: {result.returncode}, output: '{affected_rows}', stderr: '{result.stderr.strip()}'")
-                deleted_counts[table] = 0
-
-        # Finally, delete all other users from the users table
-        delete_users_cmd = [
-            "psql",
-            "-h", db_config["host"],
-            "-p", db_config["port"],
-            "-U", db_config["user"],
-            "-d", db_config["database"],
-            "-t", "-c", f"DELETE FROM users WHERE id != {target_user_id};"
-        ]
-
-        result = subprocess.run(delete_users_cmd, capture_output=True, text=True)
-        output = result.stdout.strip()
-
-        # Parse psql output - it returns "DELETE X" format
-        if result.returncode == 0 and output.startswith('DELETE '):
-            count_str = output.split(' ')[1]
-            if count_str.isdigit():
-                deleted_users = int(count_str)
-            else:
-                logger.warning(f"Unexpected DELETE output from users: '{output}'")
-                deleted_users = 0
-        else:
-            logger.error(f"DELETE from users failed - return code: {result.returncode}, output: '{output}', stderr: '{result.stderr.strip()}'")
-            deleted_users = 0
-
-        # Log cleanup results
-        logger.info(f"✅ Cleanup completed - only '{target_username}' data remains")
-        logger.info(f"   - Removed {deleted_users} other users and {sum(deleted_counts.values())} related records")
-
-        # Verify only target user remains
-        verify_cmd = [
-            "psql",
-            "-h", db_config["host"],
-            "-p", db_config["port"],
-            "-U", db_config["user"],
-            "-d", db_config["database"],
-            "-t", "-c", "SELECT COUNT(*) FROM users;"
-        ]
-
-        result = subprocess.run(verify_cmd, capture_output=True, text=True)
-        remaining_users = int(result.stdout.strip()) if result.stdout.strip().isdigit() else 0
-
-        if remaining_users == 1:
-            logger.info(f"✅ Verification successful: Only 1 user remains in database")
-            return True
-        else:
-            logger.error(f"❌ Verification failed: {remaining_users} users remain (expected 1)")
-            return False
-
-    except Exception as e:
-        logger.error(f"Error during dynamic cleanup: {e}")
-        return False
-    finally:
-        # Clean up password environment variable
-        if "PGPASSWORD" in os.environ:
-            del os.environ["PGPASSWORD"]
 
 
 def download_and_restore_backup(backup_filename, gcs_client, db_config):
@@ -363,22 +191,17 @@ def download_and_restore_backup(backup_filename, gcs_client, db_config):
         if file_size < 1000:  # Less than 1KB is suspicious
             logger.warning(f"Backup file is very small ({file_size} bytes) - may be empty or incomplete")
 
-        # Use Python to filter out problematic SET commands and filter by username, then pipe to psql
+        # Use Python to filter out problematic SET commands, then pipe to psql
         import gzip
         import re
 
-        # Get target username for filtering (defaults to andrewallkin@gmail.com)
-        target_username = os.environ.get("RESTORE_TARGET_USERNAME", "andrewallkin@gmail.com")
-
-        # Read and filter the backup file
-        filtered_sql = []
+        sql_lines = []
         create_table_count = 0
         insert_count = 0
         data_statement_types = set()  # Track what types of data statements we find
 
         try:
             with gzip.open(temp_backup_file, 'rt', encoding='utf-8') as f:
-                sql_lines = []
                 for line in f:
                     # Filter out problematic SET commands
                     if re.match(r'^\s*SET\s+transaction_timeout', line, re.IGNORECASE):
@@ -397,18 +220,15 @@ def download_and_restore_backup(backup_filename, gcs_client, db_config):
                     insert_count += 1  # Count COPY as data too
                     data_statement_types.add('COPY')
 
-            # Filter SQL by username if specified
-            filtered_sql = filter_sql_by_username(sql_lines, target_username, data_statement_types)
-
         except Exception as e:
             logger.error(f"Error reading/filtering backup file: {e}")
             return False
 
-        if not filtered_sql:
-            logger.error("Backup file appears to be empty after filtering")
+        if not sql_lines:
+            logger.error("Backup file appears to be empty")
             return False
 
-        logger.info(f"Processing backup: {len(filtered_sql)} lines, {create_table_count} tables, {insert_count} data statements")
+        logger.info(f"Processing backup: {len(sql_lines)} lines, {create_table_count} tables, {insert_count} data statements")
         if data_statement_types:
             logger.info(f"Data statement types found: {', '.join(data_statement_types)}")
         else:
@@ -435,7 +255,7 @@ def download_and_restore_backup(backup_filename, gcs_client, db_config):
         )
 
         # Send SQL to psql
-        sql_content = ''.join(filtered_sql)
+        sql_content = ''.join(sql_lines)
         try:
             stdout, stderr = psql_process.communicate(input=sql_content, timeout=300)
         except subprocess.TimeoutExpired:
@@ -500,9 +320,6 @@ def main():
         logger.error(f"POSTGRES_USER: {db_config['user']}, POSTGRES_PASSWORD: {'*' * len(db_config['password']) if db_config['password'] else None}, POSTGRES_DB: {db_config['database']}")
         sys.exit(1)
 
-    # Target username for cleanup (defaults to andrewallkin@gmail.com)
-    target_username = os.environ.get("RESTORE_TARGET_USERNAME", "andrewallkin@gmail.com")
-
     logger.info(f"Target database: {db_config['database']} @ {db_config['host']}:{db_config['port']}")
 
     try:
@@ -526,21 +343,9 @@ def main():
         # Download and restore full backup
         success = download_and_restore_backup(backup_filename, gcs_client, db_config)
         if success:
-            # Get target username for cleanup
-            target_username = os.environ.get("RESTORE_TARGET_USERNAME", "andrewallkin@gmail.com")
-
-            # Clean up data for other users
-            cleanup_success = cleanup_non_target_user_data(db_config, target_username)
-
-            if cleanup_success:
-                logger.info("=" * 60)
-                logger.info("Database initialization and cleanup completed successfully!")
-                logger.info(f"Database now contains only data for user: {target_username}")
-                logger.info("=" * 60)
-            else:
-                logger.error("Database restore succeeded but cleanup failed")
-                logger.error("Database may contain data for multiple users")
-                sys.exit(1)
+            logger.info("=" * 60)
+            logger.info("Database initialization completed successfully!")
+            logger.info("=" * 60)
         else:
             logger.error("Database initialization failed")
             sys.exit(1)

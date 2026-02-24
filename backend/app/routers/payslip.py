@@ -120,6 +120,21 @@ class PayslipConfirmRequest(BaseModel):
     temp_file_id: str
 
 
+class ManualPayslipRequest(BaseModel):
+    """Request model for manual payslip entry (no PDF upload)."""
+    year: int
+    month: int
+    title: Optional[str] = None
+    company_name: Optional[str] = None
+    gross_salary: float
+    paye: float
+    uif_employee_portion: float
+    net_pay: float
+    company_contributions: List[dict] = []
+    personal_deductions: List[dict] = []
+    additional_income: List[dict] = []
+
+
 class FinancialYearSummary(BaseModel):
     financial_year: str  # e.g., "2025/26"
     start_year: int
@@ -440,6 +455,100 @@ async def confirm_payslip_upload(
         raise
     except Exception as e:
         logger.error(f"Error confirming payslip: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/manual-entry", response_model=PayslipResponse)
+def create_manual_payslip(
+    data: ManualPayslipRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Create a payslip via manual data entry (no PDF upload required).
+    Returns 409 if a payslip already exists for this user/year/month.
+    """
+    if data.month < 1 or data.month > 12:
+        raise HTTPException(status_code=400, detail="Month must be between 1 and 12")
+
+    # Check for duplicate
+    existing = (
+        db.query(MonthlyPayslip)
+        .filter(
+            MonthlyPayslip.user_id == current_user.id,
+            MonthlyPayslip.year == data.year,
+            MonthlyPayslip.month == data.month,
+        )
+        .first()
+    )
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail=f"A payslip already exists for {data.year}-{data.month:02d}. Delete it first or upload a replacement.",
+        )
+
+    try:
+        payslip = MonthlyPayslip(
+            user_id=current_user.id,
+            year=data.year,
+            month=data.month,
+            title=data.title,
+            company_name=data.company_name,
+            gross_salary=data.gross_salary,
+            paye=data.paye,
+            uif_employee_portion=data.uif_employee_portion,
+            net_pay=data.net_pay,
+            gcs_file_path=None,
+            uploaded_at=None,
+        )
+        db.add(payslip)
+        db.flush()  # Get the ID
+
+        for item in data.company_contributions:
+            db.add(PayslipItem(
+                payslip_id=payslip.id,
+                description=item.get("description", ""),
+                amount=float(item.get("amount", 0)),
+                item_type="company_contribution",
+            ))
+
+        for item in data.personal_deductions:
+            db.add(PayslipItem(
+                payslip_id=payslip.id,
+                description=item.get("description", ""),
+                amount=float(item.get("amount", 0)),
+                item_type="personal_deduction",
+            ))
+
+        for item in data.additional_income:
+            db.add(PayslipAdditionalIncome(
+                payslip_id=payslip.id,
+                description=item.get("description", ""),
+                amount=float(item.get("amount", 0)),
+            ))
+
+        db.commit()
+
+        payslip = (
+            db.query(MonthlyPayslip)
+            .options(
+                selectinload(MonthlyPayslip.items),
+                selectinload(MonthlyPayslip.additional_income),
+            )
+            .filter(MonthlyPayslip.id == payslip.id)
+            .one()
+        )
+
+        logger.info(
+            f"Manual payslip created for user {current_user.id}, {data.year}-{data.month:02d}"
+        )
+        return payslip
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating manual payslip: {e}")
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 

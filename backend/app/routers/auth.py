@@ -28,6 +28,9 @@ class OpenAIKeyStatus(BaseModel):
 class UsernameChangeRequest(BaseModel):
     username: str
 
+class UserPreferences(BaseModel):
+    has_investec_account: bool
+
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/register", response_model=Token)
@@ -148,6 +151,31 @@ async def delete_openai_key(
     current_user.openai_api_key = None
     db.commit()
     return {"status": "success", "message": "OpenAI API key deleted successfully"}
+
+
+@router.get("/user/preferences", response_model=UserPreferences)
+async def get_user_preferences(
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    """Get user preferences. has_investec_account is true if the flag is set OR credentials exist."""
+    has_credentials = all([
+        current_user.investec_client_id,
+        current_user.investec_client_secret,
+        current_user.investec_api_key
+    ])
+    return {"has_investec_account": bool(current_user.has_investec_account) or has_credentials}
+
+
+@router.put("/user/preferences", response_model=UserPreferences)
+async def update_user_preferences(
+    preferences: UserPreferences,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """Update user preferences."""
+    current_user.has_investec_account = preferences.has_investec_account
+    db.commit()
+    return {"has_investec_account": current_user.has_investec_account}
 
 
 @router.put("/user/username")

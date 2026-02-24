@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, Date, DateTime, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, Date, DateTime, UniqueConstraint, Boolean, Text
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from .database import Base
@@ -11,6 +11,15 @@ class User(Base):
     username = Column(String, unique=True, index=True)
     hashed_password = Column(String)
     openai_api_key = Column(String, nullable=True)  # Encrypted OpenAI API key
+
+    # Encrypted Investec credentials
+    investec_client_id = Column(String, nullable=True)
+    investec_client_secret = Column(String, nullable=True)
+    investec_api_key = Column(String, nullable=True)
+    has_investec_account = Column(Boolean, default=False, server_default='false')
+
+    # Emergency fund designation
+    emergency_fund_account_id = Column(Integer, ForeignKey("investec_accounts.id"), nullable=True)
 
     budget = relationship("Budget", back_populates="owner", uselist=False)
     emergency_savings = relationship("EmergencySavings", back_populates="owner", uselist=False)
@@ -30,6 +39,13 @@ class User(Base):
     monthly_portfolio_summaries = relationship("MonthlyPortfolioSummary", back_populates="owner")
     user_sheet = relationship("UserSheet", back_populates="owner", uselist=False)
     monthly_payslips = relationship("MonthlyPayslip", back_populates="owner", cascade="all, delete-orphan")
+
+    # Investec integration relationships
+    investec_accounts = relationship("InvestecAccount", back_populates="owner", foreign_keys="InvestecAccount.user_id", cascade="all, delete-orphan")
+    manual_bank_accounts = relationship("ManualBankAccount", back_populates="owner", cascade="all, delete-orphan")
+    bank_transactions = relationship("BankTransaction", back_populates="owner", cascade="all, delete-orphan")
+    categorization_rules = relationship("CategorizationRule", back_populates="owner", cascade="all, delete-orphan")
+    emergency_fund_account = relationship("InvestecAccount", foreign_keys=[emergency_fund_account_id], post_update=True)
 
 
 class UserSheet(Base):
@@ -55,6 +71,7 @@ class Budget(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
     salary = Column(Float, default=0)
+    budget_period_start_day = Column(Integer, nullable=True, default=1)  # 1-31, 1 = calendar month
 
     owner = relationship("User", back_populates="budget")
     categories = relationship("BudgetCategory", back_populates="budget")
@@ -70,6 +87,7 @@ class EmergencySavings(Base):
     target_type = Column(String, nullable=True)  # 'months' or 'target_value'
     target_months = Column(Integer, nullable=True)  # 3, 6, or 12
     target_value = Column(Float, nullable=True)  # Direct target value
+    fund_source = Column(String, nullable=True, default='manual')  # 'manual' or 'bank_sync'
 
     owner = relationship("User", back_populates="emergency_savings")
 
@@ -117,7 +135,8 @@ class BudgetCategory(Base):
     type = Column(String)  # 'needs', 'wants', 'savings'
     name = Column(String)
     amount = Column(Float)
-    group = Column(String, nullable=True)  # Optional group for sub-categorization
+    transaction_category = Column(String, nullable=True, default='uncategorized')  # Links to BankTransaction.category
+    excluded = Column(Boolean, default=False)  # If true, entry is visible but not counted in totals
 
     budget = relationship("Budget", back_populates="categories")
 
@@ -389,8 +408,121 @@ class PayslipAdditionalIncome(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     payslip_id = Column(Integer, ForeignKey("monthly_payslips.id"), index=True)
-    
+
     description = Column(String)
     amount = Column(Float)
-    
+
     payslip = relationship("MonthlyPayslip", back_populates="additional_income")
+
+
+# =====================================================
+# Investec API Integration Models
+# =====================================================
+
+class InvestecAccount(Base):
+    """User's connected Investec bank account"""
+    __tablename__ = "investec_accounts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+
+    # From Investec API
+    investec_account_id = Column(String, unique=True, index=True)  # API accountId
+    account_number = Column(String)  # User-friendly account number
+    account_name = Column(String)  # e.g., "Mr AJ Allkin"
+    reference_name = Column(String, nullable=True)  # e.g., "Emergency Fund Account"
+    product_name = Column(String)  # e.g., "Private Bank Account", "PrimeSaver"
+
+    # Balance (cached, refreshed hourly)
+    current_balance = Column(Float, nullable=True)
+    available_balance = Column(Float, nullable=True)
+    currency = Column(String, default="ZAR")
+    balance_updated_at = Column(DateTime, nullable=True)
+
+    # Metadata
+    is_primary = Column(Boolean, default=False)  # Primary spending account
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=get_sast_now)
+    last_synced = Column(DateTime, nullable=True)
+
+    # Relationships
+    owner = relationship("User", back_populates="investec_accounts", foreign_keys=[user_id])
+    transactions = relationship("BankTransaction", back_populates="account", cascade="all, delete-orphan")
+
+
+class BankTransaction(Base):
+    """Transaction from Investec API"""
+    __tablename__ = "bank_transactions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    account_id = Column(Integer, ForeignKey("investec_accounts.id"))
+
+    # From Investec API
+    investec_uuid = Column(String, unique=True, index=True)  # Unique transaction ID
+    transaction_type = Column(String)  # CREDIT or DEBIT
+    transaction_category = Column(String, nullable=True)  # CardPurchases, Deposits, FeesAndInterest
+    status = Column(String)  # POSTED or PENDING
+    description = Column(String)
+    amount = Column(Float)
+
+    # Dates
+    transaction_date = Column(DateTime)  # When transaction occurred
+    posting_date = Column(DateTime, nullable=True)  # When posted to account
+    value_date = Column(DateTime, nullable=True)  # When funds available
+
+    # Additional details
+    card_number = Column(String, nullable=True)
+    running_balance = Column(Float, nullable=True)
+
+    # AI Categorization (7 simplified categories)
+    category = Column(String, nullable=True)  # One of: salary, side_income, investment_income, refund, other_income, groceries_household, bills, subscriptions, transport, lifestyle_misc, savings, loan_repayment, transfers
+    ai_category_confidence = Column(Float, nullable=True)  # 0.0 to 1.0
+    user_corrected = Column(Boolean, default=False)  # User manually changed category
+
+    # Metadata
+    synced_at = Column(DateTime, default=get_sast_now)
+    created_at = Column(DateTime, default=get_sast_now)
+
+    # Relationships
+    owner = relationship("User", back_populates="bank_transactions")
+    account = relationship("InvestecAccount", back_populates="transactions")
+
+
+class ManualBankAccount(Base):
+    """User-created manual bank account with balance-only updates (no transaction sync)"""
+    __tablename__ = "manual_bank_accounts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+
+    name = Column(String)
+    balance = Column(Float, default=0)
+    is_emergency_savings = Column(Boolean, default=False)
+
+    created_at = Column(DateTime, default=get_sast_now)
+    updated_at = Column(DateTime, default=get_sast_now, onupdate=get_sast_now)
+
+    owner = relationship("User", back_populates="manual_bank_accounts")
+
+
+class CategorizationRule(Base):
+    """User-defined transaction categorization rules"""
+    __tablename__ = "categorization_rules"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
+
+    # Rule definition
+    pattern = Column(String)  # Regex or substring to match
+    category = Column(String)  # Target category (income, groceries, etc.)
+    priority = Column(Integer, default=0)  # Higher priority checked first
+
+    # Metadata
+    is_active = Column(Boolean, default=True)
+    created_from_correction = Column(Boolean, default=False)  # Auto-generated from user correction
+    usage_count = Column(Integer, default=0)  # How many times this rule has matched
+    created_at = Column(DateTime, default=get_sast_now)
+
+    # Relationships
+    owner = relationship("User", back_populates="categorization_rules")

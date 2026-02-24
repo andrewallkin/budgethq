@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
 import axios from 'axios'
-import { Plus, Trash2, ArrowLeft, ChevronLeft, ChevronRight, Upload, FileText, TrendingUp, DollarSign, Receipt } from 'lucide-react'
+import { Plus, Trash2, ArrowLeft, ChevronLeft, ChevronRight, Upload, FileText, TrendingUp, DollarSign, Receipt, PenLine } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { formatCurrency } from '../utils/numberFormatting'
 import PayslipUploadModal from '../components/PayslipUploadModal'
+import ManualPayslipModal from '../components/ManualPayslipModal'
 import ConfirmDeleteModal from '../components/ConfirmDeleteModal'
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 
@@ -13,7 +14,9 @@ export default function SalaryPage() {
     const [error, setError] = useState(null)
     const [saving, setSaving] = useState(false)
     const [uploadModalOpen, setUploadModalOpen] = useState(false)
+    const [manualModalOpen, setManualModalOpen] = useState(false)
     const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+    const [hasOpenAIKey, setHasOpenAIKey] = useState(false)
     const [fyData, setFyData] = useState(null)
     
     // Month/Year state - will be set from latest payslip
@@ -25,9 +28,12 @@ export default function SalaryPage() {
     const currentDate = new Date()
     const [fyYear, setFyYear] = useState(currentDate.getMonth() >= 3 ? currentDate.getFullYear() : currentDate.getFullYear() - 1)
 
-    // Load latest payslip on mount
+    // Load latest payslip and OpenAI key status on mount
     useEffect(() => {
         loadLatestPayslip()
+        axios.get('/api/auth/user/settings/openai-key')
+            .then(res => setHasOpenAIKey(res.data.has_key))
+            .catch(() => {})
     }, [])
 
     // Load specific payslip when month/year changes (after initial load)
@@ -251,13 +257,22 @@ export default function SalaryPage() {
                     <p className="text-gray-600 dark:text-gray-400 mb-6">
                         Upload your monthly payslip PDF to automatically extract and track your salary information
                     </p>
-                    <button
-                        onClick={() => setUploadModalOpen(true)}
-                        className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium text-lg"
-                    >
-                        <Upload className="w-5 h-5" />
-                        Upload First Payslip
-                    </button>
+                    <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                        <button
+                            onClick={() => setUploadModalOpen(true)}
+                            className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium text-lg"
+                        >
+                            <Upload className="w-5 h-5" />
+                            Upload First Payslip
+                        </button>
+                        <button
+                            onClick={() => setManualModalOpen(true)}
+                            className="inline-flex items-center gap-2 px-6 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-medium text-lg"
+                        >
+                            <PenLine className="w-5 h-5" />
+                            Enter Manually
+                        </button>
+                    </div>
                 </div>
 
                 <PayslipUploadModal
@@ -267,6 +282,14 @@ export default function SalaryPage() {
                     initialMonth={currentDate.getMonth() + 1}
                     initialYear={currentDate.getFullYear()}
                     isUpdate={false}
+                    hasOpenAIKey={hasOpenAIKey}
+                />
+                <ManualPayslipModal
+                    isOpen={manualModalOpen}
+                    onClose={() => setManualModalOpen(false)}
+                    onSuccess={handleUploadSuccess}
+                    initialMonth={currentDate.getMonth() + 1}
+                    initialYear={currentDate.getFullYear()}
                 />
             </div>
         )
@@ -289,32 +312,23 @@ export default function SalaryPage() {
 
                 {/* Month Navigator */}
                 <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-xl p-4 border border-blue-200 dark:border-blue-800">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                        <div className="flex items-center justify-between sm:justify-start gap-3">
-                            <button
-                                onClick={() => handleMonthChange(-1)}
-                                className="p-2 hover:bg-white dark:hover:bg-gray-800 rounded-lg transition-colors"
-                            >
-                                <ChevronLeft className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-                            </button>
-                            <div className="text-center">
-                                <div className="text-lg font-bold text-gray-900 dark:text-white">
-                                    {monthNames[selectedMonth - 1]} {selectedYear}
-                                </div>
+                    <div className="flex items-center justify-center gap-3">
+                        <button
+                            onClick={() => handleMonthChange(-1)}
+                            className="p-2 hover:bg-white dark:hover:bg-gray-800 rounded-lg transition-colors"
+                        >
+                            <ChevronLeft className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                        </button>
+                        <div className="text-center">
+                            <div className="text-lg font-bold text-gray-900 dark:text-white">
+                                {monthNames[selectedMonth - 1]} {selectedYear}
                             </div>
-                            <button
-                                onClick={() => handleMonthChange(1)}
-                                className="p-2 hover:bg-white dark:hover:bg-gray-800 rounded-lg transition-colors"
-                            >
-                                <ChevronRight className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-                            </button>
                         </div>
                         <button
-                            onClick={() => setUploadModalOpen(true)}
-                            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium"
+                            onClick={() => handleMonthChange(1)}
+                            className="p-2 hover:bg-white dark:hover:bg-gray-800 rounded-lg transition-colors"
                         >
-                            <Upload className="w-4 h-4" />
-                            Upload Payslip
+                            <ChevronRight className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                         </button>
                     </div>
                 </div>
@@ -325,13 +339,22 @@ export default function SalaryPage() {
                     <p className="text-gray-600 dark:text-gray-400 mb-6">
                         Upload a payslip for {monthNames[selectedMonth - 1]} {selectedYear}
                     </p>
-                    <button
-                        onClick={() => setUploadModalOpen(true)}
-                        className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium"
-                    >
-                        <Upload className="w-5 h-5" />
-                        Upload Payslip
-                    </button>
+                    <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                        <button
+                            onClick={() => setUploadModalOpen(true)}
+                            className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium"
+                        >
+                            <Upload className="w-5 h-5" />
+                            Upload Payslip
+                        </button>
+                        <button
+                            onClick={() => setManualModalOpen(true)}
+                            className="inline-flex items-center gap-2 px-6 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-medium"
+                        >
+                            <PenLine className="w-5 h-5" />
+                            Enter Manually
+                        </button>
+                    </div>
                 </div>
 
                 <PayslipUploadModal
@@ -341,6 +364,14 @@ export default function SalaryPage() {
                     initialMonth={selectedMonth}
                     initialYear={selectedYear}
                     isUpdate={false}
+                    hasOpenAIKey={hasOpenAIKey}
+                />
+                <ManualPayslipModal
+                    isOpen={manualModalOpen}
+                    onClose={() => setManualModalOpen(false)}
+                    onSuccess={handleUploadSuccess}
+                    initialMonth={selectedMonth}
+                    initialYear={selectedYear}
                 />
             </div>
         )
@@ -404,17 +435,10 @@ export default function SalaryPage() {
                             <ChevronRight className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                         </button>
                     </div>
-                    <div className="flex flex-col-reverse sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
-                        <button
-                            onClick={() => setUploadModalOpen(true)}
-                            className="flex items-center justify-center gap-2 w-full sm:w-auto px-4 py-3 sm:py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium"
-                        >
-                            <Upload className="w-4 h-4" />
-                            Update Payslip
-                        </button>
+                    <div className="flex items-center gap-2">
                         <button
                             onClick={() => setDeleteModalOpen(true)}
-                            className="flex items-center justify-center gap-2 w-full sm:w-auto px-4 py-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg transition-colors font-medium sm:border-0 sm:bg-red-600 sm:hover:bg-red-700 sm:text-white"
+                            className="flex items-center justify-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors font-medium"
                             title="Delete this payslip"
                         >
                             <Trash2 className="w-4 h-4" />
@@ -423,16 +447,6 @@ export default function SalaryPage() {
                     </div>
                 </div>
             </div>
-
-            {/* Upload Modal */}
-            <PayslipUploadModal
-                isOpen={uploadModalOpen}
-                onClose={() => setUploadModalOpen(false)}
-                onSuccess={handleUploadSuccess}
-                initialMonth={selectedMonth}
-                initialYear={selectedYear}
-                isUpdate={true}
-            />
 
             {/* Delete Confirmation Modal */}
             <ConfirmDeleteModal

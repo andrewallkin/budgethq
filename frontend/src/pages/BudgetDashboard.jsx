@@ -14,26 +14,12 @@ function useIsMobile(breakpoint = 640) {
     return isMobile
 }
 
-function ChartLegend({ payload, formatter }) {
-    if (!payload || payload.length === 0) return null
-    return (
-        <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-4 min-h-[60px] text-gray-500 dark:text-gray-400 text-sm">
-            {payload.map((entry, index) => (
-                <div key={index} className="flex items-center gap-2">
-                    <span
-                        className="w-3 h-3 rounded-full flex-shrink-0"
-                        style={{ backgroundColor: entry.color }}
-                    />
-                    <span>{formatter ? formatter(entry.value, entry, index) : entry.value}</span>
-                </div>
-            ))}
-        </div>
-    )
-}
-import { Plus, Trash2, TrendingUp, ChevronDown, ChevronRight, Folder, Calculator } from 'lucide-react'
+import { Plus, Trash2, Calculator, BarChart2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import SavingsCalculator from '../components/SavingsCalculator'
+import ChartLegend from '../components/ChartLegend'
 import { formatCurrency, formatNumber } from '../utils/numberFormatting'
+import { BUDGET_TRANSACTION_CATEGORIES, CATEGORY_LABELS } from '../utils/transactionCategories'
 
 const COLORS = {
     Needs: '#B91C1C', // red-700
@@ -80,6 +66,9 @@ export default function BudgetDashboard() {
     // Savings Calculator
     const [showSavingsCalculator, setShowSavingsCalculator] = useState(false)
 
+    // Budget period (for non-calendar periods)
+    const [currentPeriodLabel, setCurrentPeriodLabel] = useState(null)
+
     // Load data on mount
     useEffect(() => {
         fetchData()
@@ -114,18 +103,18 @@ export default function BudgetDashboard() {
 
     const fetchData = async () => {
         try {
-            const [budgetRes, portfolioRes] = await Promise.all([
+            const [budgetRes, portfolioRes, periodRes] = await Promise.all([
                 axios.get('/api/budget/default_user'),
-                axios.get('/api/portfolio')
+                axios.get('/api/portfolio'),
+                axios.get('/api/budget/period/current').catch(() => null)
             ])
 
             if (budgetRes.data && Object.keys(budgetRes.data).length > 0) {
                 // Only set salary if it exists and is not null
                 setSalary(budgetRes.data.salary ?? 0)
-                // Ensure all categories have group field (backward compatibility)
-                setNeeds((budgetRes.data.needs || []).map(item => ({ ...item, group: item.group || null })))
-                setWants((budgetRes.data.wants || []).map(item => ({ ...item, group: item.group || null })))
-                setSavings((budgetRes.data.savings || []).map(item => ({ ...item, group: item.group || null })))
+                setNeeds((budgetRes.data.needs || []).map(item => ({ ...item, transaction_category: item.transaction_category || 'uncategorized', excluded: item.excluded ?? false })))
+                setWants((budgetRes.data.wants || []).map(item => ({ ...item, transaction_category: item.transaction_category || 'uncategorized', excluded: item.excluded ?? false })))
+                setSavings((budgetRes.data.savings || []).map(item => ({ ...item, transaction_category: item.transaction_category || 'uncategorized', excluded: item.excluded ?? false })))
 
                 hasLoadedData.current = true
             } else {
@@ -137,6 +126,17 @@ export default function BudgetDashboard() {
                 const total = portfolioRes.data.reduce((sum, etf) => sum + (etf.Current_Value || 0), 0)
                 setPortfolioTotal(total)
                 setPortfolioEtfCount(portfolioRes.data.length)
+            }
+
+            // Show period label when using non-calendar period
+            const startDay = budgetRes.data?.budget_period_start_day ?? 1
+            if (startDay !== 1 && periodRes?.data?.from_date && periodRes?.data?.to_date) {
+                const from = new Date(periodRes.data.from_date)
+                const to = new Date(periodRes.data.to_date)
+                const opts = { day: 'numeric', month: 'short', year: 'numeric' }
+                setCurrentPeriodLabel(`${from.toLocaleDateString('en-ZA', opts)} – ${to.toLocaleDateString('en-ZA', opts)}`)
+            } else {
+                setCurrentPeriodLabel(null)
             }
         } catch (err) {
             console.error("Failed to fetch data", err)
@@ -165,9 +165,9 @@ export default function BudgetDashboard() {
         }
     }
 
-    const addCategory = (type, name, amount = 0, group = null) => {
+    const addCategory = (type, name, amount = 0, transactionCategory = 'uncategorized') => {
         setHasUserEdited(true)
-        const newItem = { name, amount, group }
+        const newItem = { name, amount, transaction_category: transactionCategory, excluded: false }
         if (type === 'needs') setNeeds([...needs, newItem])
         else if (type === 'wants') setWants([...wants, newItem])
         else setSavings([...savings, newItem])
@@ -177,7 +177,7 @@ export default function BudgetDashboard() {
         setHasUserEdited(true)
         const list = type === 'needs' ? needs : type === 'wants' ? wants : savings
         const newList = [...list]
-        newList[index][field] = field === 'amount' ? parseFloat(value) || 0 : value
+        newList[index][field] = field === 'amount' ? parseFloat(value) || 0 : field === 'excluded' ? Boolean(value) : value
 
         if (type === 'needs') setNeeds(newList)
         if (type === 'wants') setWants(newList)
@@ -194,7 +194,7 @@ export default function BudgetDashboard() {
         if (type === 'savings') setSavings(newList)
     }
 
-    // Calculations
+    // Calculations (excluded entries still count on dashboard; they are only excluded from Budget Analysis)
     const totalNeeds = needs.reduce((sum, item) => sum + item.amount, 0)
     const totalWants = wants.reduce((sum, item) => sum + item.amount, 0)
     const totalSavings = savings.reduce((sum, item) => sum + item.amount, 0)
@@ -222,8 +222,13 @@ export default function BudgetDashboard() {
     return (
         <div className="space-y-6 sm:space-y-8">
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
-                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">💰 Budget Dashboard</h1>
-                <div className="flex items-center gap-4">
+                <div>
+                    <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">💰 Budget Dashboard</h1>
+                    {currentPeriodLabel && (
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Current period: {currentPeriodLabel}</p>
+                    )}
+                </div>
+                <div className="flex items-center gap-4 shrink-0">
                     <button
                         onClick={() => setShowSavingsCalculator(true)}
                         className="flex items-center gap-2 px-4 py-2.5 min-h-[44px] bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
@@ -415,7 +420,7 @@ export default function BudgetDashboard() {
                                 type={activeTab}
                                 items={activeTab === 'needs' ? needs : activeTab === 'wants' ? wants : savings}
                                 netIncome={netIncome}
-                                onAdd={(name, amount, group) => addCategory(activeTab, name, amount, group)}
+                                onAdd={(name, amount, transactionCategory) => addCategory(activeTab, name, amount, transactionCategory)}
                                 onUpdate={(index, field, val) => updateCategory(activeTab, index, field, val)}
                                 onRemove={(index) => removeCategory(activeTab, index)}
                             />
@@ -514,24 +519,8 @@ function SummaryItem({ label, value, color, percentage }) {
 const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => {
     const [newName, setNewName] = useState('')
     const [newAmount, setNewAmount] = useState('')
-    const [newGroup, setNewGroup] = useState('')
-    const [collapsedGroups, setCollapsedGroups] = useState(new Set())
-    const [editingGroup, setEditingGroup] = useState({}) // Track local group values while editing
+    const [newTransactionCategory, setNewTransactionCategory] = useState('uncategorized')
 
-    // Get all unique groups from items
-    const allGroups = Array.from(new Set(items.map(item => item.group).filter(Boolean)))
-
-    // Group items by their group field
-    const groupedItems = items.reduce((acc, item, index) => {
-        const group = item.group || null
-        if (!acc[group]) {
-            acc[group] = []
-        }
-        acc[group].push({ ...item, originalIndex: index })
-        return acc
-    }, {})
-
-    // Calculate percentage helper
     const calculatePercentage = (amount) => {
         if (netIncome === 0) return 0
         return (amount / netIncome) * 100
@@ -539,10 +528,10 @@ const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => 
 
     const handleAdd = () => {
         if (newName.trim()) {
-            onAdd(newName.trim(), parseFloat(newAmount) || 0, newGroup.trim() || null)
+            onAdd(newName.trim(), parseFloat(newAmount) || 0, newTransactionCategory)
             setNewName('')
             setNewAmount('')
-            setNewGroup('')
+            setNewTransactionCategory('uncategorized')
         }
     }
 
@@ -552,76 +541,12 @@ const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => 
         }
     }
 
-    const toggleGroup = (group) => {
-        const newCollapsed = new Set(collapsedGroups)
-        if (newCollapsed.has(group)) {
-            newCollapsed.delete(group)
-        } else {
-            newCollapsed.add(group)
-        }
-        setCollapsedGroups(newCollapsed)
-    }
-
-    const getGroupTotal = (groupItems) => {
-        return groupItems.reduce((sum, item) => sum + item.amount, 0)
-    }
-
-    // Render a group header
-    const renderGroupHeader = (groupName, groupItems) => {
-        const total = getGroupTotal(groupItems)
-        const isCollapsed = collapsedGroups.has(groupName)
-        const displayName = groupName === null ? 'Uncategorized' : groupName
-
-        return (
-            <div
-                key={groupName}
-                className="mt-4 first:mt-0"
-            >
-                <button
-                    onClick={() => toggleGroup(groupName)}
-                    className="w-full flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors text-left"
-                >
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                        {isCollapsed ? (
-                            <ChevronRight className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
-                        ) : (
-                            <ChevronDown className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
-                        )}
-                        <Folder className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
-                        <span className="font-semibold text-blue-900 dark:text-blue-100 break-words min-w-0">{displayName}</span>
-                        <span className="text-sm text-blue-700 dark:text-blue-300 flex-shrink-0">
-                            ({groupItems.length} {groupItems.length === 1 ? 'item' : 'items'})
-                        </span>
-                    </div>
-                    <div className="flex items-center gap-2 flex-shrink-0 self-end sm:self-auto">
-                        <span className="font-semibold text-blue-900 dark:text-blue-100">
-                            {formatCurrency(total, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </span>
-                        <span className="text-sm text-blue-700 dark:text-blue-300">
-                            ({formatNumber(calculatePercentage(total), {
-                                minimumFractionDigits: 1,
-                                maximumFractionDigits: 1,
-                            })}%)
-                        </span>
-                    </div>
-                </button>
-                {!isCollapsed && (
-                    <div className="mt-0 ml-4 border-l-2 border-gray-200 dark:border-gray-600 pl-3">
-                        {groupItems.map((item) => renderCategoryItem(item, item.originalIndex))}
-                    </div>
-                )}
-            </div>
-        )
-    }
-
-    // Render a single category item
     const renderCategoryItem = (item, index) => {
         const percentage = calculatePercentage(item.amount)
-        // Use local editing state if available, otherwise use item.group
-        const groupValue = editingGroup[index] !== undefined ? editingGroup[index] : (item.group || '')
+        const isExcluded = item.excluded ?? false
 
         return (
-            <div key={index} className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 py-3 border-b border-gray-200 dark:border-gray-600 last:border-b-0 group">
+            <div key={index} className={`flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 py-3 border-b border-gray-200 dark:border-gray-600 last:border-b-0 group ${isExcluded ? 'opacity-60' : ''}`}>
                 <div className="flex items-center gap-2 min-w-0 flex-1">
                     <input
                         type="text"
@@ -629,37 +554,15 @@ const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => 
                         onChange={(e) => onUpdate(index, 'name', e.target.value)}
                         className="flex-1 min-w-0 min-h-[44px] py-2 bg-transparent border-none focus:ring-0 text-gray-900 dark:text-white font-medium"
                     />
-                    <div className="relative flex-shrink-0 hidden sm:block">
-                        <input
-                            type="text"
-                            list={`group-edit-list-${type}-${index}`}
-                            placeholder="Group..."
-                            value={groupValue}
-                            onChange={(e) => {
-                                setEditingGroup(prev => ({ ...prev, [index]: e.target.value }))
-                            }}
-                            onBlur={(e) => {
-                                const finalValue = e.target.value.trim() || null
-                                onUpdate(index, 'group', finalValue)
-                                setEditingGroup(prev => {
-                                    const newState = { ...prev }
-                                    delete newState[index]
-                                    return newState
-                                })
-                            }}
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                    e.target.blur()
-                                }
-                            }}
-                            className="w-full sm:w-32 px-2 py-1.5 min-h-[44px] text-xs bg-white dark:bg-gray-600 border border-gray-200 dark:border-gray-500 rounded text-gray-900 dark:text-white"
-                        />
-                        <datalist id={`group-edit-list-${type}-${index}`}>
-                            {allGroups.map(group => (
-                                <option key={group} value={group} />
-                            ))}
-                        </datalist>
-                    </div>
+                    <select
+                        value={item.transaction_category || 'uncategorized'}
+                        onChange={(e) => onUpdate(index, 'transaction_category', e.target.value)}
+                        className="flex-shrink-0 w-full sm:w-36 px-2 py-1.5 min-h-[44px] text-xs bg-white dark:bg-gray-600 border border-gray-200 dark:border-gray-500 rounded text-gray-900 dark:text-white"
+                    >
+                        {BUDGET_TRANSACTION_CATEGORIES.map(cat => (
+                            <option key={cat} value={cat}>{CATEGORY_LABELS[cat]}</option>
+                        ))}
+                    </select>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0 self-center">
                     <div className="flex items-center border border-gray-200 dark:border-gray-500 rounded bg-white dark:bg-gray-600 min-h-[44px]">
@@ -673,8 +576,20 @@ const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => 
                         />
                     </div>
                     <span className="text-xs text-gray-500 dark:text-gray-400 min-w-[50px] text-right">
-                        ({formatNumber(percentage, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%)
+                        {isExcluded ? (
+                            <span className="text-amber-600 dark:text-amber-400" title="Not compared in Budget Analysis">Excl.</span>
+                        ) : (
+                            `(${formatNumber(percentage, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%)`
+                        )}
                     </span>
+                    <button
+                        type="button"
+                        onClick={() => onUpdate(index, 'excluded', !isExcluded)}
+                        title="Exclude from Budget Analysis (transaction comparison)"
+                        className={`p-2 -m-2 transition-opacity opacity-100 sm:opacity-0 sm:group-hover:opacity-100 ${isExcluded ? 'text-amber-500 dark:text-amber-400' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'}`}
+                    >
+                        <BarChart2 className="w-4 h-4" />
+                    </button>
                     <button
                         onClick={() => onRemove(index)}
                         className="p-2 -m-2 text-gray-400 hover:text-red-500 dark:hover:text-red-400 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
@@ -709,22 +624,15 @@ const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => 
                         className="w-24 min-w-0 flex-1 sm:flex-initial pl-1 pr-3 py-3 bg-transparent border-none focus:ring-0 text-right text-gray-900 dark:text-white"
                     />
                 </div>
-                <div className="relative w-full sm:w-auto">
-                    <input
-                        type="text"
-                        list={`group-list-${type}`}
-                        placeholder="Group (optional)..."
-                        value={newGroup}
-                        onChange={(e) => setNewGroup(e.target.value)}
-                        onKeyPress={handleKeyPress}
-                        className="w-full sm:w-40 px-3 py-3 min-h-[44px] border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors"
-                    />
-                    <datalist id={`group-list-${type}`}>
-                        {allGroups.map(group => (
-                            <option key={group} value={group} />
-                        ))}
-                    </datalist>
-                </div>
+                <select
+                    value={newTransactionCategory}
+                    onChange={(e) => setNewTransactionCategory(e.target.value)}
+                    className="w-full sm:w-44 px-3 py-3 min-h-[44px] border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors"
+                >
+                    {BUDGET_TRANSACTION_CATEGORIES.map(cat => (
+                        <option key={cat} value={cat}>{CATEGORY_LABELS[cat]}</option>
+                    ))}
+                </select>
                 <button
                     onClick={handleAdd}
                     className="px-4 py-2.5 min-h-[44px] text-base bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-1"
@@ -735,16 +643,7 @@ const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => 
             </div>
 
             <div className="space-y-2">
-                {Object.entries(groupedItems)
-                    .sort(([a], [b]) => {
-                        // Sort: null (ungrouped) last, then alphabetically
-                        if (a === null) return 1
-                        if (b === null) return -1
-                        return a.localeCompare(b)
-                    })
-                    .map(([groupName, groupItems]) => {
-                        return renderGroupHeader(groupName, groupItems)
-                    })}
+                {items.map((item, index) => renderCategoryItem(item, index))}
                 {items.length === 0 && (
                     <p className="text-center text-gray-500 dark:text-gray-400 py-4">No categories yet</p>
                 )}

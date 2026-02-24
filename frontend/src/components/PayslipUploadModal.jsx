@@ -1,9 +1,9 @@
 import { useState, useRef } from 'react'
-import { X, Upload, FileText, AlertCircle, CheckCircle, Loader } from 'lucide-react'
+import { X, Upload, FileText, AlertCircle, CheckCircle, Loader, KeyRound } from 'lucide-react'
 import axios from 'axios'
 import PayslipReviewModal from './PayslipReviewModal'
 
-export default function PayslipUploadModal({ isOpen, onClose, onSuccess, initialMonth, initialYear, isUpdate = false }) {
+export default function PayslipUploadModal({ isOpen, onClose, onSuccess, initialMonth, initialYear, isUpdate = false, hasOpenAIKey = true }) {
     const [file, setFile] = useState(null)
     const [month, setMonth] = useState(initialMonth || new Date().getMonth() + 1)
     const [year, setYear] = useState(initialYear || new Date().getFullYear())
@@ -205,6 +205,40 @@ export default function PayslipUploadModal({ isOpen, onClose, onSuccess, initial
                         </div>
                     </div>
 
+                        {!hasOpenAIKey ? (
+                        /* No OpenAI key configured */
+                        <div className="flex flex-col items-center text-center gap-4 py-6">
+                            <div className="p-4 bg-amber-100 dark:bg-amber-900/30 rounded-full">
+                                <KeyRound className="w-10 h-10 text-amber-600 dark:text-amber-400" />
+                            </div>
+                            <div>
+                                <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-1">
+                                    OpenAI API Key Required
+                                </h3>
+                                <p className="text-sm text-gray-600 dark:text-gray-400 max-w-sm">
+                                    Automatic payslip extraction uses the <strong>OpenAI API</strong> to read and interpret your payslip PDF. You need to add your OpenAI API key before you can use this feature.
+                                </p>
+                            </div>
+                            <a
+                                href="/settings"
+                                className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
+                            >
+                                Go to Settings
+                            </a>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                                You can get an API key at{' '}
+                                <a
+                                    href="https://platform.openai.com/api-keys"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-blue-600 dark:text-blue-400 hover:underline"
+                                >
+                                    platform.openai.com/api-keys
+                                </a>
+                            </p>
+                        </div>
+                    ) : (
+                        <>
                     {/* File Upload Area */}
                     <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -230,7 +264,7 @@ export default function PayslipUploadModal({ isOpen, onClose, onSuccess, initial
                                 className="hidden"
                                 disabled={uploading}
                             />
-                            
+
                             <div className="flex flex-col items-center">
                                 {file ? (
                                     <>
@@ -302,6 +336,8 @@ export default function PayslipUploadModal({ isOpen, onClose, onSuccess, initial
                             </p>
                         </div>
                     )}
+                        </>
+                    )}
                 </div>
 
                 {/* Footer */}
@@ -311,25 +347,27 @@ export default function PayslipUploadModal({ isOpen, onClose, onSuccess, initial
                         disabled={uploading}
                         className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-50"
                     >
-                        Cancel
+                        {hasOpenAIKey ? 'Cancel' : 'Close'}
                     </button>
-                    <button
-                        onClick={handleUpload}
-                        disabled={!file || uploading}
-                        className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                    >
-                        {uploading ? (
-                            <>
-                                <Loader className="w-4 h-4 animate-spin" />
-                                Extracting Data...
-                            </>
-                        ) : (
-                            <>
-                                <Upload className="w-4 h-4" />
-                                Extract & Review
-                            </>
-                        )}
-                    </button>
+                    {hasOpenAIKey && (
+                        <button
+                            onClick={handleUpload}
+                            disabled={!file || uploading}
+                            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        >
+                            {uploading ? (
+                                <>
+                                    <Loader className="w-4 h-4 animate-spin" />
+                                    Extracting Data...
+                                </>
+                            ) : (
+                                <>
+                                    <Upload className="w-4 h-4" />
+                                    Extract & Review
+                                </>
+                            )}
+                        </button>
+                    )}
                 </div>
             </div>
 

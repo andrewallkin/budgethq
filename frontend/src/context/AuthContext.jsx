@@ -8,6 +8,10 @@ export const useAuth = () => useContext(AuthContext)
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null)
     const [loading, setLoading] = useState(true)
+    const [showInvestecNav, setShowInvestecNav] = useState(() => {
+        const saved = localStorage.getItem('showInvestecNav')
+        return saved ? JSON.parse(saved) : false
+    })
 
     const logoutTimerRef = useRef(null)
 
@@ -20,8 +24,10 @@ export const AuthProvider = ({ children }) => {
 
     const logout = () => {
         localStorage.removeItem('token')
+        localStorage.removeItem('showInvestecNav')
         delete axios.defaults.headers.common['Authorization']
         setUser(null)
+        setShowInvestecNav(false)
         clearLogoutTimer()
     }
 
@@ -43,6 +49,27 @@ export const AuthProvider = ({ children }) => {
         }, timeout)
     }
 
+    const fetchAndApplyPreferences = async () => {
+        try {
+            const response = await axios.get('/api/auth/user/preferences')
+            const value = response.data.has_investec_account
+            setShowInvestecNav(value)
+            localStorage.setItem('showInvestecNav', JSON.stringify(value))
+        } catch (err) {
+            // Silently ignore — preferences are non-critical
+        }
+    }
+
+    const updateInvestecNavPreference = async (value) => {
+        setShowInvestecNav(value)
+        localStorage.setItem('showInvestecNav', JSON.stringify(value))
+        try {
+            await axios.put('/api/auth/user/preferences', { has_investec_account: value })
+        } catch (err) {
+            // Best-effort — local state is already updated
+        }
+    }
+
     useEffect(() => {
         const token = localStorage.getItem('token')
         if (token) {
@@ -57,6 +84,7 @@ export const AuthProvider = ({ children }) => {
                     if (payload.exp) {
                         scheduleLogout(payload.exp)
                     }
+                    fetchAndApplyPreferences()
                 }
             } catch (e) {
                 localStorage.removeItem('token')
@@ -85,6 +113,7 @@ export const AuthProvider = ({ children }) => {
         if (payload.exp) {
             scheduleLogout(payload.exp)
         }
+        await fetchAndApplyPreferences()
     }
 
     const register = async (username, password) => {
@@ -99,6 +128,7 @@ export const AuthProvider = ({ children }) => {
         if (payload.exp) {
             scheduleLogout(payload.exp)
         }
+        await fetchAndApplyPreferences()
     }
 
     useEffect(() => {
@@ -118,7 +148,7 @@ export const AuthProvider = ({ children }) => {
     }, [])
 
     return (
-        <AuthContext.Provider value={{ user, login, register, logout, loading }}>
+        <AuthContext.Provider value={{ user, login, register, logout, loading, showInvestecNav, updateInvestecNavPreference }}>
             {!loading && children}
         </AuthContext.Provider>
     )
