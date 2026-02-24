@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import axios from 'axios'
 import { CheckCircle, XCircle, RefreshCw, AlertTriangle, LayoutDashboard, HelpCircle } from 'lucide-react'
 import { formatDateSafe } from '../utils/numberFormatting'
+import ConfirmModal from '../components/ConfirmModal'
 
 export default function Settings() {
     const { user, showInvestecNav, updateInvestecNavPreference } = useAuth()
@@ -39,6 +40,8 @@ export default function Settings() {
     const [investecError, setInvestecError] = useState('')
     const [investecSuccess, setInvestecSuccess] = useState('')
     const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false)
+    const [showDeleteApiKeyConfirm, setShowDeleteApiKeyConfirm] = useState(false)
+    const [showChangePasswordConfirm, setShowChangePasswordConfirm] = useState(false)
     const [syncingHistorical, setSyncingHistorical] = useState(null)
     const [syncSuccess, setSyncSuccess] = useState('')
 
@@ -147,7 +150,6 @@ export default function Settings() {
         try {
             await axios.delete('/api/investec/credentials')
             setInvestecSuccess('Successfully disconnected from Investec')
-            setShowDisconnectConfirm(false)
             await fetchConnectionStatus()
         } catch (err) {
             setInvestecError(err.response?.data?.detail || 'Failed to disconnect')
@@ -206,6 +208,10 @@ export default function Settings() {
             return
         }
 
+        setShowChangePasswordConfirm(true)
+    }
+
+    const doChangePassword = async () => {
         setLoading(true)
 
         try {
@@ -250,11 +256,11 @@ export default function Settings() {
         }
     }
 
-    const handleDeleteApiKey = async () => {
-        if (!confirm('Are you sure you want to delete your OpenAI API key?')) {
-            return
-        }
+    const handleDeleteApiKey = () => {
+        setShowDeleteApiKeyConfirm(true)
+    }
 
+    const doDeleteApiKey = async () => {
         setApiKeyError('')
         setApiKeySuccess('')
         setApiKeyLoading(true)
@@ -688,39 +694,44 @@ export default function Settings() {
                 </div>
             </div>
 
-            {showDisconnectConfirm && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                    <div className="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-md w-full shadow-xl">
-                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Disconnect Investec?</h3>
-                        <div className="text-gray-700 dark:text-gray-300 mb-6 space-y-2">
-                            <p className="text-sm font-semibold text-red-600 dark:text-red-400">This will permanently delete ALL Investec data:</p>
-                            <ul className="text-sm list-disc list-inside space-y-1 ml-2">
-                                <li>API credentials (Client ID, Secret, API Key)</li>
-                                <li>All bank accounts</li>
-                                <li>All transactions</li>
-                                <li>All categorization rules</li>
-                            </ul>
-                            <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">This action cannot be undone.</p>
-                        </div>
-                        <div className="flex gap-3">
-                            <button
-                                onClick={handleInvestecDisconnect}
-                                disabled={investecSaving}
-                                className="flex-1 px-4 py-2.5 text-sm font-medium bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors"
-                            >
-                                {investecSaving ? 'Disconnecting...' : 'Disconnect'}
-                            </button>
-                            <button
-                                onClick={() => setShowDisconnectConfirm(false)}
-                                disabled={investecSaving}
-                                className="flex-1 px-4 py-2.5 text-sm font-medium border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                            >
-                                Cancel
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <ConfirmModal
+                isOpen={showDisconnectConfirm}
+                onClose={() => setShowDisconnectConfirm(false)}
+                onConfirm={handleInvestecDisconnect}
+                title="Disconnect Investec?"
+                message="This will permanently delete ALL Investec data. This action cannot be undone."
+                details={[
+                    'API credentials (Client ID, Secret, API Key)',
+                    'All bank accounts',
+                    'All transactions',
+                    'All categorization rules',
+                ]}
+                confirmText="Disconnect"
+                cancelText="Cancel"
+                variant="danger"
+            />
+
+            <ConfirmModal
+                isOpen={showDeleteApiKeyConfirm}
+                onClose={() => setShowDeleteApiKeyConfirm(false)}
+                onConfirm={doDeleteApiKey}
+                title="Remove OpenAI API Key?"
+                message="Your encrypted API key will be permanently deleted. You will no longer be able to extract payslip data automatically."
+                confirmText="Remove Key"
+                cancelText="Cancel"
+                variant="danger"
+            />
+
+            <ConfirmModal
+                isOpen={showChangePasswordConfirm}
+                onClose={() => setShowChangePasswordConfirm(false)}
+                onConfirm={doChangePassword}
+                title="Change Password?"
+                message="Are you sure you want to change your password? You will need to use the new password on your next login."
+                confirmText="Change Password"
+                cancelText="Cancel"
+                variant="warning"
+            />
         </div>
     )
 }
