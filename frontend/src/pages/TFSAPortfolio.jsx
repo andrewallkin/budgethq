@@ -41,8 +41,8 @@ export default function TFSAPortfolio() {
     const [sortColumn, setSortColumn] = useState(null)
     const [sortDirection, setSortDirection] = useState('asc') // 'asc' or 'desc'
 
-    // TFSA Contribution Limits
-    const TFSA_ANNUAL_LIMIT = 36000
+    // TFSA Contribution Limits (annual limit is FY-dependent, loaded from API)
+    const [tfsaAnnualLimit, setTfsaAnnualLimit] = useState(36000)
     const TFSA_LIFETIME_LIMIT = 500000
 
     // Financial year metadata from backend (source of truth)
@@ -151,6 +151,9 @@ export default function TFSAPortfolio() {
                 }
                 if (res.data.current_financial_year_label) {
                     setFinancialYearLabel(res.data.current_financial_year_label)
+                }
+                if (res.data.annual_limit) {
+                    setTfsaAnnualLimit(res.data.annual_limit)
                 }
 
                 // Mark that we've successfully loaded contributions
@@ -334,8 +337,8 @@ export default function TFSAPortfolio() {
         if (!amount || amount <= 0) return
 
         const newTotal = annualContributions + amount
-        if (newTotal > TFSA_ANNUAL_LIMIT) {
-            const exceed = newTotal - TFSA_ANNUAL_LIMIT
+        if (newTotal > tfsaAnnualLimit) {
+            const exceed = newTotal - tfsaAnnualLimit
             if (
                 !window.confirm(
                     `This will exceed your annual limit by ${formatCurrency(exceed, {
@@ -376,8 +379,8 @@ export default function TFSAPortfolio() {
             .reduce((sum, h) => sum + h.amount, 0)
         const yearTotal = existingForYear + amount
 
-        if (yearTotal > TFSA_ANNUAL_LIMIT) {
-            const exceed = yearTotal - TFSA_ANNUAL_LIMIT
+        if (yearTotal > tfsaAnnualLimit) {
+            const exceed = yearTotal - tfsaAnnualLimit
             if (
                 !window.confirm(
                     `FY ${fy} will exceed annual limit by ${formatCurrency(exceed, {
@@ -428,8 +431,8 @@ export default function TFSAPortfolio() {
 
     // TFSA Contribution calculations
     const annualContributions = deposits.reduce((sum, d) => sum + d.amount, 0)
-    const contributionsRemaining = TFSA_ANNUAL_LIMIT - annualContributions
-    const contributionPercentUsed = (annualContributions / TFSA_ANNUAL_LIMIT) * 100
+    const contributionsRemaining = tfsaAnnualLimit - annualContributions
+    const contributionPercentUsed = (annualContributions / tfsaAnnualLimit) * 100
 
     // Lifetime contribution calculations
     const historicalTotal = historicalContributions.reduce((sum, h) => sum + h.amount, 0)
@@ -568,7 +571,7 @@ export default function TFSAPortfolio() {
                         <div className="flex items-center justify-between">
                             <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Annual Limit</h3>
                             <span className="text-sm font-bold text-gray-900 dark:text-white">
-                                {formatCurrency(TFSA_ANNUAL_LIMIT, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                {formatCurrency(tfsaAnnualLimit, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                             </span>
                         </div>
 

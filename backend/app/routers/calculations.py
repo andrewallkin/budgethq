@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 from ..logic import calculate_monthly_tax_with_age, calculate_uif, calculate_rebalancing, calculate_ra_tax_scenarios
 
 class TaxRequest(BaseModel):
@@ -11,6 +11,7 @@ class RATaxRequest(BaseModel):
     salary: float
     age: int
     monthly_ra_contribution: float
+    financial_year_start: Optional[int] = None
 
 class RebalanceRequest(BaseModel):
     etfs: List[dict]  # Using dict since ETFBase is defined elsewhere
@@ -41,7 +42,8 @@ async def calculate_ra_tax_endpoint(req: RATaxRequest):
     result = calculate_ra_tax_scenarios(
         req.salary,
         req.age,
-        req.monthly_ra_contribution
+        req.monthly_ra_contribution,
+        financial_year_start=req.financial_year_start
     )
     return result
 

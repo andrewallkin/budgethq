@@ -26,8 +26,47 @@ TAX_YEAR_2025 = {
         "first_dependent": 364,
         "additional_dependent": 246
     },
-    "uif_cap": 17712 # Monthly cap (1% of this) = 177.12
+    "uif_cap": 17712, # Monthly cap (1% of this) = 177.12
+    "tfsa_annual_limit": 36000,
+    "ra_max_deduction": 350000
 }
+
+# 2026 Tax Year (1 March 2026 - 28 Feb 2027)
+TAX_YEAR_2026 = {
+    "brackets": [
+        {"limit": 245100, "rate": 0.18, "base": 0},
+        {"limit": 383100, "rate": 0.26, "base": 44118},
+        {"limit": 530200, "rate": 0.31, "base": 79998},
+        {"limit": 695800, "rate": 0.36, "base": 125599},
+        {"limit": 887000, "rate": 0.39, "base": 185215},
+        {"limit": 1878600, "rate": 0.41, "base": 259783},
+        {"limit": float('inf'), "rate": 0.45, "base": 666339}
+    ],
+    "rebates": {
+        "primary": 17820,
+        "secondary": 9765, # 65+
+        "tertiary": 3249   # 75+
+    },
+    "thresholds": {
+        "under_65": 99000,
+        "65_to_74": 153250,
+        "75_plus": 171300
+    },
+    "medical_credits": {
+        "main_member": 376,
+        "first_dependent": 376,
+        "additional_dependent": 254
+    },
+    "uif_cap": 17712, # Monthly cap (1% of this) = 177.12 (unchanged)
+    "tfsa_annual_limit": 46000,
+    "ra_max_deduction": 430000
+}
+
+_TAX_CONFIGS = {2025: TAX_YEAR_2025, 2026: TAX_YEAR_2026}
+
+def get_tax_config(financial_year_start: int) -> dict:
+    """Return tax config for the given FY start year, defaulting to earliest known year."""
+    return _TAX_CONFIGS.get(financial_year_start, TAX_YEAR_2025)
 
 def calculate_paye(taxable_income_annual: float, age: int, tax_year_data=TAX_YEAR_2025) -> float:
     """Calculate annual PAYE based on taxable income and age."""
@@ -103,14 +142,15 @@ def calculate_uif(gross_cash_salary_monthly: float, tax_year_data=TAX_YEAR_2025)
     uif_income = min(gross_cash_salary_monthly, tax_year_data["uif_cap"])
     return uif_income * 0.01
 
-def calculate_salary_breakdown(salary_orm, age: int = 30, save_to_db: bool = True):
+def calculate_salary_breakdown(salary_orm, age: int = 30, save_to_db: bool = True, financial_year_start: int = 2025):
     """
     Takes a Salary ORM object (with items) and returns a detailed breakdown.
     If save_to_db is True, updates the salary record with the calculated net_pay.
     """
-    # If age is in the Salary model (new), we rely on that. If it's passed as arg (old), we ignore or fallback? 
+    # If age is in the Salary model (new), we rely on that. If it's passed as arg (old), we ignore or fallback?
     # Let's use the explicit Salary model age if available
     tax_age = salary_orm.age if hasattr(salary_orm, 'age') and salary_orm.age else age
+    tax_year_data = get_tax_config(financial_year_start)
 
     # 1. Aggregation - Updated for new model
     # Gross Cash = Basic Salary + Earnings + (Company Contributions if they are paid out? No usually fringe is not cash)
@@ -182,35 +222,19 @@ def calculate_salary_breakdown(salary_orm, age: int = 30, save_to_db: bool = Tru
     
     # 3. Calculate Tax (PAYE)
     # PAYE is calculated on (Gross Income + Fringe - Pre-tax Deductions)
-    paye = calculate_paye(taxable_income * 12, tax_age) / 12
-    
+    paye = calculate_paye(taxable_income * 12, tax_age, tax_year_data) / 12
+
     # 4. Medical Aid Credits
     # Deduct from PAYE
-    # Medical Tax Credits apply if you are paying, OR if company affects it. It's per member.
-    credits = 0.0
     members = salary_orm.medical_aid_members
-    if members > 0:
-        # 2025 Rates
-        # Main: R364, First Dep: R364, Additional: R246
-        # If members = 1: 364
-        # If members = 2: 364+364=728
-        # If members > 2: 728 + (members-2)*246
-        
-        if members == 1:
-            credits = 364.0
-        elif members == 2:
-            credits = 728.0
-        else:
-            credits = 728.0 + (members - 2) * 246.0
-            
+    credits = calculate_medical_credits(members, tax_year_data) if members > 0 else 0.0
+
     final_paye = max(0.0, paye - credits)
     breakdown_deductions["paye"] = final_paye
 
     # 5. UIF
     # 1% of Remuneration (total gross income), capped
-    uif_remuneration = gross_income
-    uif_cap = 17712 # Monthly cap (Income)
-    uif_deduction = min(uif_remuneration, uif_cap) * 0.01
+    uif_deduction = calculate_uif(gross_income, tax_year_data)
     breakdown_deductions["uif"] = uif_deduction
 
     # 6. Net Pay

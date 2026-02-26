@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 from datetime import date
 from .. import models, database, auth, utils
+from ..tax_engine import get_tax_config
 
 # TFSA Contribution Models
 class TFSADepositBase(BaseModel):
@@ -45,6 +46,8 @@ async def get_tfsa_contributions(
         models.TFSADeposit.financial_year_start == financial_year_start
     ).all()
 
+    tax_config = get_tax_config(financial_year_start)
+
     return {
         "historical_contributions": [
             {
@@ -56,6 +59,7 @@ async def get_tfsa_contributions(
         ],
         "financial_year_start": financial_year_start,
         "current_financial_year_label": utils.format_sa_financial_year_label(financial_year_start),
+        "annual_limit": tax_config["tfsa_annual_limit"],
         "deposits": [
             {
                 "id": d.id,

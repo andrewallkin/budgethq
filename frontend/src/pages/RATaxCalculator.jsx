@@ -110,13 +110,22 @@ export default function RATaxCalculator() {
         }
     }, [loading])
 
-    // Calculate maximum monthly RA contribution (27.5% of annual salary or R350,000 per year, whichever is lower)
+    // Derive current SA financial year start: March–Feb cycle
+    const currentFinancialYearStart = useMemo(() => {
+        const now = new Date()
+        const month = now.getMonth() + 1 // 1-12
+        const year = now.getFullYear()
+        return month >= 3 ? year : year - 1
+    }, [])
+
+    // Calculate maximum monthly RA contribution using ra_max_deduction from API response
     const maxMonthlyRAContribution = useMemo(() => {
         if (salary <= 0) return 0
         const annualSalary = salary * 12
-        const maxAnnualDeduction = Math.min(annualSalary * 0.275, 350000)
-        return maxAnnualDeduction / 12
-    }, [salary])
+        const raCapFromAPI = calculationResult?.ra_max_deduction ?? null
+        const annualCap = raCapFromAPI !== null ? raCapFromAPI : Math.min(annualSalary * 0.275, 350000)
+        return annualCap / 12
+    }, [salary, calculationResult])
 
     const calculateRATax = useCallback(async () => {
         if (salary <= 0) return
@@ -126,7 +135,8 @@ export default function RATaxCalculator() {
             const res = await axios.post('/api/calculate/ra-tax', {
                 salary: parseFloat(salary || 0).toFixed(2),
                 age: age || 30,
-                monthly_ra_contribution: monthlyRAContribution || 0
+                monthly_ra_contribution: monthlyRAContribution || 0,
+                financial_year_start: currentFinancialYearStart
             })
             setCalculationResult(res.data)
         } catch (err) {
@@ -134,7 +144,7 @@ export default function RATaxCalculator() {
         } finally {
             setCalculating(false)
         }
-    }, [salary, monthlyRAContribution])
+    }, [salary, monthlyRAContribution, currentFinancialYearStart])
 
     // Wrapper function to update contribution state/ref immediately, and mark as edited
     const updateMonthlyRAContribution = useCallback((value) => {
@@ -540,7 +550,7 @@ export default function RATaxCalculator() {
                             <div className="text-sm text-blue-800 dark:text-blue-200">
                                 <p className="font-semibold mb-1">About RA Tax Benefits</p>
                                 <ul className="list-disc list-inside space-y-1 text-blue-700 dark:text-blue-300">
-                                    <li>RA contributions are tax deductible up to 27.5% of your earnings or R350,000 per year (whichever is lower)</li>
+                                    <li>RA contributions are tax deductible up to 27.5% of your earnings or {calculationResult?.ra_max_deduction ? formatCurrency(calculationResult.ra_max_deduction, { minimumFractionDigits: 0, maximumFractionDigits: 0 }) : 'R350,000'} per year (whichever is lower)</li>
                                     <li>The higher your RA contributions, the higher your potential tax refund</li>
                                     <li>Growth on your RA money is tax-free (no tax on interest, dividends, or capital gains)</li>
                                     <li>At retirement, you can take up to 1/3 of your RA as a lump sum with lower tax rates</li>
