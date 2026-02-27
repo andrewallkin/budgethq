@@ -2,9 +2,12 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import axios from 'axios'
 import { Calculator, ChevronRight, Info } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import BlurredValue from '../components/BlurredValue'
+import { useAuth } from '../context/AuthContext'
 import { formatCurrency } from '../utils/numberFormatting'
 
 export default function RATaxCalculator() {
+    const { blurSensitiveValues } = useAuth()
     const [loading, setLoading] = useState(true)
     const [isSaving, setIsSaving] = useState(false)
     const [isMobile, setIsMobile] = useState(false)
@@ -277,18 +280,21 @@ export default function RATaxCalculator() {
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
                             Monthly Gross Salary (R)
                         </label>
+                        <BlurredValue as="div">
                         <input
                             type="text"
                             value={formatCurrency(salary)}
                             readOnly
                             className="w-full min-h-[44px] px-3 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white cursor-not-allowed"
                         />
+                        </BlurredValue>
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">From your latest payslip (gross + company contributions + additional income)</p>
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
                             Current RA Value (R)
                         </label>
+                        <BlurredValue as="div">
                         <input
                             type="text"
                             value={formatCurrency(currentRAValue)}
@@ -296,6 +302,7 @@ export default function RATaxCalculator() {
                             className="w-full min-h-[44px] px-3 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white cursor-not-allowed"
                             placeholder="0"
                         />
+                        </BlurredValue>
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                             From your RA performance history (latest month)
                         </p>
@@ -304,7 +311,7 @@ export default function RATaxCalculator() {
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
                             Monthly RA Contribution (R)
                         </label>
-                        <div className="relative">
+                        <BlurredValue as="div" className="relative">
                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400 pointer-events-none">R</span>
                             <input
                                 type="number"
@@ -318,10 +325,10 @@ export default function RATaxCalculator() {
                                     }`}
                                 placeholder="0"
                             />
-                        </div>
+                        </BlurredValue>
                         {monthlyRAContribution > 0 && maxMonthlyRAContribution > 0 && !isRAContributionValid && (
                             <p className="text-xs text-red-600 dark:text-red-400 mt-1">
-                                Please provide a valid monthly contribution. Maximum monthly contribution is {formatCurrency(maxMonthlyRAContribution)}
+                                Please provide a valid monthly contribution. Maximum monthly contribution is <BlurredValue>{formatCurrency(maxMonthlyRAContribution)}</BlurredValue>
                             </p>
                         )}
                     </div>
@@ -334,11 +341,11 @@ export default function RATaxCalculator() {
                     <div id="calculator-result" className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 scroll-mt-24 pb-8">
                         <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Calculator Result</h2>
                         <p className="text-gray-700 dark:text-gray-200 mb-2 tabular-nums">
-                            On a salary of {formatCurrency(calculationResult.monthly_salary)} per month,{' '}
-                            {formatCurrency(calculationResult.annual_salary)} per year, you can expect to pay{' '}
-                            <span className="font-semibold text-red-600 dark:text-red-400">
+                            On a salary of <BlurredValue>{formatCurrency(calculationResult.monthly_salary)}</BlurredValue> per month,{' '}
+                            <BlurredValue>{formatCurrency(calculationResult.annual_salary)}</BlurredValue> per year, you can expect to pay{' '}
+                            <BlurredValue><span className="font-semibold text-red-600 dark:text-red-400">
                                 {formatCurrency(calculationResult.base_tax_annual)}
-                            </span>{' '}
+                            </span></BlurredValue>{' '}
                             in income tax per year.
                         </p>
                         <p className="text-gray-700 dark:text-gray-200">
@@ -379,7 +386,7 @@ export default function RATaxCalculator() {
                                     </td>
                                     {calculationResult.scenarios.map((scenario, index) => (
                                         <td key={index} className={`text-center py-3 px-4 text-gray-900 dark:text-white tabular-nums border-l border-gray-200 dark:border-gray-600 ${index % 2 === 1 ? 'bg-gray-50/50 dark:bg-gray-700/30' : ''}`}>
-                                            {formatCurrency(calculationResult.net_income_monthly)}
+                                            <BlurredValue>{formatCurrency(calculationResult.net_income_monthly)}</BlurredValue>
                                         </td>
                                     ))}
                                 </tr>
@@ -389,8 +396,7 @@ export default function RATaxCalculator() {
                                     <td className="py-4 px-4 text-gray-700 dark:text-gray-200">RA contributions</td>
                                     {calculationResult.scenarios.map((scenario, index) => (
                                         <td key={index} className={`text-center py-4 px-4 text-gray-900 dark:text-white tabular-nums leading-relaxed border-l border-gray-200 dark:border-gray-600 ${index % 2 === 1 ? 'bg-gray-50/50 dark:bg-gray-700/30' : ''}`}>
-                                            {formatCurrency(scenario.ra_contribution_annual)} yr /{' '}
-                                            {formatCurrency(scenario.ra_contribution_monthly)} mo
+                                            <BlurredValue>{formatCurrency(scenario.ra_contribution_annual)} yr / {formatCurrency(scenario.ra_contribution_monthly)} mo</BlurredValue>
                                         </td>
                                     ))}
                                 </tr>
@@ -407,7 +413,7 @@ export default function RATaxCalculator() {
                                     </td>
                                     {calculationResult.scenarios.map((scenario, index) => (
                                         <td key={index} className={`text-center py-3 px-4 text-gray-900 dark:text-white tabular-nums border-l border-gray-200 dark:border-gray-600 ${index % 2 === 1 ? 'bg-gray-50/50 dark:bg-gray-700/30' : ''}`}>
-                                            {formatCurrency(scenario.adjusted_income_monthly)}
+                                            <BlurredValue>{formatCurrency(scenario.adjusted_income_monthly)}</BlurredValue>
                                         </td>
                                     ))}
                                 </tr>
@@ -420,7 +426,7 @@ export default function RATaxCalculator() {
                                             key={index}
                                             className={`text-center py-3 px-4 font-semibold text-red-600 dark:text-red-400 tabular-nums border-l border-gray-200 dark:border-gray-600 ${index % 2 === 1 ? 'bg-gray-50/50 dark:bg-gray-700/30' : ''}`}
                                         >
-                                            {formatCurrency(scenario.income_tax_annual)}
+                                            <BlurredValue>{formatCurrency(scenario.income_tax_annual)}</BlurredValue>
                                         </td>
                                     ))}
                                 </tr>
@@ -440,7 +446,7 @@ export default function RATaxCalculator() {
                                             key={index}
                                             className={`text-center py-3 px-4 font-semibold text-blue-600 dark:text-blue-400 tabular-nums border-l border-gray-200 dark:border-gray-600 ${index % 2 === 1 ? 'bg-gray-50/50 dark:bg-gray-700/30' : ''}`}
                                         >
-                                            {formatCurrency(scenario.tax_saved_annual)}
+                                            <BlurredValue>{formatCurrency(scenario.tax_saved_annual)}</BlurredValue>
                                         </td>
                                     ))}
                                 </tr>
@@ -460,7 +466,7 @@ export default function RATaxCalculator() {
                                             key={index}
                                             className={`text-center py-3 px-4 font-semibold text-blue-600 dark:text-blue-400 tabular-nums border-l border-gray-200 dark:border-gray-600 ${index % 2 === 1 ? 'bg-gray-50/50 dark:bg-gray-700/30' : ''}`}
                                         >
-                                            {formatCurrency(scenario.tax_saved_monthly)}
+                                            <BlurredValue>{formatCurrency(scenario.tax_saved_monthly)}</BlurredValue>
                                         </td>
                                     ))}
                                 </tr>
@@ -470,7 +476,7 @@ export default function RATaxCalculator() {
 
                     {/* Growth Projection Graph */}
                     {growthData.length > 0 && (
-                        <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+                        <div className={`bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 ${blurSensitiveValues ? 'blur-[5px] select-none' : ''}`}>
                             <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">RA Growth Projection</h2>
                             <div className="w-full min-w-0 h-[340px] sm:h-[480px]">
                                 <ResponsiveContainer width="100%" height="100%">
@@ -550,7 +556,7 @@ export default function RATaxCalculator() {
                             <div className="text-sm text-blue-800 dark:text-blue-200">
                                 <p className="font-semibold mb-1">About RA Tax Benefits</p>
                                 <ul className="list-disc list-inside space-y-1 text-blue-700 dark:text-blue-300">
-                                    <li>RA contributions are tax deductible up to 27.5% of your earnings or {calculationResult?.ra_max_deduction ? formatCurrency(calculationResult.ra_max_deduction, { minimumFractionDigits: 0, maximumFractionDigits: 0 }) : 'R350,000'} per year (whichever is lower)</li>
+                                    <li>RA contributions are tax deductible up to 27.5% of your earnings or <BlurredValue>{calculationResult?.ra_max_deduction ? formatCurrency(calculationResult.ra_max_deduction, { minimumFractionDigits: 0, maximumFractionDigits: 0 }) : 'R350,000'}</BlurredValue> per year (whichever is lower)</li>
                                     <li>The higher your RA contributions, the higher your potential tax refund</li>
                                     <li>Growth on your RA money is tax-free (no tax on interest, dividends, or capital gains)</li>
                                     <li>At retirement, you can take up to 1/3 of your RA as a lump sum with lower tax rates</li>

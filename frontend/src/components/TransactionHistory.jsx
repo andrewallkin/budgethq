@@ -3,6 +3,7 @@ import { TrendingUp, TrendingDown, ChevronDown, ChevronUp, History, Trash2 } fro
 import axios from 'axios'
 import ConfirmModal from './ConfirmModal'
 import { formatCurrency, formatNumber } from '../utils/numberFormatting'
+import BlurredValue from './BlurredValue'
 
 export default function TransactionHistory({ refreshTrigger, onTransactionDeleted }) {
     const [transactions, setTransactions] = useState([])
@@ -180,17 +181,17 @@ export default function TransactionHistory({ refreshTrigger, onTransactionDelete
                                     </div>
                                 </td>
                                 <td className="py-3 px-2 text-right font-medium text-gray-900 dark:text-white">
-                                    {tx.type === 'BOND'
+                                    <BlurredValue>{tx.type === 'BOND'
                                         ? '—'
-                                        : formatNumber(tx.shares, { minimumFractionDigits: 0, maximumFractionDigits: 4 })}
+                                        : formatNumber(tx.shares, { minimumFractionDigits: 0, maximumFractionDigits: 4 })}</BlurredValue>
                                 </td>
                                 <td className="py-3 px-2 text-right text-gray-600 dark:text-gray-400">
-                                    {tx.type === 'BOND'
+                                    <BlurredValue>{tx.type === 'BOND'
                                         ? '—'
                                         : formatCurrency(tx.price_per_share, {
                                               minimumFractionDigits: 2,
                                               maximumFractionDigits: 2,
-                                          })}
+                                          })}</BlurredValue>
                                 </td>
                                 <td
                                     className={`py-3 px-2 text-right font-semibold ${
@@ -200,10 +201,10 @@ export default function TransactionHistory({ refreshTrigger, onTransactionDelete
                                     }`}
                                 >
                                     {tx.transaction_type === 'BUY' ? '-' : '+'}
-                                    {formatCurrency(tx.total_value, {
+                                    <BlurredValue>{formatCurrency(tx.total_value, {
                                         minimumFractionDigits: 2,
                                         maximumFractionDigits: 2,
-                                    })}
+                                    })}</BlurredValue>
                                 </td>
                                 <td className="py-3 px-2">
                                     <button

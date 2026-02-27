@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import axios from 'axios'
 import { RefreshCw, MoreVertical, Star, Shield, AlertTriangle, Plus, Trash2, Wallet } from 'lucide-react'
 import { formatCurrency, formatDateSafe } from '../utils/numberFormatting'
+import BlurredValue from '../components/BlurredValue'
 import AddManualAccountModal from '../components/AddManualAccountModal'
 
 export default function AccountsDashboard() {
@@ -194,9 +195,9 @@ export default function AccountsDashboard() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
                     <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Total Balance</p>
-                    <p className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
+                    <BlurredValue><p className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
                         {formatCurrency(totalBalance)}
-                    </p>
+                    </p></BlurredValue>
                 </div>
 
                 <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
@@ -317,15 +318,15 @@ export default function AccountsDashboard() {
                                 <div className="space-y-2">
                                     <div>
                                         <p className="text-sm text-gray-600 dark:text-gray-400">Current Balance</p>
-                                        <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                                        <BlurredValue><p className="text-2xl font-bold text-gray-900 dark:text-white">
                                             {formatCurrency(account.current_balance || 0)}
-                                        </p>
+                                        </p></BlurredValue>
                                     </div>
                                     <div>
                                         <p className="text-sm text-gray-600 dark:text-gray-400">Available Balance</p>
-                                        <p className="text-lg font-semibold text-gray-700 dark:text-gray-300">
+                                        <BlurredValue><p className="text-lg font-semibold text-gray-700 dark:text-gray-300">
                                             {formatCurrency(account.available_balance || 0)}
-                                        </p>
+                                        </p></BlurredValue>
                                     </div>
                                 </div>
 
@@ -415,6 +416,7 @@ export default function AccountsDashboard() {
                                 <div>
                                     <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Balance</p>
                                     {editingBalanceId === account.id ? (
+                                        <BlurredValue as="div">
                                         <input
                                             type="number"
                                             step="0.01"
@@ -426,6 +428,7 @@ export default function AccountsDashboard() {
                                             className="w-full px-3 py-2 text-xl font-bold border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                                             autoFocus
                                         />
+                                        </BlurredValue>
                                     ) : (
                                         <p
                                             className="text-2xl font-bold text-gray-900 dark:text-white cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded px-1 -mx-1"
@@ -434,7 +437,7 @@ export default function AccountsDashboard() {
                                                 setEditingBalanceValue(String(account.balance ?? 0))
                                             }}
                                         >
-                                            {formatCurrency(account.balance || 0)}
+                                            <BlurredValue>{formatCurrency(account.balance || 0)}</BlurredValue>
                                         </p>
                                     )}
                                 </div>

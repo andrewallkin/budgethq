@@ -12,6 +12,8 @@ import {
 } from 'recharts'
 import { TrendingUp, Edit2, Trash2 } from 'lucide-react'
 import ConfirmModal from '../components/ConfirmModal'
+import BlurredValue from '../components/BlurredValue'
+import { useAuth } from '../context/AuthContext'
 import { formatCurrency, formatDateSafe } from '../utils/numberFormatting'
 
 const TIME_RANGES = [
@@ -25,6 +27,7 @@ const formatCurrencyLocal = (value) => {
 }
 
 export default function RAPerformance() {
+    const { blurSensitiveValues } = useAuth()
     const [loading, setLoading] = useState(true)
     const [isSaving, setIsSaving] = useState(false)
     const [valueSnapshots, setValueSnapshots] = useState([])
@@ -307,34 +310,34 @@ export default function RAPerformance() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3 sm:p-4">
                     <p className="text-sm text-gray-500 dark:text-gray-400">Portfolio value</p>
-                    <p className="text-xl font-semibold text-gray-900 dark:text-white">
+                    <BlurredValue><p className="text-xl font-semibold text-gray-900 dark:text-white">
                         {formatCurrencyLocal(portfolioValueNum)}
-                    </p>
+                    </p></BlurredValue>
                 </div>
                 <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3 sm:p-4">
                     <p className="text-sm text-gray-500 dark:text-gray-400">Total contributions</p>
-                    <p className="text-xl font-semibold text-gray-900 dark:text-white">
+                    <BlurredValue><p className="text-xl font-semibold text-gray-900 dark:text-white">
                         {formatCurrencyLocal(totalContributionsNum)}
-                    </p>
+                    </p></BlurredValue>
                 </div>
                 <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3 sm:p-4">
                     <p className="text-sm text-gray-500 dark:text-gray-400">Growth</p>
-                    <p className={`text-xl font-semibold ${growth >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                    <BlurredValue><p className={`text-xl font-semibold ${growth >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                         {formatCurrencyLocal(growth)}
                     </p>
                     {growthPercent !== null && (
                         <p className={`text-sm font-medium ${growth >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                             {growthPercent.toFixed(2)}%
                         </p>
-                    )}
+                    )}</BlurredValue>
                 </div>
                 <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3 sm:p-4">
                     <p className="text-sm text-gray-500 dark:text-gray-400">
                         Contributions this financial year ({financialYearLabel})
                     </p>
-                    <p className="text-xl font-semibold text-gray-900 dark:text-white">
+                    <BlurredValue><p className="text-xl font-semibold text-gray-900 dark:text-white">
                         {formatCurrencyLocal(contributionsCurrentFy)}
-                    </p>
+                    </p></BlurredValue>
                 </div>
             </div>
 
@@ -366,7 +369,7 @@ export default function RAPerformance() {
                         Add value snapshots and contributions above to see the chart.
                     </p>
                 ) : (
-                    <div className="w-full -mx-2 sm:mx-0 px-0 sm:px-4 pb-4">
+                    <div className={`w-full -mx-2 sm:mx-0 px-0 sm:px-4 pb-4 ${blurSensitiveValues ? 'blur-[5px] select-none' : ''}`}>
                         <ResponsiveContainer width="100%" height={360}>
                             <LineChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
                                 <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-600" />
@@ -448,6 +451,7 @@ export default function RAPerformance() {
                                 <label className="text-xs font-medium text-gray-700 dark:text-gray-300">
                                     Portfolio value (R)
                                 </label>
+                                <BlurredValue as="div">
                                 <input
                                     type="number"
                                     inputMode="decimal"
@@ -458,12 +462,14 @@ export default function RAPerformance() {
                                     onChange={(e) => setPortfolioValue(e.target.value)}
                                     className="w-full min-w-0 px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
                                 />
+                                </BlurredValue>
                                 {snapshotError && (
                                     <p className="text-xs text-red-600 dark:text-red-400 mt-0.5">{snapshotError}</p>
                                 )}
                             </div>
                             <div className="flex flex-col gap-1 min-w-0">
                                 <label className="text-xs font-medium text-gray-700 dark:text-gray-300">Contributions (R)</label>
+                                <BlurredValue as="div">
                                 <input
                                     type="number"
                                     inputMode="decimal"
@@ -474,6 +480,7 @@ export default function RAPerformance() {
                                     onChange={(e) => setContributionAmount(e.target.value)}
                                     className="w-full min-w-0 px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
                                 />
+                                </BlurredValue>
                                 {contributionError && (
                                     <p className="text-xs text-red-600 dark:text-red-400 mt-0.5">{contributionError}</p>
                                 )}
@@ -515,8 +522,8 @@ export default function RAPerformance() {
                                 {monthlyRows.map((row) => (
                                     <tr key={row.monthKey} className="border-b border-gray-100 dark:border-gray-700">
                                         <td className="py-2 pr-4">{formatTableMonth(row.date)}</td>
-                                        <td className="py-2 pr-4">{row.portfolio_value != null ? formatCurrencyLocal(row.portfolio_value) : '—'}</td>
-                                        <td className="py-2 pr-4">{row.contribution_total ? formatCurrencyLocal(row.contribution_total) : '—'}</td>
+                                        <td className="py-2 pr-4"><BlurredValue>{row.portfolio_value != null ? formatCurrencyLocal(row.portfolio_value) : '—'}</BlurredValue></td>
+                                        <td className="py-2 pr-4"><BlurredValue>{row.contribution_total ? formatCurrencyLocal(row.contribution_total) : '—'}</BlurredValue></td>
                                         <td className="py-2 pr-2">
                                             <div className="flex justify-end gap-1">
                                                 <button

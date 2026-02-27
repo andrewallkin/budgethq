@@ -1,5 +1,6 @@
 import { TrendingUp, TrendingDown } from 'lucide-react'
 import { formatCurrency, formatPercent } from '../utils/numberFormatting'
+import BlurredValue from './BlurredValue'
 
 export default function GainLossIndicator({ percentage, amount, size = 'sm' }) {
     // Handle cases where we don't have valid data
@@ -23,12 +24,12 @@ export default function GainLossIndicator({ percentage, amount, size = 'sm' }) {
         <div className={`${colorClass} flex items-center justify-center gap-1 ${textSize === 'sm' ? 'text-sm' : 'text-base'}`}>
             <Icon className={iconSize} />
             <div className="text-center">
-                <div className={`font-semibold flex items-center gap-1 ${textSize === 'sm' ? 'text-sm' : 'text-base'}`}>
+                <BlurredValue><div className={`font-semibold flex items-center gap-1 ${textSize === 'sm' ? 'text-sm' : 'text-base'}`}>
                     <span>{formatPercent(percentage)}</span>
                     <span className={colorClass}>
                         ({formatCurrency(amount)})
                     </span>
-                </div>
+                </div></BlurredValue>
             </div>
         </div>
     )

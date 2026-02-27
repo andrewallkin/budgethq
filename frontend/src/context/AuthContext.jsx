@@ -12,8 +12,17 @@ export const AuthProvider = ({ children }) => {
         const saved = localStorage.getItem('showInvestecNav')
         return saved ? JSON.parse(saved) : false
     })
+    const [blurSensitiveValues, setBlurSensitiveValuesState] = useState(() => {
+        const saved = localStorage.getItem('blurSensitiveValues')
+        return saved ? JSON.parse(saved) : false
+    })
 
     const logoutTimerRef = useRef(null)
+
+    const setBlurSensitiveValues = (value) => {
+        setBlurSensitiveValuesState(value)
+        localStorage.setItem('blurSensitiveValues', JSON.stringify(value))
+    }
 
     const clearLogoutTimer = () => {
         if (logoutTimerRef.current) {
@@ -148,7 +157,7 @@ export const AuthProvider = ({ children }) => {
     }, [])
 
     return (
-        <AuthContext.Provider value={{ user, login, register, logout, loading, showInvestecNav, updateInvestecNavPreference }}>
+        <AuthContext.Provider value={{ user, login, register, logout, loading, showInvestecNav, updateInvestecNavPreference, blurSensitiveValues, setBlurSensitiveValues }}>
             {!loading && children}
         </AuthContext.Provider>
     )

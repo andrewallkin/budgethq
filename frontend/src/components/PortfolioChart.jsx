@@ -11,6 +11,8 @@ import {
     Legend
 } from 'recharts'
 import { TrendingUp, TrendingDown, Calendar, RefreshCw, Layers } from 'lucide-react'
+import BlurredValue from './BlurredValue'
+import { useAuth } from '../context/AuthContext'
 import { formatCurrency as formatCurrencyUtil } from '../utils/numberFormatting'
 
 const TIME_RANGES = [
@@ -22,6 +24,7 @@ const TIME_RANGES = [
 ]
 
 export default function PortfolioChart() {
+    const { blurSensitiveValues } = useAuth()
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState(null)
     const [selectedRange, setSelectedRange] = useState('1m')
@@ -223,14 +226,14 @@ export default function PortfolioChart() {
                     <div className="space-y-1">
                         <div className="flex justify-between items-center gap-4">
                             <span className="text-gray-300 text-sm">Portfolio Value</span>
-                            <span className="text-white font-semibold">{formatCurrency(total)}</span>
+                            <BlurredValue><span className="text-white font-semibold">{formatCurrency(total)}</span></BlurredValue>
                         </div>
                         <div className="flex justify-between items-center gap-4">
                             <div className="flex items-center gap-1.5">
                                 <div className="w-2 h-2 rounded-full bg-blue-500"></div>
                                 <span className="text-gray-400 text-xs">Contributions</span>
                             </div>
-                            <span className="text-blue-400 text-sm">{formatCurrency(contributions)}</span>
+                            <BlurredValue><span className="text-blue-400 text-sm">{formatCurrency(contributions)}</span></BlurredValue>
                         </div>
                     </div>
                 </div>
@@ -245,7 +248,7 @@ export default function PortfolioChart() {
                     <div className="space-y-1">
                         <div className="flex justify-between items-center gap-4">
                             <span className="text-gray-300 text-sm">Portfolio Value</span>
-                            <span className="text-white font-semibold">{formatCurrency(total)}</span>
+                            <BlurredValue><span className="text-white font-semibold">{formatCurrency(total)}</span></BlurredValue>
                         </div>
                     </div>
                 </div>
@@ -329,29 +332,29 @@ export default function PortfolioChart() {
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4 mb-6">
                     <div className="p-2 sm:p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                         <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Period Start</p>
-                        <p className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
+                        <BlurredValue><p className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
                             {formatCurrency(summary.period_start_value)}
-                        </p>
+                        </p></BlurredValue>
                     </div>
                     <div className="p-2 sm:p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                         <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Period End</p>
-                        <p className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
+                        <BlurredValue><p className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
                             {formatCurrency(summary.period_end_value)}
-                        </p>
+                        </p></BlurredValue>
                     </div>
                     <div className="p-2 sm:p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                         <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Change</p>
                         <p className={`text-base sm:text-lg font-semibold flex items-center gap-1 ${summary.period_change >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
                             }`}>
                             {summary.period_change >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-                            {summary.period_change >= 0 ? '+' : ''}{formatCurrency(summary.period_change)}
+                            {summary.period_change >= 0 ? '+' : ''}<BlurredValue>{formatCurrency(summary.period_change)}</BlurredValue>
                         </p>
                     </div>
                     <div className="p-2 sm:p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                         <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Return</p>
                         <p className={`text-base sm:text-lg font-semibold ${summary.period_change_percent >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
                             }`}>
-                            {summary.period_change_percent >= 0 ? '+' : ''}{summary.period_change_percent.toFixed(2)}%
+                            {summary.period_change_percent >= 0 ? '+' : ''}<BlurredValue>{summary.period_change_percent.toFixed(2)}%</BlurredValue>
                         </p>
                     </div>
                 </div>

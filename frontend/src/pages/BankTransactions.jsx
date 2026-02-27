@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
 import { Search, Filter, AlertTriangle, Sparkles, Zap, RefreshCw, Trash2 } from 'lucide-react'
 import { formatCurrency, formatDateSafe } from '../utils/numberFormatting'
+import BlurredValue from '../components/BlurredValue'
 import TransactionDetailsModal from '../components/TransactionDetailsModal'
 
 const INCOME_CATEGORIES = ['salary', 'side_income', 'investment_income', 'refund', 'other_income']
@@ -483,7 +484,7 @@ export default function BankTransactions() {
                                                 : 'text-red-600 dark:text-red-400'
                                         }`}>
                                             {txn.transaction_type === 'CREDIT' ? '+' : '-'}
-                                            {formatCurrency(Math.abs(txn.amount))}
+                                            <BlurredValue>{formatCurrency(Math.abs(txn.amount))}</BlurredValue>
                                         </td>
                                         <td className="px-4 py-3 whitespace-nowrap">
                                             <select
@@ -607,7 +608,7 @@ export default function BankTransactions() {
                         </p>
                         <p className={`text-lg font-semibold mb-6 ${transactionToDelete.transaction_type === 'CREDIT' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                             {transactionToDelete.transaction_type === 'CREDIT' ? '+' : '-'}
-                            {formatCurrency(Math.abs(transactionToDelete.amount))}
+                            <BlurredValue>{formatCurrency(Math.abs(transactionToDelete.amount))}</BlurredValue>
                         </p>
                         <div className="flex gap-3">
                             <button

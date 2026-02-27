@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import axios from 'axios'
 import { Plus, Trash2, AlertTriangle, ChevronDown, ChevronRight, HelpCircle, Play } from 'lucide-react'
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, CATEGORIES, CATEGORY_LABELS } from '../utils/transactionCategories'
+import BlurredValue from '../components/BlurredValue'
 import { formatCurrency, formatDateSafe } from '../utils/numberFormatting'
 
 export default function CategorizationRules() {
@@ -634,7 +635,7 @@ export default function CategorizationRules() {
                                                 {c.description}
                                             </td>
                                             <td className="px-4 py-2 text-right text-gray-900 dark:text-white">
-                                                {formatCurrency(Math.abs(c.amount))}
+                                                <BlurredValue>{formatCurrency(Math.abs(c.amount))}</BlurredValue>
                                             </td>
                                             <td className="px-4 py-2 text-gray-600 dark:text-gray-400">
                                                 {formatDateSafe(c.transaction_date, { day: 'numeric', month: 'short', year: 'numeric' })}

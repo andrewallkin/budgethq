@@ -1,5 +1,6 @@
 import { X, TrendingUp, TrendingDown, Target, Calendar, Edit2, Check, X as XIcon, Trash2 } from 'lucide-react'
 import GainLossIndicator from './GainLossIndicator'
+import BlurredValue from './BlurredValue'
 import { useState } from 'react'
 import axios from 'axios'
 
@@ -102,9 +103,9 @@ export default function HoldingDetailsModal({ isOpen, onClose, holding, onHoldin
                                 <span className="text-lg">💰</span>
                                 <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Current Value</span>
                             </div>
-                            <div className="text-3xl font-bold text-gray-900 dark:text-white">
+                            <BlurredValue><div className="text-3xl font-bold text-gray-900 dark:text-white">
                                 {formatCurrency(isETF ? holding.total_value : holding.current_value)}
-                            </div>
+                            </div></BlurredValue>
                         </div>
 
                         <div className="bg-gray-50 dark:bg-gray-700/50 p-6 rounded-lg text-left">
@@ -116,14 +117,14 @@ export default function HoldingDetailsModal({ isOpen, onClose, holding, onHoldin
                                 )}
                                 <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Gain/Loss</span>
                             </div>
-                            <div className="space-y-1">
+                            <BlurredValue><div className="space-y-1">
                                 <div className={`text-2xl font-bold ${isPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                                     {formatPercentage(holding.gain_loss_percentage)}
                                 </div>
                                 <div className={`text-lg font-semibold ${isPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                                     {formatCurrency(holding.gain_loss_amount)}
                                 </div>
-                            </div>
+                            </div></BlurredValue>
                         </div>
                     </div>
 
@@ -187,16 +188,16 @@ export default function HoldingDetailsModal({ isOpen, onClose, holding, onHoldin
 
                                         <div className="flex justify-between">
                                             <span className="text-gray-600 dark:text-gray-400">Shares:</span>
-                                            <span className="font-medium text-gray-900 dark:text-white">
+                                            <BlurredValue><span className="font-medium text-gray-900 dark:text-white">
                                                 {holding.shares?.toFixed(4) || '—'}
-                                            </span>
+                                            </span></BlurredValue>
                                         </div>
 
                                         <div className="flex justify-between">
                                             <span className="text-gray-600 dark:text-gray-400">Price:</span>
-                                            <span className="font-medium text-gray-900 dark:text-white">
+                                            <BlurredValue><span className="font-medium text-gray-900 dark:text-white">
                                                 {holding.current_price ? formatCurrency(holding.current_price) : '—'}
-                                            </span>
+                                            </span></BlurredValue>
                                         </div>
                                     </>
                                 )}
@@ -253,44 +254,44 @@ export default function HoldingDetailsModal({ isOpen, onClose, holding, onHoldin
                                             </button>
                                         </div>
                                     ) : (
-                                        <span
+                                        <BlurredValue><span
                                             className="font-medium text-gray-900 dark:text-white cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/30 px-2 py-1 rounded transition-colors"
                                             onClick={handleEditCostBasis}
                                             title="Click to edit cost basis"
                                         >
                                             {formatCurrency(holding.cost_basis)}
-                                        </span>
+                                        </span></BlurredValue>
                                     )}
                                 </div>
 
                                 <div className="flex justify-between">
                                     <span className="text-gray-600 dark:text-gray-400">Actual %:</span>
-                                    <span className="font-medium text-gray-900 dark:text-white">
+                                    <BlurredValue><span className="font-medium text-gray-900 dark:text-white">
                                         {totalPortfolioValue > 0
                                             ? ((isETF ? holding.total_value : holding.current_value || 0) / totalPortfolioValue * 100).toFixed(1)
                                             : '0.0'}%
-                                    </span>
+                                    </span></BlurredValue>
                                 </div>
 
                                 <div className="flex justify-between">
                                     <span className="text-gray-600 dark:text-gray-400">Target %:</span>
-                                    <span className="font-medium text-gray-900 dark:text-white">
+                                    <BlurredValue><span className="font-medium text-gray-900 dark:text-white">
                                         {holding.target_percentage.toFixed(1)}%
-                                    </span>
+                                    </span></BlurredValue>
                                 </div>
 
                                 <div className="flex justify-between">
                                     <span className="text-gray-600 dark:text-gray-400">Gain/Loss %:</span>
-                                    <span className={`font-medium ${isPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                                    <BlurredValue><span className={`font-medium ${isPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                                         {formatPercentage(holding.gain_loss_percentage)}
-                                    </span>
+                                    </span></BlurredValue>
                                 </div>
 
                                 <div className="flex justify-between">
                                     <span className="text-gray-600 dark:text-gray-400">Gain/Loss Amount:</span>
-                                    <span className={`font-medium ${isPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                                    <BlurredValue><span className={`font-medium ${isPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                                         {formatCurrency(holding.gain_loss_amount)}
-                                    </span>
+                                    </span></BlurredValue>
                                 </div>
                             </div>
                         </div>

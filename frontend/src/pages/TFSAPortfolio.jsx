@@ -15,10 +15,13 @@ import ConfirmModal from '../components/ConfirmModal'
 import PortfolioChart from '../components/PortfolioChart'
 import GainLossIndicator from '../components/GainLossIndicator'
 import HoldingDetailsModal from '../components/HoldingDetailsModal'
+import { useAuth } from '../context/AuthContext'
 import { formatCurrency, formatNumber, formatDateSafe } from '../utils/numberFormatting'
+import BlurredValue from '../components/BlurredValue'
 
 
 export default function TFSAPortfolio() {
+    const { blurSensitiveValues } = useAuth()
     const [loading, setLoading] = useState(true)
     const [holdings, setHoldings] = useState([])
     const [threshold, setThreshold] = useState(5.0)
@@ -519,17 +522,17 @@ export default function TFSAPortfolio() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div>
                         <h2 className="text-sm font-medium text-emerald-100 uppercase tracking-wide">Portfolio Value</h2>
-                        <p className="mt-2 text-4xl font-bold text-white">
+                        <BlurredValue><p className="mt-2 text-4xl font-bold text-white">
                             {formatCurrency(totalValue, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </p>
+                        </p></BlurredValue>
                         <p className="text-sm text-emerald-100 mt-1">{holdings.length} holding{holdings.length !== 1 ? 's' : ''} in portfolio</p>
                     </div>
 
                     <div>
                         <h2 className="text-sm font-medium text-emerald-100 uppercase tracking-wide">Total Invested</h2>
-                        <p className="mt-2 text-3xl font-bold text-white">
+                        <BlurredValue><p className="mt-2 text-3xl font-bold text-white">
                             {formatCurrency(totalLifetimeContributions, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </p>
+                        </p></BlurredValue>
                         <p className="text-sm text-emerald-100 mt-1">Lifetime contributions</p>
                     </div>
 
@@ -537,7 +540,7 @@ export default function TFSAPortfolio() {
                         <h2 className="text-sm font-medium text-emerald-100 uppercase tracking-wide">
                             {totalValue >= totalLifetimeContributions ? 'Profit' : 'Loss'}
                         </h2>
-                        <p className={`mt-2 text-3xl font-bold ${totalValue >= totalLifetimeContributions ? 'text-white' : 'text-red-200'}`}>
+                        <BlurredValue><p className={`mt-2 text-3xl font-bold ${totalValue >= totalLifetimeContributions ? 'text-white' : 'text-red-200'}`}>
                             {formatCurrency(totalValue - totalLifetimeContributions, { minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: 'always' })}
                         </p>
                         <p className={`text-sm mt-1 font-medium ${totalValue >= totalLifetimeContributions ? 'text-emerald-100' : 'text-red-200'}`}>
@@ -545,13 +548,15 @@ export default function TFSAPortfolio() {
                                 ? `${totalValue >= totalLifetimeContributions ? '+' : ''}${(((totalValue - totalLifetimeContributions) / totalLifetimeContributions) * 100).toFixed(2)}%`
                                 : '—'
                             } return
-                        </p>
+                        </p></BlurredValue>
                     </div>
                 </div>
             </div>
 
             {/* Portfolio Performance Chart */}
-            <PortfolioChart />
+            <div className={blurSensitiveValues ? 'blur-[5px] select-none' : ''}>
+                <PortfolioChart />
+            </div>
 
             {/* TFSA Contribution Tracking */}
             <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-600 transition-colors">
@@ -570,13 +575,13 @@ export default function TFSAPortfolio() {
                     <div className="space-y-3">
                         <div className="flex items-center justify-between">
                             <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Annual Limit</h3>
-                            <span className="text-sm font-bold text-gray-900 dark:text-white">
+                            <BlurredValue><span className="text-sm font-bold text-gray-900 dark:text-white">
                                 {formatCurrency(tfsaAnnualLimit, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                            </span>
+                            </span></BlurredValue>
                         </div>
 
                         <div className="flex flex-col sm:flex-row gap-2 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                            <div className="flex items-center flex-1">
+                            <BlurredValue as="div" className="flex items-center flex-1">
                                 <span className="mr-1 text-gray-500 dark:text-gray-400 text-sm">R</span>
                                 <input
                                     type="number"
@@ -586,7 +591,7 @@ export default function TFSAPortfolio() {
                                     placeholder="Amount"
                                     className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                                 />
-                            </div>
+                            </BlurredValue>
                             <input
                                 type="date"
                                 value={newDepositDate}
@@ -606,9 +611,9 @@ export default function TFSAPortfolio() {
                                 {deposits.sort((a, b) => new Date(a.date) - new Date(b.date)).map((deposit) => (
                                     <div key={deposit.id} className="flex items-center justify-between p-2 bg-blue-50 dark:bg-blue-900/20 rounded text-sm">
                                         <div className="flex items-center gap-2 min-w-0 flex-1">
-                                            <span className="font-medium text-blue-700 dark:text-blue-400 shrink-0">
+                                            <BlurredValue><span className="font-medium text-blue-700 dark:text-blue-400 shrink-0">
                                                 {formatCurrency(deposit.amount, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                                            </span>
+                                            </span></BlurredValue>
                                             <span className="text-gray-500 dark:text-gray-400 text-xs whitespace-nowrap shrink-0">
                                                 {formatDateSafe(deposit.date, { day: 'numeric', month: 'short', year: 'numeric' })}
                                             </span>
@@ -626,12 +631,12 @@ export default function TFSAPortfolio() {
 
                         <div>
                             <div className="flex justify-between text-sm mb-1">
-                                <span className="text-gray-600 dark:text-gray-400">
+                                <BlurredValue><span className="text-gray-600 dark:text-gray-400">
                                     {formatCurrency(annualContributions, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                                </span>
-                                <span className={`font-bold ${contributionsRemaining < 0 ? 'text-red-500' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                                </span></BlurredValue>
+                                <BlurredValue><span className={`font-bold ${contributionsRemaining < 0 ? 'text-red-500' : 'text-emerald-600 dark:text-emerald-400'}`}>
                                     {formatCurrency(contributionsRemaining, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} left
-                                </span>
+                                </span></BlurredValue>
                             </div>
                             <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden mb-1">
                                 <div
@@ -643,7 +648,7 @@ export default function TFSAPortfolio() {
                                 />
                             </div>
                             <div className="text-center text-sm text-gray-500 dark:text-gray-400">
-                                {formatNumber(contributionPercentUsed, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}% used
+                                <BlurredValue>{formatNumber(contributionPercentUsed, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}% used</BlurredValue>
                             </div>
                         </div>
                     </div>
@@ -652,9 +657,9 @@ export default function TFSAPortfolio() {
                     <div className="space-y-3">
                         <div className="flex items-center justify-between">
                             <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Lifetime Limit</h3>
-                            <span className="text-sm font-bold text-gray-900 dark:text-white">
+                            <BlurredValue><span className="text-sm font-bold text-gray-900 dark:text-white">
                                 {formatCurrency(TFSA_LIFETIME_LIMIT, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                            </span>
+                            </span></BlurredValue>
                         </div>
 
                         <div className="flex flex-col sm:flex-row gap-2 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
@@ -665,7 +670,7 @@ export default function TFSAPortfolio() {
                                 placeholder="2018/19"
                                 className="w-24 px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-purple-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                             />
-                            <div className="flex items-center flex-1">
+                            <BlurredValue as="div" className="flex items-center flex-1">
                                 <span className="mr-1 text-gray-500 dark:text-gray-400 text-sm">R</span>
                                 <input
                                     type="number"
@@ -675,7 +680,7 @@ export default function TFSAPortfolio() {
                                     placeholder="Amount"
                                     className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-purple-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                                 />
-                            </div>
+                            </BlurredValue>
                             <button
                                 onClick={addHistoricalContribution}
                                 className="px-3 py-1.5 bg-purple-600 text-white text-sm rounded hover:bg-purple-700 transition-colors flex items-center gap-1"
@@ -691,9 +696,9 @@ export default function TFSAPortfolio() {
                                         <div className="flex items-center gap-2">
                                             <span className="font-medium text-purple-700 dark:text-purple-400">FY {hist.financial_year}</span>
                                             <span className="text-gray-500 dark:text-gray-400 text-xs">→</span>
-                                            <span className="font-medium text-gray-900 dark:text-white">
+                                            <BlurredValue><span className="font-medium text-gray-900 dark:text-white">
                                                 {formatCurrency(hist.amount, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                                            </span>
+                                            </span></BlurredValue>
                                         </div>
                                         <button
                                             onClick={() => removeHistoricalContribution(hist.id)}
@@ -708,12 +713,12 @@ export default function TFSAPortfolio() {
 
                         <div className="p-4 bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 rounded-lg">
                             <div className="text-center mb-3">
-                                <p className="text-2xl font-bold text-purple-700 dark:text-purple-400">
+                                <BlurredValue><p className="text-2xl font-bold text-purple-700 dark:text-purple-400">
                                     {formatCurrency(totalLifetimeContributions, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                                 </p>
                                 <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
                                     Total ({formatCurrency(historicalTotal, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} + {formatCurrency(annualContributions, { minimumFractionDigits: 0, maximumFractionDigits: 0 })})
-                                </p>
+                                </p></BlurredValue>
                             </div>
 
                             <div>
@@ -727,12 +732,12 @@ export default function TFSAPortfolio() {
                                     />
                                 </div>
                                 <div className="flex justify-between items-baseline gap-2 text-sm">
-                                    <span className="text-gray-600 dark:text-gray-400">
+                                    <BlurredValue><span className="text-gray-600 dark:text-gray-400">
                                         {formatNumber(lifetimePercentUsed, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}% used
-                                    </span>
-                                    <span className={`font-bold ${lifetimeRemaining < 0 ? 'text-red-500' : 'text-purple-600 dark:text-purple-400'}`}>
+                                    </span></BlurredValue>
+                                    <BlurredValue><span className={`font-bold ${lifetimeRemaining < 0 ? 'text-red-500' : 'text-purple-600 dark:text-purple-400'}`}>
                                         {formatCurrency(lifetimeRemaining, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} left
-                                    </span>
+                                    </span></BlurredValue>
                                 </div>
                             </div>
                         </div>
@@ -807,10 +812,10 @@ export default function TFSAPortfolio() {
                                                 </div>
                                             </td>
                                             <td className="py-3 px-2 text-right font-semibold text-gray-900 dark:text-white">
-                                                {formatCurrency(h.type === 'ETF' ? h.total_value : h.current_value || 0, {
+                                                <BlurredValue>{formatCurrency(h.type === 'ETF' ? h.total_value : h.current_value || 0, {
                                                     minimumFractionDigits: 2,
                                                     maximumFractionDigits: 2,
-                                                })}
+                                                })}</BlurredValue>
                                             </td>
                                             <td className="py-3 px-2 text-center">
                                                 <GainLossIndicator
@@ -902,7 +907,7 @@ export default function TFSAPortfolio() {
 
             {/* Target vs Actual Bar Chart */}
             {holdings.length > 0 && (
-                <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-600 transition-colors">
+                <div className={`bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-600 transition-colors ${blurSensitiveValues ? 'blur-[5px] select-none' : ''}`}>
                     <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Target vs Actual Allocation</h2>
                     <div className="flex justify-center gap-6 mb-3 text-sm text-gray-500 dark:text-gray-400">
                         <span className="flex items-center gap-2">
@@ -961,7 +966,7 @@ export default function TFSAPortfolio() {
 
                     <div className="flex items-center gap-4 mb-6">
                         <label className="text-sm font-medium text-gray-700 dark:text-gray-300">If I invest:</label>
-                        <div className="flex items-center">
+                        <BlurredValue as="div" className="flex items-center">
                             <span className="mr-1 text-gray-500 dark:text-gray-400">R</span>
                             <input
                                 type="number"
@@ -971,7 +976,7 @@ export default function TFSAPortfolio() {
                                 placeholder="Enter amount"
                                 className="w-40 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                             />
-                        </div>
+                        </BlurredValue>
                     </div>
 
                     {(parseFloat(whatIfAmount) || 0) > 0 && whatIfDistribution.length > 0 ? (
@@ -985,9 +990,9 @@ export default function TFSAPortfolio() {
                                         <span className="font-medium text-gray-900 dark:text-white">{item.etf}</span>
                                     </div>
                                     <div className="text-right">
-                                <div className="font-semibold text-purple-700 dark:text-purple-400">
+                                <BlurredValue><div className="font-semibold text-purple-700 dark:text-purple-400">
                                     {formatCurrency(item.buyAmount, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                </div>
+                                </div></BlurredValue>
                                         <div className="text-xs text-gray-500 dark:text-gray-400">
                                             {item.targetPercentage.toFixed(1)}% of total
                                         </div>
@@ -995,10 +1000,10 @@ export default function TFSAPortfolio() {
                                 </div>
                             ))}
                             <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg text-sm text-gray-600 dark:text-gray-400">
-                                💡 Total: {formatCurrency(whatIfDistribution.reduce((sum, item) => sum + item.buyAmount, 0), {
+                                💡 Total: <BlurredValue>{formatCurrency(whatIfDistribution.reduce((sum, item) => sum + item.buyAmount, 0), {
                                     minimumFractionDigits: 2,
                                     maximumFractionDigits: 2,
-                                })}
+                                })}</BlurredValue>
                             </div>
                         </div>
                     ) : (
@@ -1043,7 +1048,7 @@ export default function TFSAPortfolio() {
                                             <span>Buy <b>{action.buy_etf}</b></span>
                                         </div>
                                         <div className="mt-1 text-right font-semibold text-blue-700 dark:text-blue-400">
-                                            {formatCurrency(action.amount, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            <BlurredValue>{formatCurrency(action.amount, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</BlurredValue>
                                         </div>
                                     </div>
                                 ))}
