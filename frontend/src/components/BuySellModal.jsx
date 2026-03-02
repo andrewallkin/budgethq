@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { X, TrendingUp, TrendingDown, AlertCircle } from 'lucide-react'
 import axios from 'axios'
+import BlurredValue from './BlurredValue'
 import { formatCurrency, formatNumber } from '../utils/numberFormatting'
 
 export default function BuySellModal({ isOpen, onClose, holding, onSuccess }) {
@@ -235,7 +236,7 @@ export default function BuySellModal({ isOpen, onClose, holding, onSuccess }) {
                             <span className="text-gray-500 dark:text-gray-400">
                                 {isBond ? 'Current Value' : 'Current Holdings'}
                             </span>
-                            <span className="font-medium text-gray-900 dark:text-white">
+                            <BlurredValue><span className="font-medium text-gray-900 dark:text-white">
                                 {isBond
                                     ? formatCurrency(holding.current_value, {
                                         minimumFractionDigits: 2,
@@ -245,17 +246,17 @@ export default function BuySellModal({ isOpen, onClose, holding, onSuccess }) {
                                         minimumFractionDigits: 0,
                                         maximumFractionDigits: 4,
                                     })} shares`}
-                            </span>
+                            </span></BlurredValue>
                         </div>
                         {!isBond && holding.current_price && (
                             <div className="flex justify-between text-sm mt-1">
                                 <span className="text-gray-500 dark:text-gray-400">Latest Price</span>
-                                <span className="font-medium text-gray-900 dark:text-white">
+                                <BlurredValue><span className="font-medium text-gray-900 dark:text-white">
                                     {formatCurrency(holding.current_price, {
                                         minimumFractionDigits: 2,
                                         maximumFractionDigits: 2,
                                     })}
-                                </span>
+                                </span></BlurredValue>
                             </div>
                         )}
                     </div>
@@ -283,10 +284,10 @@ export default function BuySellModal({ isOpen, onClose, holding, onSuccess }) {
                                     className="mt-1 text-xs text-blue-600 dark:text-blue-400 hover:underline"
                                 >
                                     Sell all (
-                                        {formatCurrency(holding.current_value, {
+                                        <BlurredValue>{formatCurrency(holding.current_value, {
                                             minimumFractionDigits: 2,
                                             maximumFractionDigits: 2,
-                                        })}
+                                        })}</BlurredValue>
                                     )
                                 </button>
                             )}
@@ -393,17 +394,17 @@ export default function BuySellModal({ isOpen, onClose, holding, onSuccess }) {
                                             : 'text-red-700 dark:text-red-400'
                                     }`}
                                 >
-                                    {formatCurrency(totalValue, {
+                                    <BlurredValue>{formatCurrency(totalValue, {
                                         minimumFractionDigits: 2,
                                         maximumFractionDigits: 2,
-                                    })}
+                                    })}</BlurredValue>
                                 </span>
                             </div>
                             <div className="flex justify-between text-sm">
                                 <span className="text-gray-600 dark:text-gray-400">
                                     {isBond ? 'New Bond Value' : 'New Share Count'}
                                 </span>
-                                <span className="font-medium text-gray-900 dark:text-white">
+                                <BlurredValue><span className="font-medium text-gray-900 dark:text-white">
                                     {isBond
                                         ? formatCurrency(newBondValue, {
                                             minimumFractionDigits: 2,
@@ -413,7 +414,7 @@ export default function BuySellModal({ isOpen, onClose, holding, onSuccess }) {
                                             minimumFractionDigits: 0,
                                             maximumFractionDigits: 4,
                                         })} shares`}
-                                </span>
+                                </span></BlurredValue>
                             </div>
                         </div>
                     )}

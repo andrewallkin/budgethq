@@ -18,7 +18,9 @@ import { Plus, Trash2, Calculator, BarChart2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import SavingsCalculator from '../components/SavingsCalculator'
 import ChartLegend from '../components/ChartLegend'
+import { useAuth } from '../context/AuthContext'
 import { formatCurrency, formatNumber } from '../utils/numberFormatting'
+import BlurredValue from '../components/BlurredValue'
 import { BUDGET_TRANSACTION_CATEGORIES, CATEGORY_LABELS } from '../utils/transactionCategories'
 
 const COLORS = {
@@ -45,6 +47,7 @@ const CATEGORY_COLORS = [
 ]
 
 export default function BudgetDashboard() {
+    const { blurSensitiveValues } = useAuth()
     const isMobile = useIsMobile(640)
     const [loading, setLoading] = useState(true)
     const [salary, setSalary] = useState(0)
@@ -246,13 +249,13 @@ export default function BudgetDashboard() {
             <div className="lg:hidden -mx-4 px-4 py-2 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 shadow-sm">
                 <div className="flex justify-between items-center text-sm">
                     <span className="text-gray-600 dark:text-gray-400">Remaining</span>
-                    <span className={`font-semibold ${remaining >= 0 ? 'text-gray-900 dark:text-white' : 'text-red-600 dark:text-red-400'}`}>
+                    <BlurredValue><span className={`font-semibold ${remaining >= 0 ? 'text-gray-900 dark:text-white' : 'text-red-600 dark:text-red-400'}`}>
                         {formatCurrency(remaining, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
+                    </span></BlurredValue>
                 </div>
                 <div className="flex justify-between items-center text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                    <span>Allocated: {formatCurrency(totalSpent, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
-                    <span>Income: {formatCurrency(netIncome, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
+                    <span>Allocated: <BlurredValue>{formatCurrency(totalSpent, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</BlurredValue></span>
+                    <span>Income: <BlurredValue>{formatCurrency(netIncome, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</BlurredValue></span>
                 </div>
             </div>
 
@@ -271,12 +274,14 @@ export default function BudgetDashboard() {
                                     </Link>
                                 </div>
                                 {salary > 0 ? (
+                                    <BlurredValue as="div">
                                     <input
                                         type="text"
                                         value={formatCurrency(salary, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                         readOnly
                                         className="w-full px-3 py-3 min-h-[44px] border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white cursor-not-allowed"
                                     />
+                                    </BlurredValue>
                                 ) : (
                                     <div className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 italic">
                                         No income data available
@@ -298,28 +303,28 @@ export default function BudgetDashboard() {
                             <div className="space-y-3 text-sm">
                                 <div className="flex justify-between">
                                     <span className="text-gray-600 dark:text-gray-300">Gross Salary</span>
-                                    <span className="font-semibold text-green-600 dark:text-green-400">
+                                    <BlurredValue><span className="font-semibold text-green-600 dark:text-green-400">
                                         {formatCurrency(latestPayslip.gross_salary)}
-                                    </span>
+                                    </span></BlurredValue>
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="text-gray-600 dark:text-gray-300">PAYE (Tax)</span>
-                                    <span className="font-semibold text-red-600 dark:text-red-400">
+                                    <BlurredValue><span className="font-semibold text-red-600 dark:text-red-400">
                                         - {formatCurrency(latestPayslip.paye)}
-                                    </span>
+                                    </span></BlurredValue>
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="text-gray-600 dark:text-gray-300">UIF</span>
-                                    <span className="font-semibold text-red-600 dark:text-red-400">
+                                    <BlurredValue><span className="font-semibold text-red-600 dark:text-red-400">
                                         - {formatCurrency(latestPayslip.uif_employee_portion)}
-                                    </span>
+                                    </span></BlurredValue>
                                 </div>
                                 <div className="pt-2 border-t border-purple-200 dark:border-purple-700">
                                     <div className="flex justify-between">
                                         <span className="text-gray-700 dark:text-gray-200 font-medium">Net Pay</span>
-                                        <span className="font-bold text-blue-600 dark:text-blue-400">
+                                        <BlurredValue><span className="font-bold text-blue-600 dark:text-blue-400">
                                             {formatCurrency(latestPayslip.net_pay)}
-                                        </span>
+                                        </span></BlurredValue>
                                     </div>
                                 </div>
                                 {latestPayslip.company_name && (
@@ -353,7 +358,7 @@ export default function BudgetDashboard() {
 
                     {/* Overall Budget Breakdown Chart */}
                     {salary > 0 && (
-                        <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors scroll-mt-32 lg:scroll-mt-0">
+                        <div className={`bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors scroll-mt-32 lg:scroll-mt-0 ${blurSensitiveValues ? 'blur-[5px] select-none' : ''}`}>
                             <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Budget Breakdown</h2>
                             <div>
                                 <ResponsiveContainer width="100%" height={isMobile ? 180 : 220}>
@@ -428,7 +433,7 @@ export default function BudgetDashboard() {
                     </div>
 
                     {/* Category Specific Chart */}
-                    <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors scroll-mt-32 lg:scroll-mt-0">
+                    <div className={`bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors scroll-mt-32 lg:scroll-mt-0 ${blurSensitiveValues ? 'blur-[5px] select-none' : ''}`}>
                         <h2 className="text-lg font-semibold mb-4 capitalize text-gray-900 dark:text-white">{activeTab} Breakdown</h2>
                         <div>
                             {(() => {
@@ -504,14 +509,14 @@ function SummaryItem({ label, value, color, percentage }) {
     return (
         <div className="flex justify-between items-center">
             <span className="text-gray-600 dark:text-gray-400">{label}</span>
-            <span className={`font-medium ${color}`}>
+            <BlurredValue><span className={`font-medium ${color}`}>
                 {formatCurrency(value, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 {percentage !== undefined && (
                     <span className="text-sm ml-2 text-gray-500 dark:text-gray-400">
                         ({formatNumber(percentage, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%)
                     </span>
                 )}
-            </span>
+            </span></BlurredValue>
         </div>
     )
 }
@@ -565,7 +570,7 @@ const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => 
                     </select>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0 self-center">
-                    <div className="flex items-center border border-gray-200 dark:border-gray-500 rounded bg-white dark:bg-gray-600 min-h-[44px]">
+                    <BlurredValue as="div" className="flex items-center border border-gray-200 dark:border-gray-500 rounded bg-white dark:bg-gray-600 min-h-[44px]">
                         <span className="pl-3 text-gray-500 dark:text-gray-400 text-sm">R</span>
                         <input
                             type="number"
@@ -574,12 +579,12 @@ const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => 
                             onFocus={(e) => e.target.select()}
                             className="w-24 min-h-[44px] pl-1 pr-2 py-2 bg-transparent border-none focus:ring-0 text-right text-gray-900 dark:text-white"
                         />
-                    </div>
+                    </BlurredValue>
                     <span className="text-xs text-gray-500 dark:text-gray-400 min-w-[50px] text-right">
                         {isExcluded ? (
                             <span className="text-amber-600 dark:text-amber-400" title="Not compared in Budget Analysis">Excl.</span>
                         ) : (
-                            `(${formatNumber(percentage, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%)`
+                            <BlurredValue>({formatNumber(percentage, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%)</BlurredValue>
                         )}
                     </span>
                     <button
@@ -612,7 +617,7 @@ const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => 
                     onKeyPress={handleKeyPress}
                     className="flex-1 min-w-0 w-full sm:min-w-[150px] px-3 py-3 min-h-[44px] border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors"
                 />
-                <div className="flex items-center border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 sm:w-auto w-full min-h-[44px]">
+                <BlurredValue as="div" className="flex items-center border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 sm:w-auto w-full min-h-[44px]">
                     <span className="pl-3 text-gray-500 dark:text-gray-400 text-sm">R</span>
                     <input
                         type="number"
@@ -623,7 +628,7 @@ const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => 
                         onFocus={(e) => e.target.select()}
                         className="w-24 min-w-0 flex-1 sm:flex-initial pl-1 pr-3 py-3 bg-transparent border-none focus:ring-0 text-right text-gray-900 dark:text-white"
                     />
-                </div>
+                </BlurredValue>
                 <select
                     value={newTransactionCategory}
                     onChange={(e) => setNewTransactionCategory(e.target.value)}

@@ -7,7 +7,7 @@ import { formatDateSafe } from '../utils/numberFormatting'
 import ConfirmModal from '../components/ConfirmModal'
 
 export default function Settings() {
-    const { user, showInvestecNav, updateInvestecNavPreference } = useAuth()
+    const { user, showInvestecNav, updateInvestecNavPreference, blurSensitiveValues, setBlurSensitiveValues } = useAuth()
     const [currentPassword, setCurrentPassword] = useState('')
     const [newPassword, setNewPassword] = useState('')
     const [confirmPassword, setConfirmPassword] = useState('')
@@ -457,8 +457,8 @@ export default function Settings() {
                     </form>
                 </div>
 
-                {/* Investec Integration — spans 2 cols on lg, 1 col on xl */}
-                <div className="lg:col-span-2 xl:col-span-1 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-200 dark:divide-gray-700">
+                {/* Investec Integration */}
+                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-200 dark:divide-gray-700">
                     <div className="p-5">
                         <div className="flex items-center justify-between">
                             <div>
@@ -625,8 +625,38 @@ export default function Settings() {
                 </div>
             </div>
 
-            {/* Bottom row: Budget Preferences + Budget Categories */}
-            <div className="mt-5 grid grid-cols-1 lg:grid-cols-2 gap-5">
+            {/* Second row: Budget Categories, Budget Preferences, Privacy */}
+            <div className="mt-5 grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
+                {/* Budget Categories */}
+                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
+                    <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-1">Budget Categories</h2>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                        Manage budget entries and view the transaction category reference.
+                    </p>
+                    <div className="flex flex-col gap-2">
+                        <Link
+                            to="/budget"
+                            className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                        >
+                            <LayoutDashboard className="w-7 h-7 text-blue-500 dark:text-blue-400 shrink-0" />
+                            <div>
+                                <p className="text-sm font-medium text-gray-900 dark:text-white">Budget Dashboard</p>
+                                <p className="text-xs text-gray-400 dark:text-gray-500">Manage needs, wants, and savings categories</p>
+                            </div>
+                        </Link>
+                        <Link
+                            to="/category-guide"
+                            className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                        >
+                            <HelpCircle className="w-7 h-7 text-blue-500 dark:text-blue-400 shrink-0" />
+                            <div>
+                                <p className="text-sm font-medium text-gray-900 dark:text-white">Category Guide</p>
+                                <p className="text-xs text-gray-400 dark:text-gray-500">Transaction category reference and examples</p>
+                            </div>
+                        </Link>
+                    </div>
+                </div>
+
                 {/* Budget Preferences */}
                 <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
                     <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-1">Budget Preferences</h2>
@@ -663,33 +693,28 @@ export default function Settings() {
                     {budgetPeriodSuccess && <p className="mt-2 text-sm text-green-600 dark:text-green-400">{budgetPeriodSuccess}</p>}
                 </div>
 
-                {/* Budget Categories */}
+                {/* Privacy */}
                 <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
-                    <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-1">Budget Categories</h2>
+                    <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-1">Privacy</h2>
                     <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                        Manage budget entries and view the transaction category reference.
+                        Hide amounts when sharing your screen (e.g. with friends)
                     </p>
-                    <div className="flex flex-col gap-2">
-                        <Link
-                            to="/budget"
-                            className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                    <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Blur sensitive values</span>
+                        <button
+                            role="switch"
+                            aria-checked={blurSensitiveValues}
+                            onClick={() => setBlurSensitiveValues(!blurSensitiveValues)}
+                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                                blurSensitiveValues ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-600'
+                            }`}
                         >
-                            <LayoutDashboard className="w-7 h-7 text-blue-500 dark:text-blue-400 shrink-0" />
-                            <div>
-                                <p className="text-sm font-medium text-gray-900 dark:text-white">Budget Dashboard</p>
-                                <p className="text-xs text-gray-400 dark:text-gray-500">Manage needs, wants, and savings categories</p>
-                            </div>
-                        </Link>
-                        <Link
-                            to="/category-guide"
-                            className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                        >
-                            <HelpCircle className="w-7 h-7 text-blue-500 dark:text-blue-400 shrink-0" />
-                            <div>
-                                <p className="text-sm font-medium text-gray-900 dark:text-white">Category Guide</p>
-                                <p className="text-xs text-gray-400 dark:text-gray-500">Transaction category reference and examples</p>
-                            </div>
-                        </Link>
+                            <span
+                                className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                    blurSensitiveValues ? 'translate-x-5' : 'translate-x-0'
+                                }`}
+                            />
+                        </button>
                     </div>
                 </div>
             </div>

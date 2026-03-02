@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { X, CheckCircle, AlertCircle, Edit2, Plus, Trash2 } from 'lucide-react'
+import BlurredValue from './BlurredValue'
 import { formatCurrency } from '../utils/numberFormatting'
 
 export default function PayslipReviewModal({ isOpen, onClose, onConfirm, extractedData, monthYear }) {
@@ -204,7 +205,7 @@ export default function PayslipReviewModal({ isOpen, onClose, onConfirm, extract
                                     {/* Cost to Company */}
                                     <div className="flex justify-between text-purple-700 dark:text-purple-400 font-semibold">
                                         <span>Cost to Company</span>
-                                        <span>{formatCurrency(costToCompany)}</span>
+                                        <BlurredValue><span>{formatCurrency(costToCompany)}</span></BlurredValue>
                                     </div>
                                     
                                     <div className="border-t border-gray-200 dark:border-gray-700 my-2"></div>
@@ -236,8 +237,8 @@ export default function PayslipReviewModal({ isOpen, onClose, onConfirm, extract
                                             <div className="text-xs text-amber-600 dark:text-amber-400 flex items-start gap-1">
                                                 <AlertCircle className="w-3 h-3 mt-0.5 flex-shrink-0" />
                                                 <span>
-                                                    Calculated: {formatCurrency(calculatedNetPay)}
-                                                    <br />Difference: {formatCurrency(Math.abs(parseFloat(netPay) - calculatedNetPay))}
+                                                    Calculated: <BlurredValue>{formatCurrency(calculatedNetPay)}</BlurredValue>
+                                                    <br />Difference: <BlurredValue>{formatCurrency(Math.abs(parseFloat(netPay) - calculatedNetPay))}</BlurredValue>
                                                 </span>
                                             </div>
                                         )}
@@ -383,9 +384,9 @@ function SummaryRow({ label, value, isGreen, isRed, isInfo }) {
     return (
         <div className="flex justify-between items-center">
             <span className="text-gray-600 dark:text-gray-400">{label}</span>
-            <span className={`font-medium ${colorClass}`}>
+            <BlurredValue><span className={`font-medium ${colorClass}`}>
                 {isRed && '- '}{formatCurrency(value || 0)}
-            </span>
+            </span></BlurredValue>
         </div>
     )
 }

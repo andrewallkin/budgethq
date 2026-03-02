@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { AlertCircle, CheckCircle } from 'lucide-react'
+import BlurredValue from './BlurredValue'
 import { formatCurrency, formatNumber } from '../utils/numberFormatting'
 import { EMERGENCY_FUND_SOURCES } from '../utils/emergencyFundSource'
 
@@ -156,6 +157,7 @@ export default function EmergencyFundCalculator({
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         Current Emergency Fund (R)
                     </label>
+                    <BlurredValue as="div">
                     <input
                         type="number"
                         value={currentFund === 0 ? '' : currentFund}
@@ -174,6 +176,7 @@ export default function EmergencyFundCalculator({
                                 : 'opacity-70 cursor-not-allowed'
                         }`}
                     />
+                    </BlurredValue>
                     {fundSource === EMERGENCY_FUND_SOURCES.BANK_SYNC && (
                         <div className="mt-2 p-3 rounded-lg bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800">
                             <div className="text-xs text-teal-900 dark:text-teal-100">
@@ -195,6 +198,7 @@ export default function EmergencyFundCalculator({
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         Monthly Deposit (R)
                     </label>
+                    <BlurredValue as="div">
                     <input
                         type="number"
                         value={monthlyDeposit === 0 ? '' : monthlyDeposit}
@@ -207,6 +211,7 @@ export default function EmergencyFundCalculator({
                         placeholder="0"
                         className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                     />
+                    </BlurredValue>
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                         How much you are currently depositing each month for your emergency savings.
                     </p>
@@ -217,6 +222,7 @@ export default function EmergencyFundCalculator({
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                             Monthly Expenses (R)
                         </label>
+                        <BlurredValue as="div">
                         <input
                             type="number"
                             value={monthlyExpenses === 0 ? '' : monthlyExpenses}
@@ -229,6 +235,7 @@ export default function EmergencyFundCalculator({
                             placeholder="0"
                             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                         />
+                        </BlurredValue>
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                             Defaults to "Needs" total. Adjust if needed.
                         </p>
@@ -280,6 +287,7 @@ export default function EmergencyFundCalculator({
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                             Target Coverage (Months)
                         </label>
+                        <BlurredValue as="div">
                         <select
                             value={targetMonths}
                             onChange={(e) => { setUserHasEdited(true); setTargetMonths(parseInt(e.target.value)) }}
@@ -289,12 +297,14 @@ export default function EmergencyFundCalculator({
                             <option value={6}>6 months</option>
                             <option value={12}>12 months</option>
                         </select>
+                        </BlurredValue>
                     </div>
                 ) : (
                     <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                             Target Value (R)
                         </label>
+                        <BlurredValue as="div">
                         <input
                             type="number"
                             value={targetValue === 0 ? '' : targetValue}
@@ -307,6 +317,7 @@ export default function EmergencyFundCalculator({
                             placeholder="0"
                             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                         />
+                        </BlurredValue>
                     </div>
                 )}
 
@@ -316,9 +327,9 @@ export default function EmergencyFundCalculator({
                         <div className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-1">
                             Months to Reach Goal
                         </div>
-                        <div className="text-2xl font-bold text-blue-700 dark:text-blue-300">
+                        <BlurredValue><div className="text-2xl font-bold text-blue-700 dark:text-blue-300">
                             {monthsToGoal} {monthsToGoal === 1 ? 'month' : 'months'}
-                        </div>
+                        </div></BlurredValue>
                     </div>
                 )}
 
@@ -347,9 +358,9 @@ export default function EmergencyFundCalculator({
                     {targetType === 'months' && (
                         <div className="text-sm text-gray-700 dark:text-gray-300">
                             You have{' '}
-                            <span className="font-semibold">
+                            <BlurredValue><span className="font-semibold">
                                 {formatNumber(monthsCovered, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} months
-                            </span>{' '}
+                            </span></BlurredValue>{' '}
                             of expenses covered
                         </div>
                     )}
@@ -359,9 +370,9 @@ export default function EmergencyFundCalculator({
                 <div>
                     <div className="flex justify-between text-sm mb-2">
                         <span className="text-gray-600 dark:text-gray-400">Progress to Target</span>
-                        <span className="font-medium text-gray-900 dark:text-white">
+                        <BlurredValue><span className="font-medium text-gray-900 dark:text-white">
                             {formatNumber(progress, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%
-                        </span>
+                        </span></BlurredValue>
                     </div>
                     <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
                         <div
@@ -373,12 +384,12 @@ export default function EmergencyFundCalculator({
                         />
                     </div>
                     <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        <span>
+                        <BlurredValue><span>
                             {formatCurrency(currentFund, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                        </span>
-                        <span>
+                        </span></BlurredValue>
+                        <BlurredValue><span>
                             {formatCurrency(targetAmount, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                        </span>
+                        </span></BlurredValue>
                     </div>
                 </div>
 
@@ -386,9 +397,9 @@ export default function EmergencyFundCalculator({
                 <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
                     <div>
                         <div className="text-sm text-gray-600 dark:text-gray-400">Target Amount</div>
-                        <div className="text-lg font-semibold text-gray-900 dark:text-white">
+                        <BlurredValue><div className="text-lg font-semibold text-gray-900 dark:text-white">
                             {formatCurrency(targetAmount, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </div>
+                        </div></BlurredValue>
                     </div>
                     <div>
                         <div className="text-sm text-gray-600 dark:text-gray-400">
@@ -399,7 +410,7 @@ export default function EmergencyFundCalculator({
                                 shortfall > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'
                             }`}
                         >
-                            {formatCurrency(Math.abs(shortfall), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            <BlurredValue>{formatCurrency(Math.abs(shortfall), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</BlurredValue>
                         </div>
                     </div>
                 </div>

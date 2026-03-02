@@ -1,4 +1,5 @@
 import { X, Trash2 } from 'lucide-react'
+import BlurredValue from './BlurredValue'
 import { formatCurrency, formatDateSafe } from '../utils/numberFormatting'
 import CategoryBadge from './CategoryBadge'
 
@@ -47,9 +48,9 @@ export default function TransactionDetailsModal({ isOpen, onClose, transaction, 
                     <div className="grid grid-cols-2 gap-4">
                         <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg">
                             <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Amount</p>
-                            <p className={`text-2xl font-bold ${isCredit ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                            <BlurredValue><p className={`text-2xl font-bold ${isCredit ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                                 {isCredit ? '+' : '-'}{formatCurrency(Math.abs(transaction.amount))}
-                            </p>
+                            </p></BlurredValue>
                         </div>
                         <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg">
                             <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Category</p>

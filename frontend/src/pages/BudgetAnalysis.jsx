@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import axios from 'axios'
 import { Calendar, AlertTriangle, TrendingUp, TrendingDown } from 'lucide-react'
+import BlurredValue from '../components/BlurredValue'
+import { useAuth } from '../context/AuthContext'
 import { formatCurrency } from '../utils/numberFormatting'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 import { INCOME_CATEGORIES, CATEGORY_COLORS, CATEGORY_LABELS } from '../utils/transactionCategories'
@@ -14,6 +16,7 @@ function formatPeriodRange(fromDate, toDate) {
 }
 
 export default function BudgetAnalysis() {
+    const { blurSensitiveValues } = useAuth()
     const [loading, setLoading] = useState(true)
     const [budget, setBudget] = useState(null)
     const [transactions, setTransactions] = useState([])
@@ -211,25 +214,25 @@ export default function BudgetAnalysis() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
                     <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Total Budgeted</p>
-                    <p className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
+                    <BlurredValue><p className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
                         {formatCurrency(totalBudgeted)}
-                    </p>
+                    </p></BlurredValue>
                 </div>
 
                 <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
                     <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Total Spent</p>
-                    <p className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
+                    <BlurredValue><p className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
                         {formatCurrency(totalSpent)}
-                    </p>
+                    </p></BlurredValue>
                 </div>
 
                 <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Variance</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Remaining</p>
                     <p className={`text-2xl sm:text-3xl font-bold flex items-center gap-2 ${
                         variance >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
                     }`}>
                         {variance >= 0 ? <TrendingUp className="w-6 h-6" /> : <TrendingDown className="w-6 h-6" />}
-                        {formatCurrency(Math.abs(variance))}
+                        <BlurredValue>{formatCurrency(Math.abs(variance))}</BlurredValue>
                     </p>
                 </div>
             </div>
@@ -250,7 +253,7 @@ export default function BudgetAnalysis() {
                                     Actual
                                 </th>
                                 <th className="px-4 py-3 text-right text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-                                    Variance
+                                    Remaining
                                 </th>
                             </tr>
                         </thead>
@@ -261,17 +264,17 @@ export default function BudgetAnalysis() {
                                         {row.category}
                                     </td>
                                     <td className="px-4 py-3 text-sm text-right text-gray-700 dark:text-gray-300">
-                                        {formatCurrency(row.budgeted)}
+                                        <BlurredValue>{formatCurrency(row.budgeted)}</BlurredValue>
                                     </td>
                                     <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-white font-semibold">
-                                        {formatCurrency(row.actual)}
+                                        <BlurredValue>{formatCurrency(row.actual)}</BlurredValue>
                                     </td>
                                     <td className={`px-4 py-3 text-sm text-right font-semibold ${
                                         row.variance >= 0
                                             ? 'text-green-600 dark:text-green-400'
                                             : 'text-red-600 dark:text-red-400'
                                     }`}>
-                                        {row.variance >= 0 ? '+' : ''}{formatCurrency(row.variance)}
+                                        {row.variance >= 0 ? '+' : ''}<BlurredValue>{formatCurrency(row.variance)}</BlurredValue>
                                     </td>
                                 </tr>
                             ))}
@@ -283,7 +286,7 @@ export default function BudgetAnalysis() {
             {/* Charts */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Bar Chart */}
-                <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+                <div className={`bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 ${blurSensitiveValues ? 'blur-[5px] select-none' : ''}`}>
                     <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
                         Budgeted vs Actual
                     </h2>
@@ -318,7 +321,7 @@ export default function BudgetAnalysis() {
                 </div>
 
                 {/* Pie Chart */}
-                <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+                <div className={`bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 ${blurSensitiveValues ? 'blur-[5px] select-none' : ''}`}>
                     <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
                         Spending Breakdown
                     </h2>

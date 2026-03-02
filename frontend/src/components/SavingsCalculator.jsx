@@ -2,8 +2,11 @@ import { useState, useMemo } from 'react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { X } from 'lucide-react'
 import { formatCurrency } from '../utils/numberFormatting'
+import BlurredValue from './BlurredValue'
+import { useAuth } from '../context/AuthContext'
 
 export default function SavingsCalculator({ isOpen, onClose }) {
+    const { blurSensitiveValues } = useAuth()
     const [initialAmount, setInitialAmount] = useState(0)
     const [monthlyDeposit, setMonthlyDeposit] = useState(0)
     const [annualRate, setAnnualRate] = useState(7)
@@ -69,6 +72,7 @@ export default function SavingsCalculator({ isOpen, onClose }) {
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                 Initial Amount (R)
                             </label>
+                            <BlurredValue as="div">
                             <input
                                 type="number"
                                 value={initialAmount === 0 ? '' : initialAmount}
@@ -80,11 +84,13 @@ export default function SavingsCalculator({ isOpen, onClose }) {
                                 placeholder="0"
                                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                             />
+                            </BlurredValue>
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                 Monthly Deposit (R)
                             </label>
+                            <BlurredValue as="div">
                             <input
                                 type="number"
                                 value={monthlyDeposit === 0 ? '' : monthlyDeposit}
@@ -96,6 +102,7 @@ export default function SavingsCalculator({ isOpen, onClose }) {
                                 placeholder="0"
                                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                             />
+                            </BlurredValue>
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -144,27 +151,27 @@ export default function SavingsCalculator({ isOpen, onClose }) {
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
                         <div>
                             <div className="text-sm text-gray-600 dark:text-gray-400">Projected Final Amount</div>
-                            <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                            <BlurredValue><div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
                                 {formatCurrency(finalAmount, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </div>
+                            </div></BlurredValue>
                         </div>
                         <div>
                             <div className="text-sm text-gray-600 dark:text-gray-400">Total Contributions</div>
-                            <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                            <BlurredValue><div className="text-2xl font-bold text-gray-900 dark:text-white">
                                 {formatCurrency(totalContributions, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </div>
+                            </div></BlurredValue>
                         </div>
                         <div>
                             <div className="text-sm text-gray-600 dark:text-gray-400">Interest Earned</div>
-                            <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                            <BlurredValue><div className="text-2xl font-bold text-green-600 dark:text-green-400">
                                 {formatCurrency(totalInterest, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </div>
+                            </div></BlurredValue>
                         </div>
                     </div>
 
                     {/* Chart */}
                     {projectionData.length > 0 && (
-                        <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4">
+                        <div className={`bg-gray-50 dark:bg-gray-900 rounded-lg p-4 ${blurSensitiveValues ? 'blur-[5px] select-none' : ''}`}>
                             <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Growth Over Time</h3>
                             <div className="h-80">
                                 <ResponsiveContainer width="100%" height="100%">

@@ -26,8 +26,47 @@ TAX_YEAR_2025 = {
         "first_dependent": 364,
         "additional_dependent": 246
     },
-    "uif_cap": 17712 # Monthly cap (1% of this) = 177.12
+    "uif_cap": 17712, # Monthly cap (1% of this) = 177.12
+    "tfsa_annual_limit": 36000,
+    "ra_max_deduction": 350000
 }
+
+# 2026 Tax Year (1 March 2026 - 28 Feb 2027)
+TAX_YEAR_2026 = {
+    "brackets": [
+        {"limit": 245100, "rate": 0.18, "base": 0},
+        {"limit": 383100, "rate": 0.26, "base": 44118},
+        {"limit": 530200, "rate": 0.31, "base": 79998},
+        {"limit": 695800, "rate": 0.36, "base": 125599},
+        {"limit": 887000, "rate": 0.39, "base": 185215},
+        {"limit": 1878600, "rate": 0.41, "base": 259783},
+        {"limit": float('inf'), "rate": 0.45, "base": 666339}
+    ],
+    "rebates": {
+        "primary": 17820,
+        "secondary": 9765, # 65+
+        "tertiary": 3249   # 75+
+    },
+    "thresholds": {
+        "under_65": 99000,
+        "65_to_74": 153250,
+        "75_plus": 171300
+    },
+    "medical_credits": {
+        "main_member": 376,
+        "first_dependent": 376,
+        "additional_dependent": 254
+    },
+    "uif_cap": 17712, # Monthly cap (1% of this) = 177.12 (unchanged)
+    "tfsa_annual_limit": 46000,
+    "ra_max_deduction": 430000
+}
+
+_TAX_CONFIGS = {2025: TAX_YEAR_2025, 2026: TAX_YEAR_2026}
+
+def get_tax_config(financial_year_start: int) -> dict:
+    """Return tax config for the given FY start year, defaulting to earliest known year."""
+    return _TAX_CONFIGS.get(financial_year_start, TAX_YEAR_2025)
 
 def calculate_paye(taxable_income_annual: float, age: int, tax_year_data=TAX_YEAR_2025) -> float:
     """Calculate annual PAYE based on taxable income and age."""
@@ -103,134 +142,3 @@ def calculate_uif(gross_cash_salary_monthly: float, tax_year_data=TAX_YEAR_2025)
     uif_income = min(gross_cash_salary_monthly, tax_year_data["uif_cap"])
     return uif_income * 0.01
 
-def calculate_salary_breakdown(salary_orm, age: int = 30, save_to_db: bool = True):
-    """
-    Takes a Salary ORM object (with items) and returns a detailed breakdown.
-    If save_to_db is True, updates the salary record with the calculated net_pay.
-    """
-    # If age is in the Salary model (new), we rely on that. If it's passed as arg (old), we ignore or fallback? 
-    # Let's use the explicit Salary model age if available
-    tax_age = salary_orm.age if hasattr(salary_orm, 'age') and salary_orm.age else age
-
-    # 1. Aggregation - Updated for new model
-    # Gross Cash = Basic Salary + Earnings + (Company Contributions if they are paid out? No usually fringe is not cash)
-    # Actually, fringe is taxable income but not cash.
-    # The user says "Separate Pre and Post Tax" and "Select if Fringe".
-    # Logic:
-    # - basic_salary: Cash (Verified)
-    # - item_type='earning': Cash (Verified)
-    # - item_type='deduction_pre' / 'deduction_post' with is_fringe=1: 
-    #     - This implies it's a benefit the company pays FOR you (e.g. Med Aid).
-    #     - It adds to Taxable Income.
-    #     - Does it add to Gross Cash? No, company pays it to provider.
-    #     - Does it reduce Net Pay? No, if company pays it.
-    #     Wait, if I select "Medical Aid" and "Fringe", it means Company pays.
-    #     So I don't see -2000 on my bank account.
-    #     But I see +2000 on my Taxable Income.
-    #     AND I get the Tax Credit (if it's medical aid).
-    
-    # Let's assume:
-    # Earnings: Always Cash.
-    # Deductions (Post) + Fringe=True: Company Contribution. (Adds to Taxable, not Cash, not Deducted from Cash).
-    # Deductions (Post) + Fringe=False: Employee Deduction. (Deducted from Cash).
-    
-    # Deductions (Post) + Fringe=False: Employee Deduction. (Deducted from Cash).
-    
-    # Basic salary is the core cash salary
-    basic_salary = getattr(salary_orm, 'basic_salary', 0.0) or 0.0
-    
-    # Calculate Gross Income: Basic Salary + All Earnings
-    earnings_total = 0.0
-    deductions_pre = 0.0
-    deductions_post = 0.0
-    total_fringe_benefits = 0.0
-
-    breakdown_deductions = {
-        "paye": 0.0,
-        "uif": 0.0,
-        "pre_tax": 0.0,
-        "post_tax": 0.0,
-        "fringe_benefits_deducted": 0.0,
-        "total": 0.0
-    }
-
-    for item in salary_orm.items:
-        if item.item_type == 'earning':
-            earnings_total += (item.amount or 0.0)
-        elif item.item_type == 'deduction_pre':
-            # Pension / RA - reduces taxable income
-            amount = item.amount or 0.0
-            deductions_pre += amount
-            breakdown_deductions["pre_tax"] += amount
-        elif item.item_type == 'deduction_post':
-            amount = item.amount or 0.0
-            if getattr(item, 'is_fringe', 0):
-                # Company Contribution (Fringe Benefit)
-                total_fringe_benefits += amount
-                breakdown_deductions["fringe_benefits_deducted"] += amount
-            else:
-                # Employee Deduction
-                deductions_post += amount
-                breakdown_deductions["post_tax"] += amount
-
-    # Gross Income is Basic Salary + Additional Earnings
-    gross_income = basic_salary + earnings_total
-    
-    # Taxable Income = Gross Income - Pre-tax Deductions + Fringe Benefits
-    # Fringe benefits increase taxable income but don't touch cash
-    taxable_income = gross_income - deductions_pre + total_fringe_benefits
-    
-    # 3. Calculate Tax (PAYE)
-    # PAYE is calculated on (Gross Income + Fringe - Pre-tax Deductions)
-    paye = calculate_paye(taxable_income * 12, tax_age) / 12
-    
-    # 4. Medical Aid Credits
-    # Deduct from PAYE
-    # Medical Tax Credits apply if you are paying, OR if company affects it. It's per member.
-    credits = 0.0
-    members = salary_orm.medical_aid_members
-    if members > 0:
-        # 2025 Rates
-        # Main: R364, First Dep: R364, Additional: R246
-        # If members = 1: 364
-        # If members = 2: 364+364=728
-        # If members > 2: 728 + (members-2)*246
-        
-        if members == 1:
-            credits = 364.0
-        elif members == 2:
-            credits = 728.0
-        else:
-            credits = 728.0 + (members - 2) * 246.0
-            
-    final_paye = max(0.0, paye - credits)
-    breakdown_deductions["paye"] = final_paye
-
-    # 5. UIF
-    # 1% of Remuneration (total gross income), capped
-    uif_remuneration = gross_income
-    uif_cap = 17712 # Monthly cap (Income)
-    uif_deduction = min(uif_remuneration, uif_cap) * 0.01
-    breakdown_deductions["uif"] = uif_deduction
-
-    # 6. Net Pay
-    # Net Pay = Gross Income - Pre-Tax Deductions - PAYE - UIF - Post-Tax Deductions
-    # Note: Fringe benefits only affect taxable income, not net pay (they don't touch cash)
-    # UIF is part of Post-Tax Deductions but kept separate in breakdown for reporting
-    net_pay = gross_income - deductions_pre - final_paye - uif_deduction - deductions_post
-    
-    # Total deductions for reporting (pre-tax deductions are included in net pay calculation above)
-    total_deductions = final_paye + uif_deduction + deductions_pre + deductions_post
-    breakdown_deductions["total"] = total_deductions
-
-    # Save net salary to database if requested
-    if save_to_db and hasattr(salary_orm, 'net_salary'):
-        salary_orm.net_salary = net_pay
-
-    return {
-        "gross_income": gross_income,
-        "fringe_benefits": total_fringe_benefits,
-        "taxable_income": taxable_income,
-        "deductions": breakdown_deductions,
-        "net_pay": net_pay
-    }

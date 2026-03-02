@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { X, PenLine, Plus, Trash2, AlertCircle } from 'lucide-react'
 import axios from 'axios'
+import BlurredValue from './BlurredValue'
 import { formatCurrency } from '../utils/numberFormatting'
 
 export default function ManualPayslipModal({ isOpen, onClose, onSuccess, initialMonth, initialYear }) {
@@ -280,7 +281,7 @@ export default function ManualPayslipModal({ isOpen, onClose, onSuccess, initial
 
                                     <div className="flex justify-between text-purple-700 dark:text-purple-400 font-semibold">
                                         <span>Cost to Company</span>
-                                        <span>{formatCurrency(costToCompany)}</span>
+                                        <BlurredValue><span>{formatCurrency(costToCompany)}</span></BlurredValue>
                                     </div>
 
                                     <div className="border-t border-gray-200 dark:border-gray-700 my-2"></div>
@@ -312,8 +313,8 @@ export default function ManualPayslipModal({ isOpen, onClose, onSuccess, initial
                                             <div className="text-xs text-amber-600 dark:text-amber-400 flex items-start gap-1">
                                                 <AlertCircle className="w-3 h-3 mt-0.5 flex-shrink-0" />
                                                 <span>
-                                                    Calculated: {formatCurrency(calculatedNetPay)}
-                                                    <br />Difference: {formatCurrency(Math.abs(netPayVal - calculatedNetPay))}
+                                                    Calculated: <BlurredValue>{formatCurrency(calculatedNetPay)}</BlurredValue>
+                                                    <br />Difference: <BlurredValue>{formatCurrency(Math.abs(netPayVal - calculatedNetPay))}</BlurredValue>
                                                 </span>
                                             </div>
                                         )}
@@ -321,7 +322,7 @@ export default function ManualPayslipModal({ isOpen, onClose, onSuccess, initial
                                         {/* Show calculated as hint when field is empty */}
                                         {!netPay && calculatedNetPay > 0 && (
                                             <p className="text-xs text-gray-500 dark:text-gray-400">
-                                                Calculated: {formatCurrency(calculatedNetPay)}
+                                                Calculated: <BlurredValue>{formatCurrency(calculatedNetPay)}</BlurredValue>
                                             </p>
                                         )}
                                     </div>
@@ -469,9 +470,9 @@ function SummaryRow({ label, value, isGreen, isRed, isInfo }) {
     return (
         <div className="flex justify-between items-center">
             <span className="text-gray-600 dark:text-gray-400">{label}</span>
-            <span className={`font-medium ${colorClass}`}>
+            <BlurredValue><span className={`font-medium ${colorClass}`}>
                 {isRed && '- '}{formatCurrency(value || 0)}
-            </span>
+            </span></BlurredValue>
         </div>
     )
 }
