@@ -227,7 +227,7 @@ export default function BudgetAnalysis() {
                 </div>
 
                 <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Variance</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Remaining</p>
                     <p className={`text-2xl sm:text-3xl font-bold flex items-center gap-2 ${
                         variance >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
                     }`}>
@@ -253,7 +253,7 @@ export default function BudgetAnalysis() {
                                     Actual
                                 </th>
                                 <th className="px-4 py-3 text-right text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-                                    Variance
+                                    Remaining
                                 </th>
                             </tr>
                         </thead>
