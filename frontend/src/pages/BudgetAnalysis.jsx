@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Fragment } from 'react'
 import axios from 'axios'
-import { Calendar, AlertTriangle, TrendingUp, TrendingDown } from 'lucide-react'
+import { Calendar, AlertTriangle, TrendingUp, TrendingDown, ChevronDown, ChevronRight } from 'lucide-react'
 import BlurredValue from '../components/BlurredValue'
 import { useAuth } from '../context/AuthContext'
 import { formatCurrency } from '../utils/numberFormatting'
@@ -24,6 +24,7 @@ export default function BudgetAnalysis() {
     const [periodRange, setPeriodRange] = useState(null) // { from_date, to_date } for display
 
     const [selectedMonth, setSelectedMonth] = useState(null)
+    const [expandedCategory, setExpandedCategory] = useState(null)
 
     useEffect(() => {
         if (selectedMonth === null) {
@@ -38,6 +39,7 @@ export default function BudgetAnalysis() {
                 })
             return
         }
+        setExpandedCategory(null)
         fetchData()
     }, [selectedMonth])
 
@@ -138,6 +140,22 @@ export default function BudgetAnalysis() {
         })
 
         return categoryBudgets
+    }
+
+    // Filter transactions for a given category (for expandable drill-down)
+    const getTransactionsForCategory = (categoryKey) => {
+        return transactions
+            .filter(txn => {
+                if (categoryKey === 'uncategorized') {
+                    return !txn.category && txn.transaction_type === 'DEBIT'
+                }
+                return txn.category === categoryKey && txn.transaction_type === 'DEBIT'
+            })
+            .sort((a, b) => {
+                const da = a.transaction_date ? new Date(a.transaction_date) : new Date(0)
+                const db = b.transaction_date ? new Date(b.transaction_date) : new Date(0)
+                return db - da
+            })
     }
 
     const actualSpending = calculateActualSpending()
@@ -243,6 +261,7 @@ export default function BudgetAnalysis() {
                     <table className="w-full">
                         <thead className="bg-gray-50 dark:bg-gray-700/50">
                             <tr>
+                                <th className="w-10 px-2 py-3" aria-label="Expand" />
                                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wider">
                                     Category
                                 </th>
@@ -258,26 +277,79 @@ export default function BudgetAnalysis() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                            {comparisonData.map((row) => (
-                                <tr key={row.category} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                                    <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">
-                                        {row.category}
-                                    </td>
-                                    <td className="px-4 py-3 text-sm text-right text-gray-700 dark:text-gray-300">
-                                        <BlurredValue>{formatCurrency(row.budgeted)}</BlurredValue>
-                                    </td>
-                                    <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-white font-semibold">
-                                        <BlurredValue>{formatCurrency(row.actual)}</BlurredValue>
-                                    </td>
-                                    <td className={`px-4 py-3 text-sm text-right font-semibold ${
-                                        row.variance >= 0
-                                            ? 'text-green-600 dark:text-green-400'
-                                            : 'text-red-600 dark:text-red-400'
-                                    }`}>
-                                        {row.variance >= 0 ? '+' : ''}<BlurredValue>{formatCurrency(row.variance)}</BlurredValue>
-                                    </td>
-                                </tr>
-                            ))}
+                            {comparisonData.map((row) => {
+                                const categoryTxns = getTransactionsForCategory(row.key)
+                                const hasTransactions = categoryTxns.length > 0
+                                const isExpanded = expandedCategory === row.key
+
+                                return (
+                                    <Fragment key={row.key}>
+                                        <tr
+                                            className={`hover:bg-gray-50 dark:hover:bg-gray-700/50 ${hasTransactions ? 'cursor-pointer' : ''}`}
+                                            onClick={() => hasTransactions && setExpandedCategory(isExpanded ? null : row.key)}
+                                        >
+                                            <td className="w-10 px-2 py-3">
+                                                {hasTransactions ? (
+                                                    isExpanded ? (
+                                                        <ChevronDown className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+                                                    ) : (
+                                                        <ChevronRight className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+                                                    )
+                                                ) : (
+                                                    <span className="w-5 inline-block" />
+                                                )}
+                                            </td>
+                                            <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">
+                                                {row.category}
+                                            </td>
+                                            <td className="px-4 py-3 text-sm text-right text-gray-700 dark:text-gray-300">
+                                                <BlurredValue>{formatCurrency(row.budgeted)}</BlurredValue>
+                                            </td>
+                                            <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-white font-semibold">
+                                                <BlurredValue>{formatCurrency(row.actual)}</BlurredValue>
+                                            </td>
+                                            <td className={`px-4 py-3 text-sm text-right font-semibold ${
+                                                row.variance >= 0
+                                                    ? 'text-green-600 dark:text-green-400'
+                                                    : 'text-red-600 dark:text-red-400'
+                                            }`}>
+                                                {row.variance >= 0 ? '+' : ''}<BlurredValue>{formatCurrency(row.variance)}</BlurredValue>
+                                            </td>
+                                        </tr>
+                                        {isExpanded && (
+                                            <tr key={`${row.key}-expanded`} className="bg-gray-50 dark:bg-gray-800/50">
+                                                <td colSpan={5} className="px-4 py-3">
+                                                    <div className="pl-6 border-l-2 border-gray-200 dark:border-gray-600">
+                                                        <div className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
+                                                            {categoryTxns.length} transaction{categoryTxns.length !== 1 ? 's' : ''}
+                                                        </div>
+                                                        <div className="max-h-48 overflow-y-auto space-y-2">
+                                                            {categoryTxns.map((txn) => (
+                                                                <div
+                                                                    key={txn.id}
+                                                                    className="flex justify-between items-center text-sm py-1.5 border-b border-gray-100 dark:border-gray-700 last:border-0"
+                                                                >
+                                                                    <span className="text-gray-600 dark:text-gray-400 shrink-0 w-24">
+                                                                        {txn.transaction_date
+                                                                            ? new Date(txn.transaction_date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })
+                                                                            : '—'}
+                                                                    </span>
+                                                                    <span className="flex-1 min-w-0 truncate px-2 text-gray-900 dark:text-white" title={txn.description}>
+                                                                        {txn.description || '—'}
+                                                                    </span>
+                                                                    <BlurredValue className="shrink-0 font-medium text-gray-900 dark:text-white">
+                                                                        {formatCurrency(Math.abs(txn.amount))}
+                                                                    </BlurredValue>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </Fragment>
+                                )
+                            })}
                         </tbody>
                     </table>
                 </div>
