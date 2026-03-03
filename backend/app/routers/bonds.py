@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
@@ -5,6 +6,8 @@ from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
 from .. import models, database, auth
+
+logger = logging.getLogger(__name__)
 from ..utils import get_sast_now
 
 # Bond Holdings Models
@@ -94,7 +97,10 @@ async def create_bond_holding(
     db.add(new_holding)
     db.commit()
     db.refresh(new_holding)
-
+    logger.info(
+        "Bond holding created",
+        extra={"user_id": current_user.id, "holding_id": new_holding.id, "bond_name": holding.bond_name},
+    )
     return {
         "id": new_holding.id,
         "bond_name": new_holding.bond_name,
@@ -165,7 +171,10 @@ async def delete_bond_holding(
 
     db.delete(holding)
     db.commit()
-
+    logger.info(
+        "Bond holding deleted",
+        extra={"user_id": current_user.id, "holding_id": holding_id, "bond_name": bond_name},
+    )
     return {
         "status": "success",
         "message": f"Bond holding '{bond_name}' deleted"

@@ -219,7 +219,10 @@ def record_hourly_snapshot(db: Session) -> dict:
         models.ETFHolding.current_price.isnot(None)
     ).all()
     
-    logger.info(f"Found {len(tickers_prices)} unique tickers to record")
+    logger.info(
+        "Price tickers found",
+        extra={"ticker_count": len(tickers_prices)},
+    )
     
     # Record price history for each ticker
     for jse_ticker, price in tickers_prices:
@@ -233,13 +236,19 @@ def record_hourly_snapshot(db: Session) -> dict:
             db.add(price_record)
             STATS['prices_recorded'] += 1
             
-    logger.info(f"Recorded {STATS['prices_recorded']} price points")
+    logger.info(
+        "Price points recorded",
+        extra={"prices_recorded": STATS["prices_recorded"]},
+    )
     
     # Get all users with holdings
     users_with_holdings = db.query(models.ETFHolding.user_id).distinct().all()
     user_ids = [u[0] for u in users_with_holdings]
     
-    logger.info(f"Processing snapshots for {len(user_ids)} users")
+    logger.info(
+        "Processing snapshots",
+        extra={"user_count": len(user_ids)},
+    )
     
     for user_id in user_ids:
         # Calculate portfolio value and contributions
@@ -280,10 +289,13 @@ def record_hourly_snapshot(db: Session) -> dict:
             STATS['holdings_recorded'] += 1
         
         STATS['users_processed'] += 1
-        logger.debug(f"User {user_id}: Recorded value R{total_value:.2f}")
+        logger.debug(
+            "User snapshot recorded",
+            extra={"user_id": user_id, "total_value": total_value},
+        )
     
     db.commit()
-    logger.info(f"Snapshot complete. Stats: {STATS}")
+    logger.info("Snapshot complete", extra=dict(STATS))
     return STATS
 
 
@@ -367,7 +379,10 @@ def create_daily_summary(db: Session, target_date: Optional[date] = None) -> dic
         models.PortfolioValueHistory.recorded_at <= end_of_day
     ).distinct().all()
 
-    logger.info(f"Creating daily summaries for {len(users_with_data)} users for {target_date}")
+    logger.info(
+        "Creating daily summaries",
+        extra={"user_count": len(users_with_data), "target_date": str(target_date)},
+    )
 
     for (user_id,) in users_with_data:
         # Check if summary already exists
@@ -377,7 +392,10 @@ def create_daily_summary(db: Session, target_date: Optional[date] = None) -> dic
         ).first()
         
         if existing:
-            logger.debug(f"Summary already exists for user {user_id} on {target_date}, skipping")
+            logger.debug(
+                "Summary already exists, skipping",
+                extra={"user_id": user_id, "target_date": str(target_date)},
+            )
             continue
         
         # Get all snapshots for this user today
@@ -429,7 +447,7 @@ def create_daily_summary(db: Session, target_date: Optional[date] = None) -> dic
         STATS['summaries_created'] += 1
 
     db.commit()
-    logger.info(f"Daily summary complete. Stats: {STATS}")
+    logger.info("Daily summary complete", extra=dict(STATS))
     return STATS
 
 

@@ -110,7 +110,7 @@ def extract_payslip_data(file_bytes: bytes, api_key: str) -> PayslipExtraction:
             )
             file_id = uploaded_file.id
 
-        logger.info(f"Uploaded file to OpenAI: {file_id}")
+        logger.info("File uploaded to OpenAI", extra={"file_id": file_id})
 
         # Extract structured data using OpenAI
         response = client.responses.parse(
@@ -138,12 +138,12 @@ def extract_payslip_data(file_bytes: bytes, api_key: str) -> PayslipExtraction:
 
         # Extract structured output
         payslip_data: PayslipExtraction = response.output_parsed
-        logger.info(f"Successfully extracted payslip data for {payslip_data.company_name}")
+        logger.info("Payslip extraction completed")
         
         return payslip_data
 
     except Exception as e:
-        logger.error(f"Error extracting payslip data: {e}")
+        logger.exception("Payslip extraction failed: %s: %s", type(e).__name__, e)
         raise
 
     finally:
@@ -151,13 +151,22 @@ def extract_payslip_data(file_bytes: bytes, api_key: str) -> PayslipExtraction:
         if file_id:
             try:
                 client.files.delete(file_id)
-                logger.info(f"Deleted file from OpenAI: {file_id}")
+                logger.info("OpenAI file deleted", extra={"file_id": file_id})
             except Exception as e:
-                logger.warning(f"Failed to delete file from OpenAI: {e}")
+                logger.warning(
+                    "Failed to delete OpenAI file: %s: %s",
+                    type(e).__name__,
+                    e,
+                    extra={"file_id": file_id},
+                )
         
         # Cleanup: Delete temporary file
         if temp_file_path:
             try:
                 Path(temp_file_path).unlink()
             except Exception as e:
-                logger.warning(f"Failed to delete temp file: {e}")
+                logger.warning(
+                    "Failed to delete temp file: %s: %s",
+                    type(e).__name__,
+                    e,
+                )

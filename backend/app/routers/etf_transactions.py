@@ -1,9 +1,12 @@
+import logging
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime, timedelta
 from .. import models, database, auth
+
+logger = logging.getLogger(__name__)
 from ..sheets_service import get_sheets_service
 from ..utils import get_sast_now
 from .. import history
@@ -177,6 +180,10 @@ async def create_etf_transaction(
 
     db.commit()
     db.refresh(new_transaction)
+    logger.info(
+        "ETF transaction created",
+        extra={"user_id": current_user.id, "transaction_id": new_transaction.id, "holding_id": transaction.holding_id},
+    )
 
     # Record transaction snapshot for historical tracking
     try:
@@ -306,5 +313,8 @@ async def delete_etf_transaction(
     # Delete the transaction
     db.delete(transaction)
     db.commit()
-
+    logger.info(
+        "ETF transaction deleted",
+        extra={"user_id": current_user.id, "transaction_id": transaction.id, "holding_id": transaction.holding_id},
+    )
     return {"message": "Transaction deleted successfully", "updated_share_count": holding.shares}

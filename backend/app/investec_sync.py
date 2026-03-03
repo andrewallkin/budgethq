@@ -11,6 +11,7 @@ from .database import SessionLocal
 from .investec_service import InvestecService
 from .transaction_categorizer import TransactionCategorizer
 from .utils import decrypt_api_key, get_sast_now
+from .logging_utils import redact_description
 from datetime import datetime, timedelta
 import logging
 
@@ -32,19 +33,32 @@ def sync_investec_accounts():
             models.User.investec_api_key.isnot(None)
         ).all()
 
-        logger.info(f"Starting account sync for {len(users)} users with Investec credentials")
+        logger.info(
+            "Account sync started",
+            extra={"user_count": len(users), "job": "sync_investec_accounts"},
+        )
 
         for user in users:
             try:
                 _sync_user_accounts(db, user)
             except Exception as e:
-                logger.error(f"Failed to sync accounts for user {user.id}: {e}")
+                logger.exception(
+                    "Account sync for user failed: %s: %s",
+                    type(e).__name__,
+                    e,
+                    extra={"user_id": user.id, "job": "sync_investec_accounts"},
+                )
                 continue
 
-        logger.info("Account sync completed successfully")
+        logger.info("Account sync completed", extra={"job": "sync_investec_accounts"})
 
     except Exception as e:
-        logger.error(f"Account sync job failed: {e}")
+        logger.exception(
+            "Account sync job failed: %s: %s",
+            type(e).__name__,
+            e,
+            extra={"job": "sync_investec_accounts"},
+        )
     finally:
         db.close()
 
@@ -101,10 +115,18 @@ def _sync_user_accounts(db: Session, user: models.User):
             account.balance_updated_at = get_sast_now()
 
         except Exception as e:
-            logger.warning(f"Failed to fetch balance for account {account_id}: {e}")
+            logger.warning(
+                "Balance fetch failed: %s: %s",
+                type(e).__name__,
+                e,
+                extra={"account_id": account_id, "user_id": user.id},
+            )
 
     db.commit()
-    logger.info(f"Synced {len(api_accounts)} accounts for user {user.id}")
+    logger.info(
+        "Accounts synced",
+        extra={"account_count": len(api_accounts), "user_id": user.id},
+    )
 
 
 def sync_investec_transactions(db: Session = None, user_id: int = None):
@@ -133,21 +155,32 @@ def sync_investec_transactions(db: Session = None, user_id: int = None):
 
         accounts = query.all()
 
-        logger.info(f"Starting transaction sync for {len(accounts)} accounts")
+        logger.info(
+            "Transaction sync started",
+            extra={"account_count": len(accounts), "job": "sync_investec_transactions"},
+        )
 
         for account in accounts:
             try:
                 _sync_account_transactions(db, account)
             except Exception as e:
-                logger.error(
-                    f"Failed to sync transactions for account {account.investec_account_id}: {e}"
+                logger.exception(
+                    "Transaction sync for account failed: %s: %s",
+                    type(e).__name__,
+                    e,
+                    extra={"account_id": account.id, "job": "sync_investec_transactions"},
                 )
                 continue
 
-        logger.info("Transaction sync completed successfully")
+        logger.info("Transaction sync completed", extra={"job": "sync_investec_transactions"})
 
     except Exception as e:
-        logger.error(f"Transaction sync job failed: {e}")
+        logger.exception(
+            "Transaction sync job failed: %s: %s",
+            type(e).__name__,
+            e,
+            extra={"job": "sync_investec_transactions"},
+        )
     finally:
         if should_close_db:
             db.close()
@@ -233,7 +266,10 @@ def _sync_account_transactions(db: Session, account: models.InvestecAccount):
                 pending_match.transaction_category = api_txn.get("transactionType")
                 pending_match.running_balance = api_txn.get("runningBalance")
                 pending_match.description = api_txn.get("description", pending_match.description)
-                logger.info(f"Transitioned pending→posted: {pending_match.description[:50]}")
+                logger.info(
+                    "Transaction transitioned pending→posted",
+                    extra={"description_preview": redact_description(pending_match.description)},
+                )
                 continue
 
         # Create new transaction
@@ -293,8 +329,12 @@ def _sync_account_transactions(db: Session, account: models.InvestecAccount):
 
     db.commit()
     logger.info(
-        f"Synced {new_count} new transactions for account {account.investec_account_id} "
-        f"({categorized_count} categorized)"
+        "Account transactions synced",
+        extra={
+            "new_count": new_count,
+            "categorized_count": categorized_count,
+            "account_id": account.id,
+        },
     )
 
 
@@ -398,7 +438,10 @@ def sync_historical_transactions_for_user(
                         pending_match.transaction_category = api_txn.get("transactionType")
                         pending_match.running_balance = api_txn.get("runningBalance")
                         pending_match.description = api_txn.get("description", pending_match.description)
-                        logger.info(f"Transitioned pending→posted: {pending_match.description[:50]}")
+                        logger.info(
+                    "Transaction transitioned pending→posted",
+                    extra={"description_preview": redact_description(pending_match.description)},
+                )
                         continue
 
                 # Create new transaction
@@ -449,13 +492,22 @@ def sync_historical_transactions_for_user(
             db.commit()
 
         except Exception as e:
-            logger.error(f"Failed to sync historical transactions for account {account.id}: {e}")
+            logger.exception(
+                "Historical transaction sync for account failed: %s: %s",
+                type(e).__name__,
+                e,
+                extra={"account_id": account.id, "user_id": user.id},
+            )
             db.rollback()  # Rollback failed account
             continue
 
     logger.info(
-        f"Synced {total_new} historical transactions for user {user.id} "
-        f"({total_categorized} categorized)"
+        "Historical transaction sync completed",
+        extra={
+            "user_id": user.id,
+            "new_count": total_new,
+            "categorized_count": total_categorized,
+        },
     )
 
     return {
@@ -506,7 +558,7 @@ def _parse_date(date_str: str) -> datetime:
     try:
         return datetime.strptime(date_str, "%Y-%m-%d")
     except ValueError:
-        logger.warning(f"Failed to parse date: {date_str}")
+        logger.warning("Date parse failed: %s", date_str)
         return None
 
 

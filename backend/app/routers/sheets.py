@@ -1,6 +1,9 @@
+import logging
 from fastapi import APIRouter, HTTPException, Depends
 from datetime import timedelta
 from .. import models, auth
+
+logger = logging.getLogger(__name__)
 from ..sheets_service import get_sheets_service
 from ..scheduler import sync_all_prices, get_last_sync_time, set_last_sync_time
 from ..utils import get_sast_now
@@ -55,7 +58,10 @@ async def sync_etf_prices(
 
         # Update the global last sync time so the UI shows the correct time
         set_last_sync_time(now)
-
+        logger.info(
+            "Manual price sync completed",
+            extra={"user_id": current_user.id, "updated_count": updated_count, "total_holdings": len(holdings)},
+        )
         return {
             "status": "success",
             "updated_count": updated_count,
@@ -96,7 +102,10 @@ async def add_etf_to_sheet(
             status_code=500,
             detail="Failed to add ETF to Google Sheet"
         )
-
+    logger.info(
+        "ETF added to sheet",
+        extra={"user_id": current_user.id, "jse_ticker": request.jse_ticker},
+    )
     return {
         "status": "success",
         "message": f"Added {request.jse_ticker} to Google Sheet"

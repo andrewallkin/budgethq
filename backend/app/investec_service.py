@@ -10,6 +10,8 @@ from typing import List, Dict, Optional
 from datetime import datetime, timedelta
 import logging
 
+from .logging_utils import redact_account
+
 logger = logging.getLogger(__name__)
 
 
@@ -75,11 +77,11 @@ class InvestecService:
             expires_in = token_data.get("expires_in", 1800)
             self._token_expires = datetime.utcnow() + timedelta(seconds=expires_in)
 
-            logger.info("Successfully obtained Investec access token")
+            logger.info("Investec access token obtained")
             return self._token
 
         except requests.exceptions.RequestException as e:
-            logger.error(f"Failed to get Investec access token: {e}")
+            logger.exception("Investec access token failed: %s: %s", type(e).__name__, e)
             raise Exception(f"Investec authentication failed: {str(e)}")
 
     def _make_request(self, method: str, endpoint: str, **kwargs) -> Dict:
@@ -112,7 +114,13 @@ class InvestecService:
             return response.json()
 
         except requests.exceptions.RequestException as e:
-            logger.error(f"Investec API request failed: {method} {endpoint} - {e}")
+            logger.exception(
+                "Investec API request failed: %s %s: %s: %s",
+                method,
+                endpoint,
+                type(e).__name__,
+                e,
+            )
             raise Exception(f"Investec API error: {str(e)}")
 
     def list_accounts(self) -> List[Dict]:
@@ -132,7 +140,7 @@ class InvestecService:
         data = self._make_request("GET", "/za/pb/v1/accounts")
         accounts = data.get("data", {}).get("accounts", [])
 
-        logger.info(f"Retrieved {len(accounts)} Investec accounts")
+        logger.info("Investec accounts retrieved: %d items", len(accounts))
         return accounts
 
     def get_account_balance(self, account_id: str) -> Dict:
@@ -154,7 +162,10 @@ class InvestecService:
         data = self._make_request("GET", f"/za/pb/v1/accounts/{account_id}/balance")
         balance = data.get("data", {})
 
-        logger.info(f"Retrieved balance for account {account_id}: {balance.get('currentBalance')}")
+        logger.info(
+            "Investec account balance retrieved",
+            extra={"account_id": redact_account(account_id)},
+        )
         return balance
 
     def get_transactions(
@@ -216,8 +227,9 @@ class InvestecService:
         transactions = data.get("data", {}).get("transactions", [])
 
         logger.info(
-            f"Retrieved {len(transactions)} transactions for account {account_id} "
-            f"({from_date} to {to_date})"
+            "Investec transactions retrieved: %d items",
+            len(transactions),
+            extra={"account_id": redact_account(account_id), "from_date": from_date, "to_date": to_date},
         )
         return transactions
 
@@ -232,5 +244,5 @@ class InvestecService:
             self.list_accounts()
             return True
         except Exception as e:
-            logger.error(f"Investec connection test failed: {e}")
+            logger.exception("Investec connection test failed: %s: %s", type(e).__name__, e)
             return False

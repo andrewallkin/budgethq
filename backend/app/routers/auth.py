@@ -1,10 +1,14 @@
+import logging
+import os
 from fastapi import APIRouter, HTTPException, status, Depends
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from .. import models, database, auth
 from ..utils import encrypt_api_key, decrypt_api_key
-import os
+from ..logging_utils import redact_email
+
+logger = logging.getLogger(__name__)
 
 # Pydantic Models for Auth
 class UserCreate(BaseModel):
@@ -55,6 +59,10 @@ def register(user: UserCreate, db: Session = Depends(database.get_db)):
     db.refresh(new_user)
 
     access_token = auth.create_access_token(data={"sub": new_user.username})
+    logger.info(
+        "User registered",
+        extra={"user_id": new_user.id, "username": redact_email(new_user.username)},
+    )
     return {"access_token": access_token, "token_type": "bearer"}
 
 @router.post("/login", response_model=Token)
@@ -78,6 +86,10 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
         )
 
     access_token = auth.create_access_token(data={"sub": user.username})
+    logger.info(
+        "User logged in",
+        extra={"user_id": user.id, "username": redact_email(user.username)},
+    )
     return {"access_token": access_token, "token_type": "bearer"}
 
 @router.post("/change-password")
@@ -103,7 +115,7 @@ async def change_password(
     # Update password
     current_user.hashed_password = auth.get_password_hash(request.new_password)
     db.commit()
-
+    logger.info("Password changed", extra={"user_id": current_user.id})
     return {"status": "success", "message": "Password changed successfully"}
 
 
@@ -125,8 +137,10 @@ async def save_openai_key(
         encrypted_key = encrypt_api_key(request.api_key.strip())
         current_user.openai_api_key = encrypted_key
         db.commit()
+        logger.info("OpenAI API key saved", extra={"user_id": current_user.id})
         return {"status": "success", "message": "OpenAI API key saved successfully"}
     except Exception as e:
+        logger.exception("OpenAI API key save failed: %s: %s", type(e).__name__, e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to save API key: {str(e)}"
@@ -150,6 +164,7 @@ async def delete_openai_key(
     """Delete user's OpenAI API key."""
     current_user.openai_api_key = None
     db.commit()
+    logger.info("OpenAI API key deleted", extra={"user_id": current_user.id})
     return {"status": "success", "message": "OpenAI API key deleted successfully"}
 
 
@@ -216,5 +231,8 @@ async def change_username(
     # Update username
     current_user.username = new_username
     db.commit()
-    
+    logger.info(
+        "Username changed",
+        extra={"user_id": current_user.id, "username": redact_email(new_username)},
+    )
     return {"status": "success", "message": "Username updated successfully"}

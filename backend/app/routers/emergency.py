@@ -1,8 +1,11 @@
+import logging
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
 from .. import models, database, auth
+
+logger = logging.getLogger(__name__)
 
 # EmergencySavings Pydantic Models
 class EmergencySavingsData(BaseModel):
@@ -66,4 +69,5 @@ async def save_emergency_savings(
         es.fund_source = data.fund_source
 
     db.commit()
+    logger.info("Emergency savings saved", extra={"user_id": current_user.id})
     return {"status": "success"}

@@ -1,9 +1,14 @@
+import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from . import database
 from .scheduler import start_scheduler, stop_scheduler, sync_all_prices
 from .logging_config import configure_logging
+from .middleware.request_id import RequestIDMiddleware
+from .middleware.logging import RequestLoggingMiddleware
 
 # Import all routers
 from .routers.auth import router as auth_router
@@ -47,6 +52,30 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+logger = logging.getLogger(__name__)
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Log unhandled exceptions with traceback. Preserve HTTPException behavior."""
+    if isinstance(exc, HTTPException):
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+    request_id = getattr(request.state, "request_id", None)
+    logger.exception(
+        "Unhandled exception: %s: %s",
+        type(exc).__name__,
+        str(exc),
+        extra={"request_id": request_id, "path": request.url.path, "method": request.method},
+    )
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"},
+    )
+
+
+# Request ID first (runs last in stack = first to execute)
+app.add_middleware(RequestIDMiddleware)
+app.add_middleware(RequestLoggingMiddleware)
 
 # CORS configuration
 app.add_middleware(
