@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Fragment } from 'react'
 import axios from 'axios'
-import { Plus, Trash2, AlertTriangle, ChevronDown, ChevronRight, HelpCircle, Play } from 'lucide-react'
+import { Plus, Trash2, AlertTriangle, ChevronDown, ChevronRight, HelpCircle, Play, Layers } from 'lucide-react'
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, CATEGORIES, CATEGORY_LABELS } from '../utils/transactionCategories'
 import BlurredValue from '../components/BlurredValue'
 import { formatCurrency, formatDateSafe } from '../utils/numberFormatting'
@@ -28,6 +28,11 @@ export default function CategorizationRules() {
     const [applyPreview, setApplyPreview] = useState(null) // { uncategorized_count, conflicts }
     const [showConflictModal, setShowConflictModal] = useState(false)
     const [acceptedConflictIds, setAcceptedConflictIds] = useState(new Set())
+
+    // Filter and group-by state
+    const [categoryFilter, setCategoryFilter] = useState('')
+    const [groupedByCategory, setGroupedByCategory] = useState(true)
+    const [collapsedGroups, setCollapsedGroups] = useState(new Set())
 
     useEffect(() => {
         fetchRules()
@@ -169,6 +174,92 @@ export default function CategorizationRules() {
     const handleApplyFromConflictModal = () => {
         handleApplyRules(Array.from(acceptedConflictIds))
     }
+
+    const toggleGroupByCategory = () => {
+        setGroupedByCategory(prev => !prev)
+    }
+
+    const toggleGroupCollapse = (category) => {
+        setCollapsedGroups(prev => {
+            const next = new Set(prev)
+            if (next.has(category)) next.delete(category)
+            else next.add(category)
+            return next
+        })
+    }
+
+    const filteredRules = rules.filter(r => !categoryFilter || r.category === categoryFilter)
+
+    const getGroupedRules = () => {
+        const groups = {}
+        for (const rule of filteredRules) {
+            const cat = rule.category || 'uncategorized'
+            if (!groups[cat]) groups[cat] = []
+            groups[cat].push(rule)
+        }
+        const orderedCats = CATEGORIES.filter(cat => groups[cat]?.length)
+        const extraCats = Object.keys(groups).filter(cat => !CATEGORIES.includes(cat))
+        return [...orderedCats, ...extraCats].map(cat => ({ category: cat, rules: groups[cat] }))
+    }
+
+    const renderRuleRow = (rule) => (
+        <tr
+            key={rule.id}
+            onClick={() => setEditingRule({ ...rule })}
+            className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer"
+        >
+            <td className={`px-4 py-3 ${groupedByCategory ? 'pl-8' : ''}`}>
+                <code className="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-sm text-gray-900 dark:text-white">
+                    {rule.pattern}
+                </code>
+            </td>
+            <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
+                {CATEGORY_LABELS[rule.category] || rule.category}
+            </td>
+            <td className="px-4 py-3 text-center text-sm text-gray-900 dark:text-white">
+                {rule.priority}
+            </td>
+            <td className="px-4 py-3 text-center text-sm text-gray-900 dark:text-white">
+                {rule.usage_count || 0}
+            </td>
+            <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation()
+                        handleToggleActive(rule.id, rule.is_active)
+                    }}
+                    className={`px-3 py-1 rounded-full text-xs font-medium ${
+                        rule.is_active
+                            ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                            : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
+                    }`}
+                >
+                    {rule.is_active ? 'Active' : 'Inactive'}
+                </button>
+            </td>
+            <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-center gap-1">
+                    <button
+                        onClick={(e) => handleApplySingleRule(rule.id, e)}
+                        disabled={runningRuleId === rule.id}
+                        title="Apply this rule to existing transactions"
+                        className="p-2 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded transition-colors disabled:opacity-50"
+                    >
+                        <Play className="w-4 h-4" />
+                    </button>
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation()
+                            setDeleteConfirm(rule.id)
+                        }}
+                        className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                    >
+                        <Trash2 className="w-4 h-4" />
+                    </button>
+                </div>
+            </td>
+        </tr>
+    )
 
     if (loading) {
         return (
@@ -348,6 +439,31 @@ export default function CategorizationRules() {
 
             {/* Rules Table */}
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+                <div className="px-4 sm:px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row sm:items-center gap-4">
+                    <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Filter by category:
+                        <select
+                            value={categoryFilter}
+                            onChange={(e) => setCategoryFilter(e.target.value)}
+                            className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                        >
+                            <option value="">All categories</option>
+                            <optgroup label="Income">
+                                {INCOME_CATEGORIES.map(cat => (
+                                    <option key={cat} value={cat}>{CATEGORY_LABELS[cat]}</option>
+                                ))}
+                            </optgroup>
+                            <optgroup label="Expenses">
+                                {EXPENSE_CATEGORIES.map(cat => (
+                                    <option key={cat} value={cat}>{CATEGORY_LABELS[cat]}</option>
+                                ))}
+                            </optgroup>
+                            <optgroup label="Neutral">
+                                <option value="transfers">Transfers</option>
+                            </optgroup>
+                        </select>
+                    </label>
+                </div>
                 <div className="overflow-x-auto">
                     <table className="w-full">
                         <thead className="bg-gray-50 dark:bg-gray-700/50">
@@ -355,8 +471,18 @@ export default function CategorizationRules() {
                                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wider">
                                     Pattern
                                 </th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-                                    Category
+                                <th
+                                    onClick={toggleGroupByCategory}
+                                    className="px-4 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors"
+                                >
+                                    <div className="flex items-center gap-1">
+                                        Category
+                                        {groupedByCategory ? (
+                                            <Layers className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" title="Grouped by category (click to ungroup)" />
+                                        ) : (
+                                            <Layers className="w-3.5 h-3.5 opacity-40" title="Click to group by category" />
+                                        )}
+                                    </div>
                                 </th>
                                 <th className="px-4 py-3 text-center text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wider">
                                     Priority
@@ -373,71 +499,47 @@ export default function CategorizationRules() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                            {rules.map((rule) => (
-                                <tr
-                                    key={rule.id}
-                                    onClick={() => setEditingRule({ ...rule })}
-                                    className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer"
-                                >
-                                    <td className="px-4 py-3">
-                                        <code className="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-sm text-gray-900 dark:text-white">
-                                            {rule.pattern}
-                                        </code>
-                                    </td>
-                                    <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
-                                        {CATEGORY_LABELS[rule.category] || rule.category}
-                                    </td>
-                                    <td className="px-4 py-3 text-center text-sm text-gray-900 dark:text-white">
-                                        {rule.priority}
-                                    </td>
-                                    <td className="px-4 py-3 text-center text-sm text-gray-900 dark:text-white">
-                                        {rule.usage_count || 0}
-                                    </td>
-                                    <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation()
-                                                handleToggleActive(rule.id, rule.is_active)
-                                            }}
-                                            className={`px-3 py-1 rounded-full text-xs font-medium ${
-                                                rule.is_active
-                                                    ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
-                                                    : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
-                                            }`}
-                                        >
-                                            {rule.is_active ? 'Active' : 'Inactive'}
-                                        </button>
-                                    </td>
-                                    <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
-                                        <div className="flex items-center justify-center gap-1">
-                                            <button
-                                                onClick={(e) => handleApplySingleRule(rule.id, e)}
-                                                disabled={runningRuleId === rule.id}
-                                                title="Apply this rule to existing transactions"
-                                                className="p-2 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded transition-colors disabled:opacity-50"
+                            {groupedByCategory ? (
+                                getGroupedRules().map(({ category, rules: groupRules }) => {
+                                    const isCollapsed = collapsedGroups.has(category)
+                                    return (
+                                        <Fragment key={category}>
+                                            <tr
+                                                onClick={() => toggleGroupCollapse(category)}
+                                                className="bg-gray-100 dark:bg-gray-700/50 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
                                             >
-                                                <Play className="w-4 h-4" />
-                                            </button>
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation()
-                                                    setDeleteConfirm(rule.id)
-                                                }}
-                                                className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
-                                            >
-                                                <Trash2 className="w-4 h-4" />
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
+                                                <td colSpan={6} className="px-4 py-2.5">
+                                                    <div className="flex items-center gap-2">
+                                                        {isCollapsed ? (
+                                                            <ChevronRight className="w-4 h-4 text-gray-600 dark:text-gray-400 shrink-0" />
+                                                        ) : (
+                                                            <ChevronDown className="w-4 h-4 text-gray-600 dark:text-gray-400 shrink-0" />
+                                                        )}
+                                                        <span className="font-medium text-gray-900 dark:text-white">
+                                                            {CATEGORY_LABELS[category] || category}
+                                                        </span>
+                                                        <span className="text-sm text-gray-500 dark:text-gray-400">
+                                                            ({groupRules.length} rule{groupRules.length !== 1 ? 's' : ''})
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                            {!isCollapsed && groupRules.map(rule => renderRuleRow(rule))}
+                                        </Fragment>
+                                    )
+                                })
+                            ) : (
+                                filteredRules.map(rule => renderRuleRow(rule))
+                            )}
                         </tbody>
                     </table>
                 </div>
 
-                {rules.length === 0 && (
+                {(rules.length === 0 || filteredRules.length === 0) && (
                     <div className="text-center py-12 text-gray-600 dark:text-gray-400">
-                        No rules created yet. Create your first rule above.
+                        {rules.length === 0
+                            ? 'No rules created yet. Create your first rule above.'
+                            : 'No rules match this filter. Try a different category.'}
                     </div>
                 )}
             </div>
