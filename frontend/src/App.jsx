@@ -648,6 +648,67 @@ function HomePage() {
                         </Link>
                     </div>
                 </div>
+
+                {/* Investec Banking Card */}
+                <div className="flex flex-col h-full bg-gradient-to-br from-teal-50 to-slate-100 dark:from-teal-900/20 dark:to-slate-800/20 rounded-2xl shadow-lg border border-teal-200 dark:border-teal-800 overflow-hidden hover:shadow-xl transition-all">
+                    <div className="p-4 sm:p-6 lg:p-8 flex-1 flex flex-col">
+                        <div className="flex items-center mb-4">
+                            <div className="p-4 bg-teal-600 rounded-xl">
+                                <Building2 className="w-8 h-8 text-white" />
+                            </div>
+                            <h2 className="text-2xl font-bold text-gray-900 dark:text-white ml-4">Investec Banking</h2>
+                        </div>
+
+                        <p className="text-amber-700 dark:text-amber-400 font-medium mb-4 text-sm">
+                            This integration is only available if you bank with Investec.
+                        </p>
+
+                        <p className="text-gray-700 dark:text-gray-300 mb-6 text-base leading-relaxed">
+                            Connect your Investec accounts to sync balances, view transactions, and compare your actual spending against your budget.
+                        </p>
+
+                        <div className="space-y-3 mb-8">
+                            <div className="flex items-start">
+                                <span className="text-teal-600 dark:text-teal-400 mr-3 mt-1">✓</span>
+                                <div>
+                                    <p className="font-semibold text-gray-900 dark:text-white">Bank Account Sync</p>
+                                    <p className="text-sm text-gray-600 dark:text-gray-400">View and sync your Investec account balances in one place</p>
+                                </div>
+                            </div>
+                            <div className="flex items-start">
+                                <span className="text-teal-600 dark:text-teal-400 mr-3 mt-1">✓</span>
+                                <div>
+                                    <p className="font-semibold text-gray-900 dark:text-white">Transaction History & Categorization</p>
+                                    <p className="text-sm text-gray-600 dark:text-gray-400">Auto-categorize transactions with custom rules</p>
+                                </div>
+                            </div>
+                            <div className="flex items-start">
+                                <span className="text-teal-600 dark:text-teal-400 mr-3 mt-1">✓</span>
+                                <div>
+                                    <p className="font-semibold text-gray-900 dark:text-white">Budget vs Actual Analysis</p>
+                                    <p className="text-sm text-gray-600 dark:text-gray-400">Compare your budgeted spending against real transactions</p>
+                                </div>
+                            </div>
+                            <div className="flex items-start">
+                                <span className="text-teal-600 dark:text-teal-400 mr-3 mt-1">✓</span>
+                                <div>
+                                    <p className="font-semibold text-gray-900 dark:text-white">Emergency Fund Sync</p>
+                                    <p className="text-sm text-gray-600 dark:text-gray-400">Link an Investec account to auto-sync your emergency savings balance</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <Link
+                            to="/investec/accounts"
+                            className="mt-auto block w-full text-center px-6 py-3 bg-teal-600 text-white font-semibold rounded-lg hover:bg-teal-700 transition-colors"
+                        >
+                            Open Investec Banking →
+                        </Link>
+                        <p className="text-center text-sm text-gray-500 dark:text-gray-400 mt-2">
+                            Connect your account in Settings to get started.
+                        </p>
+                    </div>
+                </div>
             </div>
         </div>
     )
