@@ -1,9 +1,12 @@
+import logging
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import date
 from .. import models, database, auth, utils
+
+logger = logging.getLogger(__name__)
 from ..tax_engine import get_tax_config
 
 # TFSA Contribution Models
@@ -119,4 +122,12 @@ async def save_tfsa_contributions(
         ))
 
     db.commit()
+    logger.info(
+        "TFSA contributions saved",
+        extra={
+            "user_id": current_user.id,
+            "historical_count": len(data.historical_contributions),
+            "deposit_count": len(data.deposits),
+        },
+    )
     return {"status": "success"}

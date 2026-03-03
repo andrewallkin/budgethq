@@ -1,8 +1,11 @@
+import logging
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import List
 from .. import models, database, auth
+
+logger = logging.getLogger(__name__)
 
 class ETFBase(BaseModel):
     ETF: str
@@ -33,4 +36,5 @@ async def save_portfolio(etfs: List[ETFBase], current_user: models.User = Depend
         ))
 
     db.commit()
+    logger.info("Portfolio saved", extra={"user_id": current_user.id, "etf_count": len(etfs)})
     return {"status": "success"}

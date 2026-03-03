@@ -272,7 +272,7 @@ async def extract_payslip_preview(
         except Exception as e:
             # If extraction fails, delete the temp file
             blob.delete()
-            logger.error(f"Extraction failed: {e}")
+            logger.exception("Payslip extraction failed: %s: %s", type(e).__name__, e)
             raise HTTPException(
                 status_code=500,
                 detail=f"Failed to extract payslip data: {str(e)}",
@@ -304,7 +304,7 @@ async def extract_payslip_preview(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error extracting payslip: {e}")
+        logger.exception("Payslip extraction failed: %s: %s", type(e).__name__, e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -447,14 +447,15 @@ async def confirm_payslip_upload(
         )
 
         logger.info(
-            f"Successfully confirmed and saved payslip for user {current_user.id}, {data.year}-{data.month:02d}"
+            "Payslip confirmed and saved",
+            extra={"user_id": current_user.id, "year": data.year, "month": data.month},
         )
         return payslip
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error confirming payslip: {e}")
+        logger.exception("Payslip confirmation failed: %s: %s", type(e).__name__, e)
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -541,14 +542,15 @@ def create_manual_payslip(
         )
 
         logger.info(
-            f"Manual payslip created for user {current_user.id}, {data.year}-{data.month:02d}"
+            "Manual payslip created",
+            extra={"user_id": current_user.id, "year": data.year, "month": data.month},
         )
         return payslip
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error creating manual payslip: {e}")
+        logger.exception("Manual payslip creation failed: %s: %s", type(e).__name__, e)
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -611,7 +613,7 @@ async def upload_payslip(
         except Exception as e:
             # If extraction fails, delete the uploaded file
             gcs_service.delete_payslip(gcs_path)
-            logger.error(f"Extraction failed: {e}")
+            logger.exception("Payslip extraction failed: %s: %s", type(e).__name__, e)
             raise HTTPException(
                 status_code=500,
                 detail=f"Failed to extract payslip data: {str(e)}",
@@ -702,14 +704,15 @@ async def upload_payslip(
         db.refresh(payslip)
 
         logger.info(
-            f"Successfully uploaded and extracted payslip for user {current_user.id}, {year}-{month:02d}"
+            "Payslip uploaded and extracted",
+            extra={"user_id": current_user.id, "year": year, "month": month},
         )
         return payslip
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error uploading payslip: {e}")
+        logger.exception("Payslip upload failed: %s: %s", type(e).__name__, e)
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 

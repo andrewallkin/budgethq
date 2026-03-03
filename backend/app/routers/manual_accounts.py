@@ -1,11 +1,13 @@
 """Manual bank accounts - balance-only tracking, no transaction sync."""
 
+import logging
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
-
 from .. import models, database, auth
+
+logger = logging.getLogger(__name__)
 
 
 class ManualAccountCreate(BaseModel):
@@ -63,6 +65,10 @@ async def create_manual_account(
     db.add(account)
     db.commit()
     db.refresh(account)
+    logger.info(
+        "Manual account created",
+        extra={"user_id": current_user.id, "account_id": account.id, "name": data.name},
+    )
     return {
         "id": account.id,
         "name": account.name,
@@ -101,6 +107,10 @@ async def update_manual_account(
 
     db.commit()
     db.refresh(account)
+    logger.info(
+        "Manual account updated",
+        extra={"user_id": current_user.id, "account_id": account_id},
+    )
     return {
         "id": account.id,
         "name": account.name,
@@ -131,4 +141,8 @@ async def delete_manual_account(
 
     db.delete(account)
     db.commit()
+    logger.info(
+        "Manual account deleted",
+        extra={"user_id": current_user.id, "account_id": account_id},
+    )
     return {"status": "success"}

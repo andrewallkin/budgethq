@@ -4,13 +4,14 @@ Contains core functions for recording and aggregating portfolio history data.
 """
 
 import logging
+import calendar
 from datetime import datetime, date, timedelta
 from typing import List, Dict, Optional, Tuple
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_
+from sqlalchemy import func
 
 from . import models
-from .utils import get_sast_now
+from .utils import get_sast_now, get_sa_financial_year_start
 
 
 # Initialize logger
@@ -23,17 +24,42 @@ def calculate_total_contributions(db: Session, user_id: int, as_of_date: Optiona
     Includes both historical contributions and current year deposits.
     """
     if as_of_date is None:
-        as_of_date = date.today()
+        as_of_date = get_sast_now().date()
+
+    fy_start = get_sa_financial_year_start(as_of_date)
+    fy_start_date = date(fy_start, 3, 1)
+    next_fy_start_date = date(fy_start + 1, 3, 1)
     
-    # Sum historical contributions (full years)
-    historical_total = db.query(func.coalesce(func.sum(models.TFSAHistoricalContribution.amount), 0)).filter(
+    # Sum historical contributions for years before the active FY.
+    # This prevents accidental double counting when a current FY value
+    # exists in TFSAHistoricalContribution and deposits also exist for that FY.
+    historical_rows = db.query(
+        models.TFSAHistoricalContribution.financial_year,
+        models.TFSAHistoricalContribution.amount
+    ).filter(
         models.TFSAHistoricalContribution.user_id == user_id
-    ).scalar() or 0
+    ).all()
+
+    historical_total = 0.0
+    for financial_year, amount in historical_rows:
+        if amount is None:
+            continue
+        try:
+            year_start = int(str(financial_year).split("/")[0])
+            if year_start < fy_start:
+                historical_total += float(amount)
+        except (ValueError, TypeError, IndexError):
+            # Keep backward compatibility for unexpected legacy labels.
+            historical_total += float(amount)
     
-    # Sum deposits up to the given date
+    # Sum deposits in the active SA financial year up to the given date.
+    # Use deposit_date bounds as source of truth so legacy/mismatched
+    # financial_year_start values do not inflate totals.
     deposits_total = db.query(func.coalesce(func.sum(models.TFSADeposit.amount), 0)).filter(
         models.TFSADeposit.user_id == user_id,
-        models.TFSADeposit.deposit_date <= as_of_date
+        models.TFSADeposit.deposit_date <= as_of_date,
+        models.TFSADeposit.deposit_date >= fy_start_date,
+        models.TFSADeposit.deposit_date < next_fy_start_date
     ).scalar() or 0
     
     return float(historical_total) + float(deposits_total)
@@ -193,7 +219,10 @@ def record_hourly_snapshot(db: Session) -> dict:
         models.ETFHolding.current_price.isnot(None)
     ).all()
     
-    logger.info(f"Found {len(tickers_prices)} unique tickers to record")
+    logger.info(
+        "Price tickers found",
+        extra={"ticker_count": len(tickers_prices)},
+    )
     
     # Record price history for each ticker
     for jse_ticker, price in tickers_prices:
@@ -207,18 +236,24 @@ def record_hourly_snapshot(db: Session) -> dict:
             db.add(price_record)
             STATS['prices_recorded'] += 1
             
-    logger.info(f"Recorded {STATS['prices_recorded']} price points")
+    logger.info(
+        "Price points recorded",
+        extra={"prices_recorded": STATS["prices_recorded"]},
+    )
     
     # Get all users with holdings
     users_with_holdings = db.query(models.ETFHolding.user_id).distinct().all()
     user_ids = [u[0] for u in users_with_holdings]
     
-    logger.info(f"Processing snapshots for {len(user_ids)} users")
+    logger.info(
+        "Processing snapshots",
+        extra={"user_count": len(user_ids)},
+    )
     
     for user_id in user_ids:
         # Calculate portfolio value and contributions
         total_value, holdings_breakdown = calculate_portfolio_value(db, user_id)
-        total_contributions = calculate_total_contributions(db, user_id)
+        total_contributions = calculate_total_contributions(db, user_id, as_of_date=now.date())
         total_growth = total_value - total_contributions
         
         # Record portfolio value history
@@ -254,10 +289,13 @@ def record_hourly_snapshot(db: Session) -> dict:
             STATS['holdings_recorded'] += 1
         
         STATS['users_processed'] += 1
-        logger.debug(f"User {user_id}: Recorded value R{total_value:.2f}")
+        logger.debug(
+            "User snapshot recorded",
+            extra={"user_id": user_id, "total_value": total_value},
+        )
     
     db.commit()
-    logger.info(f"Snapshot complete. Stats: {STATS}")
+    logger.info("Snapshot complete", extra=dict(STATS))
     return STATS
 
 
@@ -278,7 +316,7 @@ def record_transaction_snapshot(db: Session, user_id: int, transaction_id: int) 
     
     # Calculate portfolio state
     total_value, holdings_breakdown = calculate_portfolio_value(db, user_id)
-    total_contributions = calculate_total_contributions(db, user_id)
+    total_contributions = calculate_total_contributions(db, user_id, as_of_date=now.date())
     total_growth = total_value - total_contributions
     
     # Record portfolio value history with transaction type
@@ -341,7 +379,10 @@ def create_daily_summary(db: Session, target_date: Optional[date] = None) -> dic
         models.PortfolioValueHistory.recorded_at <= end_of_day
     ).distinct().all()
 
-    logger.info(f"Creating daily summaries for {len(users_with_data)} users for {target_date}")
+    logger.info(
+        "Creating daily summaries",
+        extra={"user_count": len(users_with_data), "target_date": str(target_date)},
+    )
 
     for (user_id,) in users_with_data:
         # Check if summary already exists
@@ -351,7 +392,10 @@ def create_daily_summary(db: Session, target_date: Optional[date] = None) -> dic
         ).first()
         
         if existing:
-            logger.debug(f"Summary already exists for user {user_id} on {target_date}, skipping")
+            logger.debug(
+                "Summary already exists, skipping",
+                extra={"user_id": user_id, "target_date": str(target_date)},
+            )
             continue
         
         # Get all snapshots for this user today
@@ -403,7 +447,7 @@ def create_daily_summary(db: Session, target_date: Optional[date] = None) -> dic
         STATS['summaries_created'] += 1
 
     db.commit()
-    logger.info(f"Daily summary complete. Stats: {STATS}")
+    logger.info("Daily summary complete", extra=dict(STATS))
     return STATS
 
 
@@ -579,12 +623,15 @@ def _get_daily_from_hourly(db: Session, user_id: int, start_date: datetime, end_
     # Process in Python to get last record per day
     daily_map = {}
     for r in results:
-        day_str = str(r.recorded_at.date())
+        point_date = r.recorded_at.date()
+        day_str = str(point_date)
+        contributions = calculate_total_contributions(db, user_id, as_of_date=point_date)
+        total_value = float(r.total_value or 0)
         daily_map[day_str] = {
             'date': day_str,
-            'contributions': round(r.total_contributions or 0, 2),
-            'gain': round(r.total_growth or 0, 2),
-            'total': round(r.total_value or 0, 2)
+            'contributions': round(contributions, 2),
+            'gain': round(total_value - contributions, 2),
+            'total': round(total_value, 2)
         }
     
     return list(daily_map.values())
@@ -598,15 +645,18 @@ def _get_from_daily_summary(db: Session, user_id: int, start_date: datetime, end
         models.DailyPortfolioSummary.date <= end_date.date()
     ).order_by(models.DailyPortfolioSummary.date).all()
     
-    return [
-        {
-            'date': str(r.date),
-            'contributions': round(r.total_contributions or 0, 2),
-            'gain': round(r.total_growth or 0, 2),
-            'total': round(r.closing_value or 0, 2)
-        }
-        for r in results
-    ]
+    points = []
+    for r in results:
+        point_date = r.date
+        contributions = calculate_total_contributions(db, user_id, as_of_date=point_date)
+        total_value = float(r.closing_value or 0)
+        points.append({
+            'date': str(point_date),
+            'contributions': round(contributions, 2),
+            'gain': round(total_value - contributions, 2),
+            'total': round(total_value, 2)
+        })
+    return points
 
 
 def _get_weekly_from_daily(db: Session, user_id: int, start_date: datetime, end_date: datetime) -> List[Dict]:
@@ -658,15 +708,19 @@ def _get_from_monthly_summary(db: Session, user_id: int) -> List[Dict]:
         models.MonthlyPortfolioSummary.month
     ).all()
     
-    return [
-        {
+    points = []
+    for r in results:
+        month_end_day = calendar.monthrange(r.year, r.month)[1]
+        point_date = date(r.year, r.month, month_end_day)
+        contributions = calculate_total_contributions(db, user_id, as_of_date=point_date)
+        total_value = float(r.closing_value or 0)
+        points.append({
             'date': f"{r.year}-{r.month:02d}-01",
-            'contributions': round(r.total_contributions or 0, 2),
-            'gain': round(r.total_growth or 0, 2),
-            'total': round(r.closing_value or 0, 2)
-        }
-        for r in results
-    ]
+            'contributions': round(contributions, 2),
+            'gain': round(total_value - contributions, 2),
+            'total': round(total_value, 2)
+        })
+    return points
 
 
 def get_holding_attribution(db: Session, user_id: int) -> List[Dict]:

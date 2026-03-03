@@ -48,9 +48,12 @@ async def sync_all_prices():
     Background task to sync prices from each user's Google Sheets.
     This runs every 5 minutes and processes each user individually.
     """
+    import time
     global last_sync_time
 
-    logger.info("Starting scheduled price sync...")
+    job_name = "price_sync"
+    start = time.monotonic()
+    logger.info("Job started: %s", job_name, extra={"job": job_name})
 
     # Always update last sync time, even if no prices found
     now = get_sast_now()
@@ -65,10 +68,14 @@ async def sync_all_prices():
         user_ids = [u[0] for u in users_with_holdings]
 
         if not user_ids:
-            logger.info("Price sync complete: No users with holdings found")
+            duration_ms = int((time.monotonic() - start) * 1000)
+            logger.info(
+                "Job completed: %s",
+                job_name,
+                extra={"job": job_name, "duration_ms": duration_ms, "result": "no_users"},
+            )
             return
 
-        logger.info(f"Syncing prices for {len(user_ids)} users")
         total_updated = 0
 
         for user_id in user_ids:
@@ -77,14 +84,17 @@ async def sync_all_prices():
                 sheets_service = get_sheets_service(user_id)
 
                 if not sheets_service.is_available():
-                    logger.warning(f"Google Sheets service not available for user {user_id}, skipping")
+                    logger.warning(
+                        "Google Sheets service not available, skipping",
+                        extra={"user_id": user_id, "job": job_name},
+                    )
                     continue
 
                 # Get prices from this user's sheet
                 user_prices = sheets_service.get_all_etf_prices()
 
                 if not user_prices:
-                    logger.debug(f"No prices found in user {user_id}'s sheet")
+                    logger.debug("No prices found", extra={"user_id": user_id})
                     continue
 
                 prices_map = {p['jse_ticker']: p['current_price'] for p in user_prices}
@@ -103,18 +113,42 @@ async def sync_all_prices():
                             holding.price_updated_at = now
                             user_updated += 1
 
-                logger.debug(f"User {user_id}: Updated {user_updated} holdings")
+                logger.debug(
+                    "Holdings updated",
+                    extra={"user_id": user_id, "holdings_updated": user_updated},
+                )
                 total_updated += user_updated
 
             except Exception as e:
-                logger.error(f"Error syncing prices for user {user_id}: {e}")
+                logger.exception(
+                    "Price sync for user failed: %s: %s",
+                    type(e).__name__,
+                    e,
+                    extra={"user_id": user_id, "job": job_name},
+                )
                 continue
 
         db.commit()
-        logger.info(f"Price sync complete: {total_updated} holdings updated across {len(user_ids)} users")
+        duration_ms = int((time.monotonic() - start) * 1000)
+        logger.info(
+            "Job completed: %s",
+            job_name,
+            extra={
+                "job": job_name,
+                "duration_ms": duration_ms,
+                "holdings_updated": total_updated,
+                "users_processed": len(user_ids),
+            },
+        )
 
     except Exception as e:
-        logger.error(f"Error during price sync: {e}")
+        logger.exception(
+            "Job failed: %s: %s: %s",
+            job_name,
+            type(e).__name__,
+            e,
+            extra={"job": job_name},
+        )
         db.rollback()
     finally:
         db.close()
@@ -125,19 +159,35 @@ async def record_hourly_snapshot():
     Record hourly snapshots of ETF prices and portfolio values.
     Runs every hour on the hour.
     """
-
-    logger.info("Recording hourly snapshot...")
+    import time
+    job_name = "hourly_snapshot"
+    start = time.monotonic()
+    logger.info("Job started: %s", job_name, extra={"job": job_name})
     
     db: Session = SessionLocal()
     
     try:
         stats = history.record_hourly_snapshot(db)
-        logger.info(f"Hourly snapshot complete: "
-              f"{stats['prices_recorded']} prices, "
-              f"{stats['users_processed']} users, "
-              f"{stats['holdings_recorded']} holdings")
+        duration_ms = int((time.monotonic() - start) * 1000)
+        logger.info(
+            "Job completed: %s",
+            job_name,
+            extra={
+                "job": job_name,
+                "duration_ms": duration_ms,
+                "prices_recorded": stats.get("prices_recorded", 0),
+                "users_processed": stats.get("users_processed", 0),
+                "holdings_recorded": stats.get("holdings_recorded", 0),
+            },
+        )
     except Exception as e:
-        logger.error(f"Error during hourly snapshot: {e}")
+        logger.exception(
+            "Job failed: %s: %s: %s",
+            job_name,
+            type(e).__name__,
+            e,
+            extra={"job": job_name},
+        )
         db.rollback()
     finally:
         db.close()
@@ -148,18 +198,33 @@ async def create_daily_summary():
     Create end-of-day summary from hourly snapshots.
     Runs daily at 17:30 SAST (15:30 UTC) after JSE market close.
     """
-
-    logger.info("Creating daily summary...")
+    import time
+    job_name = "daily_summary"
+    start = time.monotonic()
+    logger.info("Job started: %s", job_name, extra={"job": job_name})
     
     db: Session = SessionLocal()
     
     try:
         stats = history.create_daily_summary(db)
-
-        logger.info(f"Daily summary complete: "
-              f"{stats['summaries_created']} summaries created")
+        duration_ms = int((time.monotonic() - start) * 1000)
+        logger.info(
+            "Job completed: %s",
+            job_name,
+            extra={
+                "job": job_name,
+                "duration_ms": duration_ms,
+                "summaries_created": stats.get("summaries_created", 0),
+            },
+        )
     except Exception as e:
-        logger.error(f"Error during daily summary: {e}")
+        logger.exception(
+            "Job failed: %s: %s: %s",
+            job_name,
+            type(e).__name__,
+            e,
+            extra={"job": job_name},
+        )
         db.rollback()
     finally:
         db.close()
@@ -170,7 +235,10 @@ async def create_monthly_summary():
     Create monthly summary from daily summaries for the previous month.
     Runs on the 1st of each month at 00:00 UTC.
     """
-    logger.info("Creating monthly summary...")
+    import time
+    job_name = "monthly_summary"
+    start = time.monotonic()
+    logger.info("Job started: %s", job_name, extra={"job": job_name})
     
     db: Session = SessionLocal()
     
@@ -185,11 +253,26 @@ async def create_monthly_summary():
             month = now.month - 1
         
         stats = history.create_monthly_summary(db, year, month)
-
-        logger.info(f"Monthly summary complete: "
-              f"{stats['summaries_created']} summaries created for {year}-{month:02d}")
+        duration_ms = int((time.monotonic() - start) * 1000)
+        logger.info(
+            "Job completed: %s",
+            job_name,
+            extra={
+                "job": job_name,
+                "duration_ms": duration_ms,
+                "summaries_created": stats.get("summaries_created", 0),
+                "year": year,
+                "month": month,
+            },
+        )
     except Exception as e:
-        logger.error(f"Error during monthly summary: {e}")
+        logger.exception(
+            "Job failed: %s: %s: %s",
+            job_name,
+            type(e).__name__,
+            e,
+            extra={"job": job_name},
+        )
         db.rollback()
     finally:
         db.close()
@@ -200,19 +283,35 @@ async def cleanup_old_data():
     Clean up old hourly data (older than 90 days).
     Runs weekly on Sunday at 03:00 SAST (01:00 UTC).
     """
-
-    logger.info("Cleaning up old hourly data...")
+    import time
+    job_name = "cleanup_old_data"
+    start = time.monotonic()
+    logger.info("Job started: %s", job_name, extra={"job": job_name})
     
     db: Session = SessionLocal()
     
     try:
         stats = history.cleanup_old_hourly_data(db, retention_days=90)
-        logger.info(f"Cleanup complete: "
-              f"deleted {stats['portfolio_deleted']} portfolio records, "
-              f"{stats['holding_deleted']} holding records, "
-              f"{stats['price_deleted']} price records")
+        duration_ms = int((time.monotonic() - start) * 1000)
+        logger.info(
+            "Job completed: %s",
+            job_name,
+            extra={
+                "job": job_name,
+                "duration_ms": duration_ms,
+                "portfolio_deleted": stats.get("portfolio_deleted", 0),
+                "holding_deleted": stats.get("holding_deleted", 0),
+                "price_deleted": stats.get("price_deleted", 0),
+            },
+        )
     except Exception as e:
-        logger.error(f"Error during cleanup: {e}")
+        logger.exception(
+            "Job failed: %s: %s: %s",
+            job_name,
+            type(e).__name__,
+            e,
+            extra={"job": job_name},
+        )
         db.rollback()
     finally:
         db.close()

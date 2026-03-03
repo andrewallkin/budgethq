@@ -158,7 +158,7 @@ async def trigger_snapshot(
 
     # Calculate portfolio value and contributions
     total_value, holdings_breakdown = history.calculate_portfolio_value(db, current_user.id)
-    total_contributions = history.calculate_total_contributions(db, current_user.id)
+    total_contributions = history.calculate_total_contributions(db, current_user.id, as_of_date=now.date())
     total_growth = total_value - total_contributions
 
     # Record portfolio value history

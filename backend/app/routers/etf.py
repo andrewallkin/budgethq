@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
@@ -7,6 +8,8 @@ from datetime import datetime
 import csv
 import io
 from .. import models, database, auth
+
+logger = logging.getLogger(__name__)
 from ..sheets_service import get_sheets_service
 from ..utils import get_sast_now
 from .. import history
@@ -191,7 +194,10 @@ async def create_etf_holding(
     db.add(new_holding)
     db.commit()
     db.refresh(new_holding)
-
+    logger.info(
+        "ETF holding created",
+        extra={"user_id": current_user.id, "holding_id": new_holding.id, "jse_ticker": holding.jse_ticker},
+    )
     # If shares > 0, create a BUY transaction record (mandatory for audit trail)
     transaction_created = False
     if new_holding.shares > 0:
@@ -320,7 +326,10 @@ async def delete_etf_holding(
 
     db.delete(holding)
     db.commit()
-
+    logger.info(
+        "ETF holding deleted",
+        extra={"user_id": current_user.id, "holding_id": holding_id, "jse_ticker": holding.jse_ticker},
+    )
     # Also delete from Google Sheet if requested (user-specific sheet)
     sheet_deleted = False
     if delete_from_sheet:

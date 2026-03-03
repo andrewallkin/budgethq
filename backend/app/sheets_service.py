@@ -67,14 +67,25 @@ class GoogleSheetsService:
             db.add(user_sheet)
             db.commit()
 
-            logger.info(f"Created new user sheet record for user {user_id} with sheet name: {sheet_name}")
+            logger.info(
+                "User sheet record created",
+                extra={"user_id": user_id, "sheet_name": sheet_name},
+            )
             return sheet_name
 
         except Exception as e:
-            logger.error(f"Error getting/creating user sheet for user {user_id}: {e}")
+            logger.exception(
+                "User sheet get/create failed: %s: %s",
+                type(e).__name__,
+                e,
+                extra={"user_id": user_id},
+            )
             # Fallback to user ID based name (not stored in DB)
             fallback_name = f"user_{user_id}"
-            logger.warning(f"Using fallback sheet name for user {user_id}: {fallback_name}")
+            logger.warning(
+                "Using fallback sheet name",
+                extra={"user_id": user_id, "fallback_name": fallback_name},
+            )
             return fallback_name
         finally:
             db.close()
@@ -104,10 +115,14 @@ class GoogleSheetsService:
             
             # Build the Sheets API service
             self.service = build('sheets', 'v4', credentials=credentials)
-            logger.info("Google Sheets service initialized successfully")
+            logger.info("Google Sheets service initialized")
             
         except Exception as e:
-            logger.error(f"Error initializing Google Sheets service: {e}")
+            logger.exception(
+                "Google Sheets initialization failed: %s: %s",
+                type(e).__name__,
+                e,
+            )
             self.service = None
     
     def is_available(self) -> bool:
@@ -173,11 +188,19 @@ class GoogleSheetsService:
                 body=body
             ).execute()
 
-            logger.info(f"Created new sheet tab '{self.sheet_name}' with headers")
+            logger.info(
+                "Sheet tab created with headers",
+                extra={"sheet_name": self.sheet_name},
+            )
             return True
 
         except Exception as e:
-            logger.error(f"Error ensuring user sheet exists: {e}")
+            logger.exception(
+                "User sheet ensure failed: %s: %s",
+                type(e).__name__,
+                e,
+                extra={"sheet_name": self.sheet_name},
+            )
             return False
     
 
@@ -187,23 +210,41 @@ class GoogleSheetsService:
             try:
                 return func(self, *args, **kwargs)
             except (BrokenPipeError, ConnectionError) as e:
-                logger.warning(f"Connection error in {func.__name__}: {e}. Retrying...")
+                logger.warning(
+                    "Connection error, retrying: %s: %s",
+                    type(e).__name__,
+                    e,
+                    extra={"function": func.__name__},
+                )
                 # Re-initialize service
                 self._initialize_service()
                 if not self.is_available():
-                    logger.error("Service unavailable after re-initialization")
+                    logger.error("Google Sheets service unavailable after re-initialization")
                     return [] if func.__name__ == 'get_all_etf_prices' else False
                 try:
                     return func(self, *args, **kwargs)
                 except Exception as retry_err:
-                    logger.error(f"Retry failed for {func.__name__}: {retry_err}")
+                    logger.exception(
+                        "Retry failed: %s: %s",
+                        type(retry_err).__name__,
+                        retry_err,
+                        extra={"function": func.__name__},
+                    )
                     return [] if func.__name__ == 'get_all_etf_prices' else False
             except HttpError as err:
-                 # Check for 503 Service Unavailable or other transient errors if needed
-                logger.error(f"HTTP error in {func.__name__}: {err}")
+                logger.error(
+                    "HTTP error: %s",
+                    err,
+                    extra={"function": func.__name__},
+                )
                 return [] if func.__name__ == 'get_all_etf_prices' else False
             except Exception as e:
-                logger.error(f"Error in {func.__name__}: {e}")
+                logger.exception(
+                    "Sheets operation failed: %s: %s",
+                    type(e).__name__,
+                    e,
+                    extra={"function": func.__name__},
+                )
                 return [] if func.__name__ == 'get_all_etf_prices' else False
         return wrapper
 
@@ -235,7 +276,10 @@ class GoogleSheetsService:
             range=range_name
         ).execute()
         
-        logger.info(f"Fetched ETF prices from range: {range_name}")
+        logger.info(
+            "ETF prices fetched",
+            extra={"range_name": range_name, "user_id": self.user_id},
+        )
         
         values = result.get('values', [])
         
@@ -322,11 +366,19 @@ class GoogleSheetsService:
                 body=body
             ).execute()
 
-            logger.info(f"Successfully added ETF {jse_ticker} to sheet '{sheet_name}'")
+            logger.info(
+                "ETF added to sheet",
+                extra={"jse_ticker": jse_ticker, "sheet_name": sheet_name},
+            )
             return True
 
         except Exception as e:
-            logger.error(f"Error adding ETF {jse_ticker} to sheet '{sheet_name}': {e}")
+            logger.exception(
+                "ETF add to sheet failed: %s: %s",
+                type(e).__name__,
+                e,
+                extra={"jse_ticker": jse_ticker, "sheet_name": sheet_name},
+            )
             return False
 
     @_retry_on_connection_error
@@ -386,7 +438,7 @@ class GoogleSheetsService:
                 break
         
         if sheet_id is None:
-            logger.error(f"Could not find sheet: {self.sheet_name}")
+            logger.error("Sheet not found", extra={"sheet_name": self.sheet_name})
             return False
         
         # Find the row with the matching ticker
@@ -405,7 +457,10 @@ class GoogleSheetsService:
                 break
         
         if row_to_delete is None:
-            logger.warning(f"Ticker {jse_ticker} not found in sheet")
+            logger.warning(
+                "Ticker not found in sheet",
+                extra={"jse_ticker": jse_ticker, "sheet_name": self.sheet_name},
+            )
             return False
         
         # Delete the row (0-indexed for the API)
@@ -429,7 +484,10 @@ class GoogleSheetsService:
         
 
         
-        logger.info(f"Successfully deleted ETF {jse_ticker} from Google Sheet")
+        logger.info(
+            "ETF deleted from sheet",
+            extra={"jse_ticker": jse_ticker, "sheet_name": self.sheet_name},
+        )
         return True
     
     def check_ticker_exists(self, jse_ticker: str) -> bool:

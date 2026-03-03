@@ -1,6 +1,9 @@
+import logging
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 from .. import models, database, auth
+
+logger = logging.getLogger(__name__)
 from ..scheduler import sync_all_prices, record_hourly_snapshot
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -21,9 +24,11 @@ async def trigger_manual_sync(
         # 2. Record snapshot
         await record_hourly_snapshot()
 
+        logger.info("Manual sync triggered", extra={"user_id": current_user.id})
         return {"status": "success", "message": "Manual sync and snapshot completed"}
 
     except Exception as e:
+        logger.exception("Manual sync failed: %s: %s", type(e).__name__, e)
         raise HTTPException(status_code=500, detail=f"Error during manual sync: {str(e)}")
 
 @router.get("/history/etf-prices")

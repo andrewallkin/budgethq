@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -5,6 +6,8 @@ from typing import List, Optional
 from .. import models, database, auth
 from datetime import date
 from ..budget_period import get_period_dates_for_end_month, get_current_period
+
+logger = logging.getLogger(__name__)
 
 BUDGET_TRANSACTION_CATEGORIES = [
     "groceries_household", "bills", "subscriptions", "transport",
@@ -119,6 +122,7 @@ async def save_budget(data: BudgetData, current_user: models.User = Depends(auth
         db.add(models.BudgetCategory(budget_id=budget.id, type='savings', name=item.name, amount=item.amount, transaction_category=tc, excluded=excluded))
 
     db.commit()
+    logger.info("Budget saved", extra={"user_id": current_user.id})
     return {"status": "success"}
 
 
@@ -141,6 +145,7 @@ async def update_budget_settings(
         budget.budget_period_start_day = start_day if 1 <= start_day <= 31 else 1
 
     db.commit()
+    logger.info("Budget settings updated", extra={"user_id": current_user.id})
     return {"status": "success"}
 
 

@@ -10,6 +10,7 @@ from typing import List, Dict, Optional
 from openai import OpenAI
 from sqlalchemy.orm import Session
 from . import models
+from .logging_utils import redact_description
 import re
 import logging
 
@@ -101,7 +102,12 @@ class TransactionCategorizer:
                 self.db.commit()
 
                 logger.info(
-                    f"Transaction '{description[:50]}' matched rule '{rule.pattern}' → {rule.category}"
+                    "Transaction matched rule: %s",
+                    rule.category,
+                    extra={
+                        "description_preview": redact_description(description),
+                        "rule_pattern": rule.pattern,
+                    },
                 )
 
                 return {
@@ -157,8 +163,10 @@ class TransactionCategorizer:
             categorization = response.choices[0].message.parsed
 
             logger.info(
-                f"AI categorized '{description[:50]}' → {categorization.category} "
-                f"(confidence: {categorization.confidence:.2f})"
+                "AI categorization completed: %s (confidence: %.2f)",
+                categorization.category,
+                categorization.confidence,
+                extra={"description_preview": redact_description(description)},
             )
 
             return {
@@ -169,7 +177,11 @@ class TransactionCategorizer:
             }
 
         except Exception as e:
-            logger.error(f"OpenAI categorization failed: {e}")
+            logger.exception(
+                "OpenAI categorization failed: %s: %s",
+                type(e).__name__,
+                e,
+            )
             # Fallback to simple heuristic based on transaction type
             return self._fallback_categorization(txn_type)
 
@@ -296,7 +308,11 @@ Type: {txn_type}"""
                 'method': categorization['method']
             })
 
-        logger.info(f"Batch categorized {len(results)} transactions for user {user_id}")
+        logger.info(
+            "Batch categorization completed: %d transactions",
+            len(results),
+            extra={"user_id": user_id},
+        )
         return results
 
     def create_rule_from_transaction(
@@ -331,7 +347,9 @@ Type: {txn_type}"""
         self.db.refresh(rule)
 
         logger.info(
-            f"Created rule from transaction: '{pattern}' → {transaction.category}"
+            "Rule created from transaction: %s",
+            transaction.category,
+            extra={"pattern": redact_description(pattern)},
         )
 
         return rule

@@ -1,9 +1,12 @@
+import logging
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime, timedelta
 from .. import models, database, auth
+
+logger = logging.getLogger(__name__)
 from ..utils import get_sast_now
 
 class BondTransactionCreate(BaseModel):
@@ -128,7 +131,10 @@ async def create_bond_transaction(
 
     db.commit()
     db.refresh(new_transaction)
-
+    logger.info(
+        "Bond transaction created",
+        extra={"user_id": current_user.id, "transaction_id": new_transaction.id, "holding_id": transaction.holding_id},
+    )
     # Calculate unrealized gain for the bond
     unrealized_gain = (holding.current_value or 0) - (holding.cost_basis or 0)
 
@@ -217,5 +223,9 @@ async def delete_bond_transaction(
     # Delete the transaction
     db.delete(transaction)
     db.commit()
+    logger.info(
+        "Bond transaction deleted",
+        extra={"user_id": current_user.id, "transaction_id": transaction_id, "holding_id": transaction.holding_id},
+    )
 
     return {"message": "Transaction deleted successfully", "updated_value": holding.current_value}

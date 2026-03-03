@@ -51,11 +51,16 @@ class PayslipGCSService:
             # Create the GCS client
             self.client = storage.Client()
             logger.info(
-                f"Payslip GCS service initialized successfully (bucket: {self.bucket_name})"
+                "Payslip GCS service initialized",
+                extra={"bucket": self.bucket_name},
             )
 
         except Exception as e:
-            logger.error(f"Error initializing Payslip GCS service: {e}")
+            logger.exception(
+                "Payslip GCS initialization failed: %s: %s",
+                type(e).__name__,
+                e,
+            )
             self.client = None
 
     def is_available(self) -> bool:
@@ -83,7 +88,7 @@ class PayslipGCSService:
 
         # Create path: payslips/{user_id}/{year}-{month:02d}.pdf
         gcs_path = f"payslips/{user_id}/{year}-{month:02d}.pdf"
-        logger.info(f"Uploading payslip to GCS: {gcs_path}")
+        logger.info("Payslip upload started", extra={"gcs_path": gcs_path})
 
         try:
             bucket = self.client.bucket(self.bucket_name)
@@ -92,11 +97,16 @@ class PayslipGCSService:
             # Upload from bytes
             blob.upload_from_file(BytesIO(file_content), content_type="application/pdf")
 
-            logger.info(f"Successfully uploaded payslip: {gcs_path}")
+            logger.info("Payslip uploaded", extra={"gcs_path": gcs_path})
             return gcs_path
 
         except Exception as e:
-            logger.error(f"Error uploading payslip to GCS: {e}")
+            logger.exception(
+                "Payslip upload failed: %s: %s",
+                type(e).__name__,
+                e,
+                extra={"gcs_path": gcs_path},
+            )
             return None
 
     def download_payslip(self, gcs_path: str) -> Optional[bytes]:
@@ -113,7 +123,7 @@ class PayslipGCSService:
             logger.error("Payslip GCS service not available")
             return None
 
-        logger.info(f"Downloading payslip from GCS: {gcs_path}")
+        logger.info("Payslip download started", extra={"gcs_path": gcs_path})
 
         try:
             bucket = self.client.bucket(self.bucket_name)
@@ -122,11 +132,16 @@ class PayslipGCSService:
             # Download as bytes
             file_content = blob.download_as_bytes()
             
-            logger.info(f"Successfully downloaded payslip: {gcs_path}")
+            logger.info("Payslip downloaded", extra={"gcs_path": gcs_path})
             return file_content
 
         except Exception as e:
-            logger.error(f"Error downloading payslip from GCS: {e}")
+            logger.exception(
+                "Payslip download failed: %s: %s",
+                type(e).__name__,
+                e,
+                extra={"gcs_path": gcs_path},
+            )
             return None
 
     def delete_payslip(self, gcs_path: str) -> bool:
@@ -147,18 +162,23 @@ class PayslipGCSService:
             logger.warning("No GCS path provided for deletion")
             return False
 
-        logger.info(f"Deleting payslip from GCS: {gcs_path}")
+        logger.info("Payslip delete started", extra={"gcs_path": gcs_path})
 
         try:
             bucket = self.client.bucket(self.bucket_name)
             blob = bucket.blob(gcs_path)
             blob.delete()
 
-            logger.info(f"Successfully deleted payslip: {gcs_path}")
+            logger.info("Payslip deleted", extra={"gcs_path": gcs_path})
             return True
 
         except Exception as e:
-            logger.error(f"Error deleting payslip from GCS: {e}")
+            logger.exception(
+                "Payslip delete failed: %s: %s",
+                type(e).__name__,
+                e,
+                extra={"gcs_path": gcs_path},
+            )
             return False
 
     def __del__(self):
@@ -170,4 +190,8 @@ class PayslipGCSService:
                 if os.environ.get("GOOGLE_APPLICATION_CREDENTIALS") == self._temp_credentials_file:
                     del os.environ["GOOGLE_APPLICATION_CREDENTIALS"]
             except Exception as e:
-                logger.warning(f"Failed to delete temp credentials file: {e}")
+                logger.warning(
+                    "Failed to delete temp credentials file: %s: %s",
+                    type(e).__name__,
+                    e,
+                )

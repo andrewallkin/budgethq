@@ -1,11 +1,12 @@
+import logging
 from datetime import date, timedelta
-
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
-
 from .. import models, database, auth
+
+logger = logging.getLogger(__name__)
 from ..utils import get_sast_now, get_sa_financial_year_start, format_sa_financial_year_label
 
 # RetirementAnnuity Pydantic Models
@@ -91,6 +92,7 @@ async def save_retirement_annuity(
     ra.monthly_contribution = data.monthly_contribution or 0
 
     db.commit()
+    logger.info("Retirement annuity saved", extra={"user_id": current_user.id})
     return {"status": "success"}
 
 

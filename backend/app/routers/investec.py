@@ -20,6 +20,7 @@ from ..utils import encrypt_api_key, decrypt_api_key, get_sast_now
 from ..investec_service import InvestecService
 from ..transaction_categorizer import TransactionCategorizer
 from ..investec_sync import _sync_user_accounts, _sync_account_transactions
+from ..logging_utils import redact_description
 
 import logging
 
@@ -177,14 +178,14 @@ async def store_credentials(
     try:
         _sync_user_accounts(db, current_user)
     except Exception as e:
-        logger.error(f"Failed to sync accounts after credential storage: {e}")
+        logger.exception("Account sync after credential storage failed: %s: %s", type(e).__name__, e)
 
     # Trigger immediate transaction sync for all newly created accounts
     try:
         from ..investec_sync import sync_investec_transactions
         sync_investec_transactions(db, user_id=current_user.id)
     except Exception as e:
-        logger.error(f"Failed to sync transactions after credential storage: {e}")
+        logger.exception("Transaction sync after credential storage failed: %s: %s", type(e).__name__, e)
 
     return {"message": "Credentials stored successfully"}
 
@@ -250,7 +251,7 @@ async def delete_credentials(
 
     db.commit()
 
-    logger.info(f"Deleted all Investec data for user {current_user.id}")
+    logger.info("Investec data deleted", extra={"user_id": current_user.id})
 
     return None
 
@@ -306,7 +307,7 @@ async def sync_accounts(
         _sync_user_accounts(db, current_user)
         return {"message": "Account sync completed successfully"}
     except Exception as e:
-        logger.error(f"Manual account sync failed: {e}")
+        logger.exception("Manual account sync failed: %s: %s", type(e).__name__, e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Account sync failed: {str(e)}"
@@ -483,7 +484,12 @@ async def sync_transactions(
             _sync_account_transactions(db, account)
             synced_count += 1
         except Exception as e:
-            logger.error(f"Failed to sync transactions for account {account.id}: {e}")
+            logger.exception(
+                "Transaction sync for account failed: %s: %s",
+                type(e).__name__,
+                e,
+                extra={"account_id": account.id, "user_id": current_user.id},
+            )
 
     return {
         "message": f"Transaction sync completed for {synced_count}/{len(accounts)} accounts"
@@ -542,16 +548,24 @@ async def categorize_all_transactions_with_ai(
             categorized_count += 1
 
         except Exception as e:
-            import traceback
-            logger.error(f"Failed to categorize transaction {txn.id}: {e}")
-            logger.error(f"Traceback: {traceback.format_exc()}")
+            logger.exception(
+                "Transaction categorization failed: %s: %s",
+                type(e).__name__,
+                e,
+                extra={"transaction_id": txn.id, "user_id": current_user.id},
+            )
             failed_count += 1
             continue
 
     db.flush()  # Ensure all changes are written before commit
     db.commit()
 
-    logger.info(f"Bulk categorization completed: {categorized_count}/{len(transactions)} successful")
+    logger.info(
+        "Bulk categorization completed: %d/%d successful",
+        categorized_count,
+        len(transactions),
+        extra={"user_id": current_user.id},
+    )
 
     return {
         "message": "Bulk categorization completed",
@@ -683,8 +697,6 @@ async def categorize_transaction_with_ai(
 
     # Categorize using AI
     try:
-        logger.info(f"Categorizing transaction {transaction_id}: {transaction.description[:50]}")
-
         openai_key = decrypt_api_key(current_user.openai_api_key)
         categorizer = TransactionCategorizer(openai_key, db)
 
@@ -694,11 +706,7 @@ async def categorize_transaction_with_ai(
             'type': transaction.transaction_type or 'DEBIT'
         }
 
-        logger.info(f"Transaction dict: {transaction_dict}")
-
         categorization = categorizer.categorize_transaction(transaction_dict, current_user.id)
-
-        logger.info(f"Categorization result: {categorization}")
 
         # Update transaction (but don't mark as user_corrected since it's AI)
         transaction.category = categorization['category']
@@ -710,10 +718,15 @@ async def categorize_transaction_with_ai(
         db.commit()
         db.refresh(transaction)
 
-        logger.info(f"Successfully updated transaction {transaction_id} with category {categorization['category']}")
-
-        # Verify the category was actually saved
-        logger.info(f"Verified transaction category after refresh: {transaction.category}")
+        logger.info(
+            "Transaction categorized: %s",
+            categorization['category'],
+            extra={
+                "transaction_id": transaction_id,
+                "user_id": current_user.id,
+                "description_preview": redact_description(transaction.description),
+            },
+        )
 
         return {
             "message": "Transaction categorized successfully",
@@ -723,9 +736,12 @@ async def categorize_transaction_with_ai(
             "user_corrected": transaction.user_corrected
         }
     except Exception as e:
-        import traceback
-        logger.error(f"Failed to categorize transaction {transaction_id}: {e}")
-        logger.error(f"Traceback: {traceback.format_exc()}")
+        logger.exception(
+            "Transaction categorization failed: %s: %s",
+            type(e).__name__,
+            e,
+            extra={"transaction_id": transaction_id, "user_id": current_user.id},
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"AI categorization failed: {str(e) or 'Unknown error'}"
