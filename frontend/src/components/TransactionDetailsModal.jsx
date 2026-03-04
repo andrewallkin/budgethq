@@ -23,7 +23,7 @@ export default function TransactionDetailsModal({ isOpen, onClose, transaction, 
                 {/* Header */}
                 <div className="flex items-start justify-between p-6 border-b border-gray-200 dark:border-gray-700">
                     <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <h2 className="text-lg font-semibold text-gray-900 dark:text-white truncate">
+                        <h2 className="text-lg font-semibold text-gray-900 dark:text-white whitespace-normal break-words">
                             {transaction.description}
                         </h2>
                         <span className={`flex-shrink-0 px-2 py-0.5 rounded text-xs font-semibold ${

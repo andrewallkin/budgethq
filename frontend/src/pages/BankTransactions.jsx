@@ -474,7 +474,7 @@ export default function BankTransactions() {
                                             )}
                                         </td>
                                         <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
-                                            <div className="max-w-xs truncate" title={txn.description}>
+                                            <div className="whitespace-normal break-words min-w-[12rem]">
                                                 {txn.description}
                                             </div>
                                         </td>

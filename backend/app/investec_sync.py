@@ -208,11 +208,12 @@ def _sync_account_transactions(db: Session, account: models.InvestecAccount):
 
     to_date = datetime.utcnow().strftime("%Y-%m-%d")
 
-    # Fetch transactions from API
+    # Fetch transactions from API (exclude PENDING to avoid duplicates when they post)
     api_transactions = investec.get_transactions(
         account.investec_account_id,
         from_date=from_date,
-        to_date=to_date
+        to_date=to_date,
+        include_pending=False
     )
 
     new_count = 0
@@ -237,40 +238,7 @@ def _sync_account_transactions(db: Session, account: models.InvestecAccount):
         ).first()
 
         if existing:
-            # Update status if changed (PENDING → POSTED), and refresh all posted fields
-            if existing.status != api_txn.get("status") and api_txn.get("status") == "POSTED":
-                existing.status = "POSTED"
-                existing.posting_date = _parse_date(api_txn.get("postingDate"))
-                existing.value_date = _parse_date(api_txn.get("valueDate"))
-                existing.transaction_category = api_txn.get("transactionType")
-                existing.running_balance = api_txn.get("runningBalance") or existing.running_balance
-                existing.description = api_txn.get("description", existing.description)
             continue
-
-        # For POSTED transactions not found by UUID, check if a matching PENDING record
-        # has since cleared (description may change on posting, causing a different hash)
-        if api_txn.get("status") == "POSTED":
-            pending_match = db.query(models.BankTransaction).filter(
-                models.BankTransaction.account_id == account.id,
-                models.BankTransaction.transaction_date == _parse_date(api_txn.get("transactionDate")),
-                models.BankTransaction.amount == api_txn.get("amount"),
-                models.BankTransaction.transaction_type == api_txn.get("type"),
-                models.BankTransaction.status == "PENDING"
-            ).first()
-
-            if pending_match:
-                pending_match.investec_uuid = txn_uuid
-                pending_match.status = "POSTED"
-                pending_match.posting_date = _parse_date(api_txn.get("postingDate"))
-                pending_match.value_date = _parse_date(api_txn.get("valueDate"))
-                pending_match.transaction_category = api_txn.get("transactionType")
-                pending_match.running_balance = api_txn.get("runningBalance")
-                pending_match.description = api_txn.get("description", pending_match.description)
-                logger.info(
-                    "Transaction transitioned pending→posted",
-                    extra={"description_preview": redact_description(pending_match.description)},
-                )
-                continue
 
         # Create new transaction
         new_txn = models.BankTransaction(
@@ -375,11 +343,12 @@ def sync_historical_transactions_for_user(
 
     for account in accounts:
         try:
-            # Fetch from API
+            # Fetch from API (exclude PENDING to avoid duplicates when they post)
             api_transactions = service.get_transactions(
                 account.investec_account_id,
                 from_date=from_date.strftime("%Y-%m-%d"),
-                to_date=to_date.strftime("%Y-%m-%d")
+                to_date=to_date.strftime("%Y-%m-%d"),
+                include_pending=False
             )
 
             # Load user's categorization rules once per account
@@ -409,40 +378,7 @@ def sync_historical_transactions_for_user(
                 ).first()
 
                 if existing:
-                    # Update status if changed (PENDING → POSTED), and refresh all posted fields
-                    if existing.status != api_txn.get("status") and api_txn.get("status") == "POSTED":
-                        existing.status = "POSTED"
-                        existing.posting_date = _parse_date(api_txn.get("postingDate"))
-                        existing.value_date = _parse_date(api_txn.get("valueDate"))
-                        existing.transaction_category = api_txn.get("transactionType")
-                        existing.running_balance = api_txn.get("runningBalance") or existing.running_balance
-                        existing.description = api_txn.get("description", existing.description)
                     continue
-
-                # For POSTED transactions not found by UUID, check if a matching PENDING record
-                # has since cleared (description may change on posting, causing a different hash)
-                if api_txn.get("status") == "POSTED":
-                    pending_match = db.query(models.BankTransaction).filter(
-                        models.BankTransaction.account_id == account.id,
-                        models.BankTransaction.transaction_date == _parse_date(api_txn.get("transactionDate")),
-                        models.BankTransaction.amount == api_txn.get("amount"),
-                        models.BankTransaction.transaction_type == api_txn.get("type"),
-                        models.BankTransaction.status == "PENDING"
-                    ).first()
-
-                    if pending_match:
-                        pending_match.investec_uuid = txn_uuid
-                        pending_match.status = "POSTED"
-                        pending_match.posting_date = _parse_date(api_txn.get("postingDate"))
-                        pending_match.value_date = _parse_date(api_txn.get("valueDate"))
-                        pending_match.transaction_category = api_txn.get("transactionType")
-                        pending_match.running_balance = api_txn.get("runningBalance")
-                        pending_match.description = api_txn.get("description", pending_match.description)
-                        logger.info(
-                    "Transaction transitioned pending→posted",
-                    extra={"description_preview": redact_description(pending_match.description)},
-                )
-                        continue
 
                 # Create new transaction
                 new_txn = models.BankTransaction(
