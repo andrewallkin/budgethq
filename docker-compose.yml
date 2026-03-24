@@ -22,16 +22,6 @@ services:
     restart: always
     networks: [default]
 
-  backup:
-    build:
-      context: .
-      dockerfile: backup/Dockerfile
-    profiles: ["disabled"]
-    depends_on: []
-    env_file:
-      - .env
-    restart: always
-
 networks:
   default:
   postgres-net:

@@ -16,7 +16,7 @@ services:
     build:
       context: .
       dockerfile: db_init/Dockerfile
-    profiles: ["disabled"]
+    profiles: ["restore"]
     depends_on:
       - postgres
     env_file:

@@ -7,11 +7,11 @@ help:
 	@echo "Development:"
 	@echo "  make dev-up          - Start with persistent database (default)"
 	@echo "  make dev-build       - Rebuild and start with persistent database"
-	@echo "  make dev-up-restore  - Start with fresh database from backup"
-	@echo "  make dev-build-restore - Rebuild and start with fresh database from backup"
+	@echo "  make dev-up-restore  - Wipe DB volume, start stack, restore latest GCS dump"
+	@echo "  make dev-build-restore - Same as dev-up-restore with --build"
 	@echo "  make dev-down        - Stop development environment"
 	@echo "  make dev-logs        - View all development logs"
-	@echo "  make dev-logs-restore- View restore-specific logs"
+	@echo "  make dev-logs-restore - View db_restore container logs"
 	@echo "  make dev-shell       - Open shell in backend container"
 	@echo ""
 	@echo "Database Migrations:"
@@ -19,7 +19,7 @@ help:
 	@echo "  make migrate-create  - Create new migration (use MSG='description')"
 	@echo "  make migrate-stamp   - Mark DB as up-to-date (prevents data loss)"
 	@echo "  make migrate-history - Show migration history"
-	@echo "  make migrate-rollback- Rollback last migration"
+	@echo "  make migrate-rollback - Rollback last migration"
 	@echo ""
 	@echo "Production (VPS/Testing):"
 	@echo "  make prod-up         - Start with production config"
@@ -52,18 +52,28 @@ dev-build:
 	@echo "  Frontend: http://localhost:3000"
 	@echo "  Database: localhost:5432"
 
-# Development with fresh database restore
+# Development with fresh database restore (GCS → postgres; production dumps are created outside this repo)
 dev-up-restore:
-	@echo "Restore is disabled — db_restore service has been removed"
+	docker-compose -f docker-compose.dev.yml down -v
+	docker-compose -f docker-compose.dev.yml --profile restore up -d
+	@echo "✓ Stack started with db_restore profile (latest GCS backup applied to empty volume)"
+	@echo "  Backend:  http://localhost:8000"
+	@echo "  Frontend: http://localhost:3000"
+	@echo "  Database: localhost:5432"
 
 dev-build-restore:
-	@echo "Restore is disabled — db_restore service has been removed"
+	docker-compose -f docker-compose.dev.yml down -v
+	docker-compose -f docker-compose.dev.yml --profile restore up -d --build
+	@echo "✓ Stack rebuilt and started with db_restore profile"
+	@echo "  Backend:  http://localhost:8000"
+	@echo "  Frontend: http://localhost:3000"
+	@echo "  Database: localhost:5432"
 
 dev-logs:
 	docker-compose -f docker-compose.dev.yml logs -f
 
 dev-logs-restore:
-	@echo "Restore is disabled — db_restore service has been removed"
+	docker-compose -f docker-compose.dev.yml logs -f db_restore
 
 dev-shell:
 	docker-compose -f docker-compose.dev.yml exec backend bash

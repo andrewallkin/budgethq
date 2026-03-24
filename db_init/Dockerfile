@@ -22,9 +22,6 @@ RUN uv venv && \
 # Copy db_init directory
 COPY db_init ./db_init
 
-# Copy backup/logging_config.py for consistent logging
-COPY backup/logging_config.py ./backup/logging_config.py
-
 # Make init script executable
 RUN chmod +x /app/db_init/init_db_from_backup.py
 
