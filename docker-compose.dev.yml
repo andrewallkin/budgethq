@@ -9,13 +9,14 @@ services:
     restart: unless-stopped
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks: [postgres-net]
 
   # Database restoration service (runs only when profile activated)
   db_restore:
     build:
       context: .
       dockerfile: db_init/Dockerfile
-    profiles: ["restore"]
+    profiles: ["disabled"]
     depends_on:
       - postgres
     env_file:
@@ -37,13 +38,11 @@ services:
     depends_on:
       postgres:
         condition: service_started
-      db_restore:
-        condition: service_completed_successfully
-        required: false  # Only required when db_restore profile is active
     env_file:
       - .env
     restart: unless-stopped
     command: uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload # Enable hot reload
+    networks: [default, postgres-net]
 
   frontend:
     build: ./frontend
@@ -54,6 +53,11 @@ services:
     depends_on:
       - backend
     restart: unless-stopped
+    networks: [default]
 
 volumes:
   postgres_data:
+
+networks:
+  postgres-net:
+    driver: bridge

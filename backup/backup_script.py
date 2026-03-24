@@ -8,7 +8,6 @@ import subprocess
 import datetime
 import logging
 import sys
-from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -20,23 +19,11 @@ configure_logging()
 logger = logging.getLogger(__name__)
 
 # PostgreSQL connection details (from environment variables)
-# Support both individual POSTGRES_* vars and DATABASE_URL
-if os.environ.get("DATABASE_URL"):
-    # Parse DATABASE_URL: postgresql://user:password@host:port/dbname
-    database_url = os.environ.get("DATABASE_URL")
-    parsed = urlparse(database_url)
-    DB_HOST = parsed.hostname or "postgres"
-    DB_PORT = str(parsed.port) if parsed.port else "5432"
-    DB_USER = parsed.username
-    DB_PASS = parsed.password
-    DB_NAME = parsed.path.lstrip("/") if parsed.path else None
-else:
-    # Use individual environment variables
-    DB_HOST = os.environ.get("POSTGRES_HOST", "postgres")
-    DB_PORT = os.environ.get("POSTGRES_PORT", "5432")
-    DB_USER = os.environ.get("POSTGRES_USER")
-    DB_PASS = os.environ.get("POSTGRES_PASSWORD")
-    DB_NAME = os.environ.get("POSTGRES_DB")
+DB_HOST = os.environ.get("POSTGRES_HOST", "postgres")
+DB_PORT = os.environ.get("POSTGRES_PORT", "5432")
+DB_USER = os.environ.get("POSTGRES_USER")
+DB_PASS = os.environ.get("POSTGRES_PASSWORD")
+DB_NAME = os.environ.get("POSTGRES_DB")
 
 # Backup configuration
 RETENTION_DAYS = int(os.environ.get("BACKUP_RETENTION_DAYS", "14"))

@@ -54,24 +54,16 @@ dev-build:
 
 # Development with fresh database restore
 dev-up-restore:
-	docker-compose -f docker-compose.dev.yml --profile restore up -d
-	@echo "✓ Development environment started with fresh database restore!"
-	@echo "  Backend:  http://localhost:8000"
-	@echo "  Frontend: http://localhost:3000"
-	@echo "  Database: localhost:5432"
+	@echo "Restore is disabled — db_restore service has been removed"
 
 dev-build-restore:
-	docker-compose -f docker-compose.dev.yml --profile restore up -d --build
-	@echo "✓ Development environment rebuilt and started with fresh database restore!"
-	@echo "  Backend:  http://localhost:3000"
-	@echo "  Frontend: http://localhost:3000"
-	@echo "  Database: localhost:5432"
+	@echo "Restore is disabled — db_restore service has been removed"
 
 dev-logs:
 	docker-compose -f docker-compose.dev.yml logs -f
 
 dev-logs-restore:
-	docker-compose -f docker-compose.dev.yml --profile restore logs -f
+	@echo "Restore is disabled — db_restore service has been removed"
 
 dev-shell:
 	docker-compose -f docker-compose.dev.yml exec backend bash
