@@ -7,19 +7,11 @@ services:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
       - ./data:/app/data
-    depends_on:
-      - postgres
+    depends_on: []
     env_file:
       - .env
     restart: always
-
-  postgres:
-    image: postgres:15
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    env_file:
-      - .env
-    restart: always
+    networks: [default, postgres-net]
 
   frontend:
     build: ./frontend
@@ -28,16 +20,9 @@ services:
     depends_on:
       - backend
     restart: always
+    networks: [default]
 
-  backup:
-    build:
-      context: .
-      dockerfile: backup/Dockerfile
-    depends_on:
-      - postgres
-    env_file:
-      - .env
-    restart: always
-
-volumes:
-  postgres_data:
+networks:
+  default:
+  postgres-net:
+    external: true

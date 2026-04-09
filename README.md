@@ -9,7 +9,7 @@ A personal finance dashboard for South African users, built with **React** and *
 - 🏦 **Multi-Asset Support** for ETFs and Government Bonds in TFSA tracking
 - 📊 **Smart Rebalancing Engine** with automated buy/sell recommendations
 - 🔐 **Secure Authentication** with JWT tokens and restricted registration
-- 🗃️ **Automated Local DB Restore** from GCS production backups
+- 🗃️ **Local DB restore from GCS** (loads latest dump; production backups run outside this repo)
 - 🐳 **Full Docker Support** with separate dev and production environments
 - �️ **Database Migrations** via Alembic for safe schema updates
 - �🎨 **Modern UI** with dark mode, sortable tables, and interactive modals
@@ -163,18 +163,23 @@ GOOGLE_SPREADSHEET_ID=your_spreadsheet_id
 # Authentication & Security
 AUTHORIZED_USERS=user1@example.com,user2@example.com  # Comma-separated list of authorized usernames
 
-# Local Development DB Restore (GCS)
+# Local development DB restore from GCS (optional — only for make dev-up-restore)
+GCS_DB_BACKUP_BUCKET_NAME=your_bucket_name
 LOCAL_USERNAME=your_authorized_email@example.com
 LOCAL_PASSWORD=your_local_dev_login_password
 ```
 
 ### Local Database Initialization (`db-init`)
 
-When running in restore mode (`make dev-up-restore`), the stack includes a `db_restore` container that automatically:
-1. **Connects to Google Cloud Storage** using your service account credentials.
-2. **Downloads the latest production backup**.
-3. **Restores the full backup** to your local PostgreSQL instance.
-4. **Updates your local password**: Uses `LOCAL_USERNAME` and `LOCAL_PASSWORD` to update the specified user's password so you can log in locally with your preferred development credentials.
+Production PostgreSQL dumps are **not** created by this repository; they should be produced and uploaded to GCS by your own process. Restore expects compressed SQL dumps in the configured bucket (see `db_init/gcs_client.py` for how the latest object is chosen, including `backup_YYYY-MM-DD_HH-MM-SS.sql.gz`-style names).
+
+When you run restore mode (`make dev-up-restore`), Compose uses the `restore` profile so a `db_restore` container runs once and:
+1. **Wipes the dev Postgres volume** (`docker-compose down -v` is part of the Makefile target) for a clean restore.
+2. **Connects to GCS** with `GCP_SERVICE_ACCOUNT_CREDENTIALS` and `GCS_DB_BACKUP_BUCKET_NAME`.
+3. **Downloads the latest backup** and restores it into local PostgreSQL.
+4. **Optional password override**: If set, `LOCAL_USERNAME` and `LOCAL_PASSWORD` update that user’s password for local login.
+
+Manual equivalent: `docker-compose -f docker-compose.dev.yml down -v && docker-compose -f docker-compose.dev.yml --profile restore up -d`.
 
 ### Database Persistence Control
 
@@ -182,7 +187,7 @@ The development environment now supports two database modes:
 
 - **Persistent Mode** (`make dev-up`): Database state persists between container restarts. Schema changes and test data are maintained, making iterative development seamless.
 
-- **Restore Mode** (`make dev-up-restore`): Downloads and restores the latest production backup fresh each time, ensuring you always have current production data for testing.
+- **Restore Mode** (`make dev-up-restore`): Removes the dev database volume, starts the stack with the `restore` profile, and loads the latest GCS dump (see above).
 
 **Usage Examples:**
 
@@ -238,11 +243,11 @@ docker-compose up -d
 # Container Management
 make dev-up          # Start with persistent database (default)
 make dev-build       # Rebuild and start with persistent database
-make dev-up-restore  # Start with fresh database from backup
-make dev-build-restore # Rebuild and start with fresh database from backup
+make dev-up-restore  # Wipe volume, restore latest GCS dump, start stack
+make dev-build-restore # Same with --build
 make dev-down        # Stop development environment
 make dev-logs        # View all development logs
-make dev-logs-restore# View restore-specific logs
+make dev-logs-restore # View db_restore logs
 make dev-shell       # Access backend shell
 
 # Database Migrations (see section below)
@@ -485,9 +490,10 @@ The following secrets must be configured in your GitHub repository settings for 
 - `AUTHORIZED_USERS` - Comma-separated list of authorized usernames for registration/login
 - `BACKEND_PORT`, `FRONTEND_PORT` - Application ports
 - `GCP_SERVICE_ACCOUNT_CREDENTIALS` - Google Cloud service account JSON
-- `GCS_DB_BACKUP_BUCKET_NAME` - Google Cloud Storage bucket name
+- `GCS_PAYSLIPS_BUCKET_NAME` - Payslip PDF storage (if used)
 - `GOOGLE_SPREADSHEET_ID` - Google Sheets integration (per-user tabs)
-- `BACKUP_RETENTION_DAYS`, `BACKUP_SCHEDULE_HOUR`, `BACKUP_SCHEDULE_MINUTE` - Backup configuration
+
+`GCS_DB_BACKUP_BUCKET_NAME` is only for **local** `make dev-up-restore`; it is not written to the VPS `.env` by this workflow.
 
 ## Troubleshooting
 

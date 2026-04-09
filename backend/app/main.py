@@ -4,9 +4,10 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from . import database
-from .scheduler import start_scheduler, stop_scheduler, sync_all_prices
 from .logging_config import configure_logging
+
+configure_logging()
+
 from .middleware.request_id import RequestIDMiddleware
 from .middleware.logging import RequestLoggingMiddleware
 
@@ -30,8 +31,8 @@ from .routers.salary import router as salary_router
 from .routers.investec import router as investec_router
 from .routers.manual_accounts import router as manual_accounts_router
 
-# Configure logging on startup
-configure_logging()
+from . import database  # noqa: E402
+from .scheduler import start_scheduler, stop_scheduler, sync_all_prices  # noqa: E402
 
 # Initialize DB
 # Note: Database tables are now managed by Alembic migrations
@@ -42,6 +43,7 @@ configure_logging()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage application lifecycle - start/stop background tasks."""
+    database.check_postgres_connection()
     # Startup: Start the price sync scheduler
     start_scheduler()
     # Run initial sync on startup
