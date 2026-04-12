@@ -11,20 +11,6 @@ services:
       - postgres_data:/var/lib/postgresql/data
     networks: [postgres-net]
 
-  # Database restoration service (runs only when profile activated)
-  db_restore:
-    build:
-      context: .
-      dockerfile: db_init/Dockerfile
-    profiles: ["restore"]
-    depends_on:
-      - postgres
-    env_file:
-      - .env
-    restart: "no" # Run once and exit
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-
   backend:
     build:
       context: .

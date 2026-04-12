@@ -26,10 +26,6 @@ backend = [
     "openai>=1.0.0",
     "cryptography>=41.0.0",
 ]
-db-init = [
-    "google-cloud-storage>=2.10.0",
-    "bcrypt>=4.0.1",
-]
 dev = [
     "pytest>=7.4.0",
     "black>=23.10.0",
