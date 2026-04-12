@@ -191,10 +191,6 @@ backend = [
     { name = "sqlalchemy" },
     { name = "uvicorn" },
 ]
-db-init = [
-    { name = "bcrypt" },
-    { name = "google-cloud-storage" },
-]
 dev = [
     { name = "black" },
     { name = "flake8" },
@@ -206,7 +202,6 @@ requires-dist = [
     { name = "alembic", marker = "extra == 'backend'", specifier = ">=1.12.0" },
     { name = "apscheduler", marker = "extra == 'backend'", specifier = ">=3.10.0" },
     { name = "bcrypt", marker = "extra == 'backend'", specifier = ">=4.0.1" },
-    { name = "bcrypt", marker = "extra == 'db-init'", specifier = ">=4.0.1" },
     { name = "black", marker = "extra == 'dev'", specifier = ">=23.10.0" },
     { name = "cryptography", marker = "extra == 'backend'", specifier = ">=41.0.0" },
     { name = "fastapi", marker = "extra == 'backend'", specifier = ">=0.104.0" },
@@ -214,7 +209,6 @@ requires-dist = [
     { name = "google-api-python-client", marker = "extra == 'backend'", specifier = ">=2.0.0" },
     { name = "google-auth", marker = "extra == 'backend'", specifier = ">=2.0.0" },
     { name = "google-cloud-storage", marker = "extra == 'backend'", specifier = ">=2.10.0" },
-    { name = "google-cloud-storage", marker = "extra == 'db-init'", specifier = ">=2.10.0" },
     { name = "openai", marker = "extra == 'backend'", specifier = ">=1.0.0" },
     { name = "pandas", marker = "extra == 'backend'", specifier = ">=2.1.0" },
     { name = "psycopg2-binary", marker = "extra == 'backend'", specifier = ">=2.9.9" },
@@ -226,7 +220,7 @@ requires-dist = [
     { name = "sqlalchemy", marker = "extra == 'backend'", specifier = ">=2.0.0" },
     { name = "uvicorn", marker = "extra == 'backend'", specifier = ">=0.24.0" },
 ]
-provides-extras = ["backend", "db-init", "dev"]
+provides-extras = ["backend", "dev"]
 
 [[package]]
 name = "cachetools"
