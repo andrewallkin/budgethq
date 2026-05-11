@@ -3,7 +3,6 @@ import { Routes, Route, Link, useLocation, Navigate } from 'react-router-dom'
 import { LayoutDashboard, PieChart, Home, Moon, Sun, LogOut, Settings as SettingsIcon, ChevronLeft, ChevronRight, ChevronDown, Calculator, Shield, TrendingUp, Menu, CreditCard, Receipt, Tag, HelpCircle, Building2 } from 'lucide-react'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import BudgetDashboard from './pages/BudgetDashboard'
-import TFSAPortfolio from './pages/TFSAPortfolio'
 import RATaxCalculator from './pages/RATaxCalculator'
 import RAPerformance from './pages/RAPerformance'
 import EmergencySavings from './pages/EmergencySavings'
@@ -16,6 +15,8 @@ import BankTransactions from './pages/BankTransactions'
 import CategorizationRules from './pages/CategorizationRules'
 import BudgetAnalysis from './pages/BudgetAnalysis'
 import CategoryGuide from './pages/CategoryGuide'
+import InvestmentsLanding from './pages/InvestmentsLanding'
+import InvestmentPortfolioPage from './pages/InvestmentPortfolioPage'
 
 function ProtectedRoute({ children }) {
     const { user } = useAuth()
@@ -78,7 +79,7 @@ function AppContent() {
         { path: '/', label: 'Home', icon: Home },
         { path: '/salary', label: 'Payslip & Tax', icon: Calculator },
         { path: '/budget', label: 'Budget Dashboard', icon: LayoutDashboard },
-        { path: '/portfolio', label: 'TFSA Portfolio', icon: PieChart },
+        { path: '/investments', label: 'Investments', icon: PieChart },
         { path: '/emergency-savings', label: 'Emergency Savings', icon: Shield },
         { path: '/ra', label: 'RA Performance', icon: TrendingUp },
         { path: '/ra-calculator', label: 'RA Tax Calculator', icon: Calculator },
@@ -199,7 +200,9 @@ function AppContent() {
                     }
 
                     const Icon = item.icon
-                    const isActive = location.pathname === item.path
+                    const isActive = item.path === '/investments'
+                        ? location.pathname.startsWith('/investments') || location.pathname === '/portfolio'
+                        : location.pathname === item.path
                     return (
                         <Link
                             key={item.path}
@@ -299,7 +302,9 @@ function AppContent() {
                         <Route path="/" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
                         <Route path="/budget" element={<ProtectedRoute><BudgetDashboard /></ProtectedRoute>} />
                         <Route path="/salary" element={<ProtectedRoute><SalaryPage /></ProtectedRoute>} />
-                        <Route path="/portfolio" element={<ProtectedRoute><TFSAPortfolio /></ProtectedRoute>} />
+                        <Route path="/investments" element={<ProtectedRoute><InvestmentsLanding /></ProtectedRoute>} />
+                        <Route path="/investments/:portfolioSlug" element={<ProtectedRoute><InvestmentPortfolioPage /></ProtectedRoute>} />
+                        <Route path="/portfolio" element={<Navigate to="/investments/tfsa" replace />} />
                         <Route path="/emergency-savings" element={<ProtectedRoute><EmergencySavings /></ProtectedRoute>} />
                         <Route path="/ra" element={<ProtectedRoute><RAPerformance /></ProtectedRoute>} />
                         <Route path="/ra-calculator" element={<ProtectedRoute><RATaxCalculator /></ProtectedRoute>} />
@@ -437,27 +442,27 @@ function HomePage() {
                     </div>
                 </div>
 
-                {/* TFSA Portfolio Card */}
+                {/* Investments Card */}
                 <div className="flex flex-col h-full bg-gradient-to-br from-emerald-50 to-emerald-100 dark:from-emerald-900/20 dark:to-emerald-800/20 rounded-2xl shadow-lg border border-emerald-200 dark:border-emerald-800 overflow-hidden hover:shadow-xl transition-all">
                     <div className="p-4 sm:p-6 lg:p-8 flex-1 flex flex-col">
                         <div className="flex items-center mb-6">
                             <div className="p-4 bg-emerald-600 rounded-xl">
                                 <PieChart className="w-8 h-8 text-white" />
                             </div>
-                            <h2 className="text-2xl font-bold text-gray-900 dark:text-white ml-4">TFSA Portfolio</h2>
+                            <h2 className="text-2xl font-bold text-gray-900 dark:text-white ml-4">Investments</h2>
                         </div>
 
                         <p className="text-gray-700 dark:text-gray-300 mb-6 text-base leading-relaxed">
-                            Complete TFSA portfolio management with ETFs and government bonds. Live price tracking,
-                            transaction history, intelligent rebalancing, and powerful tools to optimize your tax-free investments.
+                            Manage all investment portfolios from one place. Keep your TFSA structure intact and add
+                            new portfolios like USD Account with identical ETF workflows.
                         </p>
 
                         <div className="space-y-3 mb-8">
                             <div className="flex items-start">
                                 <span className="text-emerald-600 dark:text-emerald-400 mr-3 mt-1">✓</span>
                                 <div>
-                                    <p className="font-semibold text-gray-900 dark:text-white">ETFs & Government Bonds</p>
-                                    <p className="text-sm text-gray-600 dark:text-gray-400">Track both ETFs with live prices and manually-managed government bonds</p>
+                                    <p className="font-semibold text-gray-900 dark:text-white">Multi-Portfolio ETFs</p>
+                                    <p className="text-sm text-gray-600 dark:text-gray-400">Track ETFs with live prices and portfolio-level organization</p>
                                 </div>
                             </div>
                             <div className="flex items-start">
@@ -484,10 +489,10 @@ function HomePage() {
                         </div>
 
                         <Link
-                            to="/portfolio"
+                            to="/investments"
                             className="mt-auto block w-full text-center px-6 py-3 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-700 transition-colors"
                         >
-                            Open TFSA Portfolio →
+                            Open Investments →
                         </Link>
                     </div>
                 </div>

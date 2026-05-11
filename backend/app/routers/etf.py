@@ -1,65 +1,58 @@
-import logging
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
-from sqlalchemy.orm import Session
-from sqlalchemy import or_
-from pydantic import BaseModel
-from typing import List, Optional
-from datetime import datetime
 import csv
 import io
-from .. import models, database, auth
+import logging
+from datetime import datetime
+from typing import List, Optional
 
-logger = logging.getLogger(__name__)
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from pydantic import BaseModel
+from sqlalchemy import or_
+from sqlalchemy.orm import Session
+
+from .. import auth, database, history, models
+from ..portfolio_service import resolve_user_portfolio
 from ..sheets_service import get_sheets_service
 from ..utils import get_sast_now
-from .. import history
 
-# ETF Holdings Models (New System)
+logger = logging.getLogger(__name__)
+
+
+def _normalize_instrument_type(raw: Optional[str]) -> str:
+    v = (raw or "etf").strip().lower()
+    if v not in ("etf", "stock"):
+        raise HTTPException(status_code=400, detail='instrument_type must be "etf" or "stock"')
+    return v
+
+
 class ETFHoldingCreate(BaseModel):
     jse_ticker: str
     etf_name: str
     region: str
     shares: float
-    target_percentage: float
+    target_percentage: float = 0.0
     cost_basis: Optional[float] = None
+    instrument_type: Optional[str] = "etf"
 
 
 class ETFHoldingUpdate(BaseModel):
     shares: Optional[float] = None
     target_percentage: Optional[float] = None
     region: Optional[str] = None
+    instrument_type: Optional[str] = None
 
-class ETFHoldingResponse(BaseModel):
-    id: int
-    jse_ticker: str
-    etf_name: str
-    region: str
-    shares: float
-    target_percentage: float
-    current_price: Optional[float]
-    total_value: Optional[float]
-    price_updated_at: Optional[datetime]
-
-class AddETFToSheetRequest(BaseModel):
-    jse_ticker: str
-    etf_name: str
-
-class BulkImportResult(BaseModel):
-    success: int
-    failed: int
-    errors: List[str]
 
 router = APIRouter(prefix="/etf", tags=["etf-holdings"])
 
 @router.get("/holdings")
 async def get_etf_holdings(
+    portfolio_id: Optional[int] = Query(default=None),
     current_user: models.User = Depends(auth.get_current_user),
-    db: Session = Depends(database.get_db)
+    db: Session = Depends(database.get_db),
 ):
-    """Get all ETF holdings for the current user with computed total values."""
+    portfolio = resolve_user_portfolio(db, current_user.id, portfolio_id=portfolio_id)
     holdings = db.query(models.ETFHolding).filter(
         models.ETFHolding.user_id == current_user.id,
-        # Include holdings with shares > 0 OR target_percentage > 0
+        models.ETFHolding.portfolio_id == portfolio.id,
         or_(models.ETFHolding.shares > 0, models.ETFHolding.target_percentage > 0)
     ).all()
 
@@ -83,9 +76,11 @@ async def get_etf_holdings(
             "target_percentage": h.target_percentage,
             "current_price": h.current_price,
             "total_value": total_value,
+            "portfolio_id": h.portfolio_id,
             "cost_basis": h.cost_basis,
             "gain_loss_percentage": gain_loss_percentage,
             "gain_loss_amount": gain_loss_amount,
+            "instrument_type": h.instrument_type or "etf",
             "price_updated_at": (h.price_updated_at.isoformat()) if h.price_updated_at else None
         })
 
@@ -94,13 +89,14 @@ async def get_etf_holdings(
 @router.post("/holdings")
 async def create_etf_holding(
     holding: ETFHoldingCreate,
+    portfolio_id: Optional[int] = Query(default=None),
     current_user: models.User = Depends(auth.get_current_user),
-    db: Session = Depends(database.get_db)
+    db: Session = Depends(database.get_db),
 ):
-    """Create a new ETF holding."""
-    # Check if holding already exists for this ticker
+    portfolio = resolve_user_portfolio(db, current_user.id, portfolio_id=portfolio_id)
     existing = db.query(models.ETFHolding).filter(
         models.ETFHolding.user_id == current_user.id,
+        models.ETFHolding.portfolio_id == portfolio.id,
         models.ETFHolding.jse_ticker == holding.jse_ticker
     ).first()
 
@@ -113,8 +109,7 @@ async def create_etf_holding(
             )
         # If shares == 0, we'll update it below instead of creating new
 
-    # Get current price from Google Sheets (user-specific sheet)
-    sheets_service = get_sheets_service(current_user.id)
+    sheets_service = get_sheets_service(current_user.id, portfolio.id)
     current_price = None
     price_updated_at = None
 
@@ -129,6 +124,7 @@ async def create_etf_holding(
         existing.target_percentage = holding.target_percentage
         existing.region = holding.region
         existing.etf_name = holding.etf_name  # Update name in case it changed
+        existing.instrument_type = _normalize_instrument_type(holding.instrument_type)
         existing.current_price = current_price
         existing.price_updated_at = price_updated_at
 
@@ -161,6 +157,7 @@ async def create_etf_holding(
             "current_price": existing.current_price,
             "total_value": total_value,
             "cost_basis": existing.cost_basis,
+            "instrument_type": existing.instrument_type or "etf",
             "price_updated_at": (existing.price_updated_at.isoformat() + "Z") if existing.price_updated_at else None,
             "reactivated": True,
             "sheet_added": sheet_added
@@ -168,13 +165,15 @@ async def create_etf_holding(
 
     new_holding = models.ETFHolding(
         user_id=current_user.id,
+        portfolio_id=portfolio.id,
         jse_ticker=holding.jse_ticker,
         etf_name=holding.etf_name,
         region=holding.region,
         shares=holding.shares,
         target_percentage=holding.target_percentage,
         current_price=current_price,
-        price_updated_at=price_updated_at
+        price_updated_at=price_updated_at,
+        instrument_type=_normalize_instrument_type(holding.instrument_type),
     )
 
     # Calculate intended cost_basis (for transaction calculation)
@@ -219,6 +218,7 @@ async def create_etf_holding(
         # Create BUY transaction record
         new_transaction = models.ETFTransaction(
             user_id=current_user.id,
+            portfolio_id=portfolio.id,
             holding_id=new_holding.id,
             transaction_type="BUY",
             shares=new_holding.shares,
@@ -257,6 +257,7 @@ async def create_etf_holding(
         "current_price": new_holding.current_price,
         "total_value": total_value,
         "cost_basis": new_holding.cost_basis,
+        "instrument_type": new_holding.instrument_type or "etf",
         "price_updated_at": (new_holding.price_updated_at.isoformat() + "Z") if new_holding.price_updated_at else None,
         "transaction_created": transaction_created
     }
@@ -265,13 +266,15 @@ async def create_etf_holding(
 async def update_etf_holding(
     holding_id: int,
     update: ETFHoldingUpdate,
+    portfolio_id: Optional[int] = Query(default=None),
     current_user: models.User = Depends(auth.get_current_user),
-    db: Session = Depends(database.get_db)
+    db: Session = Depends(database.get_db),
 ):
-    """Update an existing ETF holding."""
+    portfolio = resolve_user_portfolio(db, current_user.id, portfolio_id=portfolio_id)
     holding = db.query(models.ETFHolding).filter(
         models.ETFHolding.id == holding_id,
-        models.ETFHolding.user_id == current_user.id
+        models.ETFHolding.user_id == current_user.id,
+        models.ETFHolding.portfolio_id == portfolio.id,
     ).first()
 
     if not holding:
@@ -283,6 +286,8 @@ async def update_etf_holding(
         holding.target_percentage = update.target_percentage
     if update.region is not None:
         holding.region = update.region
+    if update.instrument_type is not None:
+        holding.instrument_type = _normalize_instrument_type(update.instrument_type)
 
     db.commit()
     db.refresh(holding)
@@ -298,20 +303,23 @@ async def update_etf_holding(
         "target_percentage": holding.target_percentage,
         "current_price": holding.current_price,
         "total_value": total_value,
-        "price_updated_at": (holding.price_updated_at.isoformat() + "Z") if holding.price_updated_at else None
+        "price_updated_at": (holding.price_updated_at.isoformat() + "Z") if holding.price_updated_at else None,
+        "instrument_type": holding.instrument_type or "etf",
     }
 
 @router.delete("/holdings/{holding_id}")
 async def delete_etf_holding(
     holding_id: int,
     delete_from_sheet: bool = True,
+    portfolio_id: Optional[int] = Query(default=None),
     current_user: models.User = Depends(auth.get_current_user),
-    db: Session = Depends(database.get_db)
+    db: Session = Depends(database.get_db),
 ):
-    """Delete an ETF holding. Optionally also removes from Google Sheet."""
+    portfolio = resolve_user_portfolio(db, current_user.id, portfolio_id=portfolio_id)
     holding = db.query(models.ETFHolding).filter(
         models.ETFHolding.id == holding_id,
-        models.ETFHolding.user_id == current_user.id
+        models.ETFHolding.user_id == current_user.id,
+        models.ETFHolding.portfolio_id == portfolio.id,
     ).first()
 
     if not holding:
@@ -321,7 +329,8 @@ async def delete_etf_holding(
 
     # Delete associated transactions first
     db.query(models.ETFTransaction).filter(
-        models.ETFTransaction.holding_id == holding_id
+        models.ETFTransaction.holding_id == holding_id,
+        models.ETFTransaction.portfolio_id == portfolio.id,
     ).delete()
 
     db.delete(holding)
@@ -333,7 +342,7 @@ async def delete_etf_holding(
     # Also delete from Google Sheet if requested (user-specific sheet)
     sheet_deleted = False
     if delete_from_sheet:
-        sheets_service = get_sheets_service(current_user.id)
+        sheets_service = get_sheets_service(current_user.id, portfolio.id)
         if sheets_service.is_available():
             sheet_deleted = sheets_service.delete_etf_from_sheet(jse_ticker)
 
@@ -346,8 +355,9 @@ async def delete_etf_holding(
 @router.post("/bulk-import")
 async def bulk_import_holdings(
     file: UploadFile = File(...),
+    portfolio_id: Optional[int] = Query(default=None),
     current_user: models.User = Depends(auth.get_current_user),
-    db: Session = Depends(database.get_db)
+    db: Session = Depends(database.get_db),
 ):
     """
     Bulk import ETF holdings from a CSV file (UPSERT mode).
@@ -356,7 +366,10 @@ async def bulk_import_holdings(
     - If holding doesn't exist: Creates new holding
     - Google Sheets: Adds ticker if not present, skips if exists
 
-    Required columns: jse_ticker, etf_name, region, shares, target_percentage
+    Required columns: jse_ticker, etf_name, region, shares (target_percentage required when portfolio tracks allocation).
+    Optional column: instrument_type (etf or stock); defaults to etf.
+
+    For portfolios with target allocation off, omit target_percentage (each row defaults to 0%).
     """
     if not file.filename.endswith('.csv'):
         raise HTTPException(status_code=400, detail="File must be a CSV")
@@ -365,7 +378,12 @@ async def bulk_import_holdings(
     decoded = content.decode('utf-8')
     reader = csv.DictReader(io.StringIO(decoded))
 
-    required_columns = {'jse_ticker', 'etf_name', 'region', 'shares', 'target_percentage'}
+    portfolio = resolve_user_portfolio(db, current_user.id, portfolio_id=portfolio_id)
+    strict_targets = portfolio.is_default_tfsa or bool(portfolio.target_allocation_enabled)
+
+    required_columns = {'jse_ticker', 'etf_name', 'region', 'shares'}
+    if strict_targets:
+        required_columns.add('target_percentage')
 
     # Validate headers
     if not required_columns.issubset(set(reader.fieldnames or [])):
@@ -375,8 +393,7 @@ async def bulk_import_holdings(
             detail=f"Missing required columns: {', '.join(missing)}"
         )
 
-    # Get prices from Google Sheets (user-specific sheet)
-    sheets_service = get_sheets_service(current_user.id)
+    sheets_service = get_sheets_service(current_user.id, portfolio.id)
     prices_map = {}
     sheets_available = sheets_service.is_available()
 
@@ -398,6 +415,7 @@ async def bulk_import_holdings(
             # Check if already exists in database
             existing = db.query(models.ETFHolding).filter(
                 models.ETFHolding.user_id == current_user.id,
+                models.ETFHolding.portfolio_id == portfolio.id,
                 models.ETFHolding.jse_ticker == jse_ticker
             ).first()
 
@@ -416,9 +434,13 @@ async def bulk_import_holdings(
             # Handle empty shares (for ETFs you plan to buy)
             shares_str = row['shares'].strip()
             shares = float(shares_str) if shares_str else 0.0
-            target_pct = float(row['target_percentage'])
+            tgt_cell = row.get('target_percentage', '') or ''
+            tgt_str = str(tgt_cell).strip()
+            target_pct = float(tgt_str) if tgt_str else 0.0
             region = row['region'].strip()
 
+            inst_raw = row.get("instrument_type") or row.get("Instrument_Type")
+            inst_type = _normalize_instrument_type(inst_raw) if inst_raw and str(inst_raw).strip() else "etf"
 
             if shares < 0:
                 errors.append(f"Row {row_num}: Shares cannot be negative")
@@ -437,6 +459,8 @@ async def bulk_import_holdings(
                 existing.target_percentage = target_pct
                 existing.region = region
                 existing.etf_name = etf_name  # Update name in case it changed
+                if inst_raw and str(inst_raw).strip():
+                    existing.instrument_type = inst_type
                 if current_price:
                     existing.current_price = current_price
                     existing.price_updated_at = price_updated_at
@@ -447,6 +471,7 @@ async def bulk_import_holdings(
                 # CREATE new holding
                 new_holding = models.ETFHolding(
                     user_id=current_user.id,
+                    portfolio_id=portfolio.id,
                     jse_ticker=jse_ticker,
                     etf_name=etf_name,
                     region=region,
@@ -454,7 +479,8 @@ async def bulk_import_holdings(
                     target_percentage=target_pct,
                     current_price=current_price,
                     price_updated_at=price_updated_at,
-                    cost_basis=cost_basis  # Initialize cost_basis
+                    cost_basis=cost_basis,
+                    instrument_type=inst_type,
                 )
                 db.add(new_holding)
                 created_count += 1

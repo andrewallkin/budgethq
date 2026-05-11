@@ -5,7 +5,13 @@ import ConfirmModal from './ConfirmModal'
 import { formatCurrency, formatNumber } from '../utils/numberFormatting'
 import BlurredValue from './BlurredValue'
 
-export default function TransactionHistory({ refreshTrigger, onTransactionDeleted }) {
+export default function TransactionHistory({
+    refreshTrigger,
+    onTransactionDeleted,
+    portfolioId = null,
+    currencyFormatOpts = { currency: 'ZAR', minimumFractionDigits: 2, maximumFractionDigits: 2 },
+    transactionDeleteModalTitle = 'Delete ETF Transaction',
+}) {
     const [transactions, setTransactions] = useState([])
     const [loading, setLoading] = useState(true)
     const [expanded, setExpanded] = useState(false)
@@ -18,36 +24,17 @@ export default function TransactionHistory({ refreshTrigger, onTransactionDelete
 
     const fetchTransactions = async () => {
         try {
-            // Fetch both ETF and bond transactions in parallel
-            const [etfRes, bondRes] = await Promise.all([
-                axios.get('/api/etf/transactions'),
-                axios.get('/api/bond/transactions')
-            ])
-
-            // Add type indicator to each transaction
+            const etfRes = await axios.get(
+                '/api/etf/transactions',
+                portfolioId ? { params: { portfolio_id: portfolioId } } : undefined
+            )
             const etfTransactions = (etfRes.data || []).map(tx => ({
                 ...tx,
-                type: 'ETF',
-                // For ETFs, use etf_name field
+                type: 'Holding',
                 name: tx.etf_name
             }))
-
-            const bondTransactions = (bondRes.data || []).map(tx => ({
-                ...tx,
-                type: 'BOND',
-                // For bonds, use bond_name field
-                name: tx.bond_name,
-                // Bonds don't have jse_ticker or shares/price_per_share
-                jse_ticker: null,
-                shares: null,
-                price_per_share: null,
-                total_value: tx.amount  // Bonds use 'amount' instead of 'total_value'
-            }))
-
-            // Combine and sort by created_at (newest insertion first)
-            const allTransactions = [...etfTransactions, ...bondTransactions].sort(
+            const allTransactions = etfTransactions.sort(
                 (a, b) => {
-                    // Use created_at if available (for precise insertion order), fallback to transaction_date
                     const dateA = a.created_at ? new Date(a.created_at) : new Date(a.transaction_date)
                     const dateB = b.created_at ? new Date(b.created_at) : new Date(b.transaction_date)
                     return dateB - dateA
@@ -71,11 +58,8 @@ export default function TransactionHistory({ refreshTrigger, onTransactionDelete
         if (!transactionToDelete) return
 
         try {
-            const endpoint = transactionToDelete.type === 'BOND'
-                ? `/api/bond/transactions/${transactionToDelete.id}`
-                : `/api/etf/transactions/${transactionToDelete.id}`
-
-            await axios.delete(endpoint)
+            const endpoint = `/api/etf/transactions/${transactionToDelete.id}`
+            await axios.delete(endpoint, portfolioId ? { params: { portfolio_id: portfolioId } } : undefined)
 
             // Refresh transactions list
             await fetchTransactions()
@@ -173,25 +157,13 @@ export default function TransactionHistory({ refreshTrigger, onTransactionDelete
                                                 </div>
                                             )}
                                         </div>
-                                        {tx.type === 'BOND' && (
-                                            <span className="px-1.5 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium rounded">
-                                                BOND
-                                            </span>
-                                        )}
                                     </div>
                                 </td>
                                 <td className="py-3 px-2 text-right font-medium text-gray-900 dark:text-white">
-                                    <BlurredValue>{tx.type === 'BOND'
-                                        ? '—'
-                                        : formatNumber(tx.shares, { minimumFractionDigits: 0, maximumFractionDigits: 4 })}</BlurredValue>
+                                    <BlurredValue>{formatNumber(tx.shares, { minimumFractionDigits: 0, maximumFractionDigits: 4 })}</BlurredValue>
                                 </td>
                                 <td className="py-3 px-2 text-right text-gray-600 dark:text-gray-400">
-                                    <BlurredValue>{tx.type === 'BOND'
-                                        ? '—'
-                                        : formatCurrency(tx.price_per_share, {
-                                              minimumFractionDigits: 2,
-                                              maximumFractionDigits: 2,
-                                          })}</BlurredValue>
+                                    <BlurredValue>{formatCurrency(tx.price_per_share, currencyFormatOpts)}</BlurredValue>
                                 </td>
                                 <td
                                     className={`py-3 px-2 text-right font-semibold ${
@@ -201,10 +173,7 @@ export default function TransactionHistory({ refreshTrigger, onTransactionDelete
                                     }`}
                                 >
                                     {tx.transaction_type === 'BUY' ? '-' : '+'}
-                                    <BlurredValue>{formatCurrency(tx.total_value, {
-                                        minimumFractionDigits: 2,
-                                        maximumFractionDigits: 2,
-                                    })}</BlurredValue>
+                                    <BlurredValue>{formatCurrency(tx.total_value, currencyFormatOpts)}</BlurredValue>
                                 </td>
                                 <td className="py-3 px-2">
                                     <button
@@ -248,33 +217,24 @@ export default function TransactionHistory({ refreshTrigger, onTransactionDelete
                     setTransactionToDelete(null)
                 }}
                 onConfirm={handleDeleteConfirm}
-                title={`Delete ${transactionToDelete?.type === 'BOND' ? 'Bond' : 'ETF'} Transaction`}
+                title={transactionDeleteModalTitle}
                 message={transactionToDelete ? `Are you sure you want to delete this ${transactionToDelete.transaction_type} transaction?` : ''}
                 details={
                     transactionToDelete
                         ? [
-                              `This will reverse the ${
+                            `This will reverse the ${
                                   transactionToDelete.transaction_type === 'BUY' ? 'purchase' : 'sale'
                               } of ${
-                                  transactionToDelete.type === 'BOND'
-                                      ? formatCurrency(transactionToDelete.total_value, {
-                                            minimumFractionDigits: 2,
-                                            maximumFractionDigits: 2,
-                                        })
-                                      : `${formatNumber(transactionToDelete.shares, {
-                                            minimumFractionDigits: 0,
-                                            maximumFractionDigits: 4,
-                                        })} shares`
+                                `${formatNumber(transactionToDelete.shares, {
+                                    minimumFractionDigits: 0,
+                                    maximumFractionDigits: 4,
+                                })} shares`
                               }`,
-                              transactionToDelete.type === 'ETF'
-                                  ? `Holding shares will be ${
-                                        transactionToDelete.transaction_type === 'BUY' ? 'reduced' : 'increased'
-                                    }`
-                                  : `Holding value will be ${
-                                        transactionToDelete.transaction_type === 'BUY' ? 'reduced' : 'increased'
-                                    }`,
-                              'Cost basis will be recalculated',
-                          ]
+                            `Holding shares will be ${
+                                transactionToDelete.transaction_type === 'BUY' ? 'reduced' : 'increased'
+                            }`,
+                            'Cost basis will be recalculated',
+                        ]
                         : []
                 }
                 confirmText="Delete"

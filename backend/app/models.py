@@ -27,6 +27,7 @@ class User(Base):
     ra_value_history = relationship("RAValueHistory", back_populates="owner")
     ra_contributions = relationship("RAContribution", back_populates="owner")
     etfs = relationship("ETF", back_populates="owner")
+    investment_portfolios = relationship("InvestmentPortfolio", back_populates="owner", cascade="all, delete-orphan")
     etf_holdings = relationship("ETFHolding", back_populates="owner")
     etf_transactions = relationship("ETFTransaction", back_populates="owner")
     bond_holdings = relationship("BondHolding", back_populates="owner")
@@ -37,7 +38,7 @@ class User(Base):
     holding_value_history = relationship("HoldingValueHistory", back_populates="owner")
     daily_portfolio_summaries = relationship("DailyPortfolioSummary", back_populates="owner")
     monthly_portfolio_summaries = relationship("MonthlyPortfolioSummary", back_populates="owner")
-    user_sheet = relationship("UserSheet", back_populates="owner", uselist=False)
+    user_sheets = relationship("UserSheet", back_populates="owner", cascade="all, delete-orphan")
     monthly_payslips = relationship("MonthlyPayslip", back_populates="owner", cascade="all, delete-orphan")
 
     # Investec integration relationships
@@ -48,21 +49,49 @@ class User(Base):
     emergency_fund_account = relationship("InvestecAccount", foreign_keys=[emergency_fund_account_id], post_update=True)
 
 
+class InvestmentPortfolio(Base):
+    __tablename__ = "investment_portfolios"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    name = Column(String, nullable=False)
+    slug = Column(String, nullable=False)
+    is_default_tfsa = Column(Boolean, default=False, server_default='false')
+    is_active = Column(Boolean, default=True, server_default='true')
+    target_allocation_enabled = Column(Boolean, default=True, server_default='true')
+    currency_code = Column(String, nullable=False, default="ZAR", server_default="ZAR")
+    created_at = Column(DateTime, default=get_sast_now)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "slug", name="uq_investment_portfolio_user_slug"),
+    )
+
+    owner = relationship("User", back_populates="investment_portfolios")
+    etf_holdings = relationship("ETFHolding", back_populates="portfolio")
+    etf_transactions = relationship("ETFTransaction", back_populates="portfolio")
+    sheet_mapping = relationship("UserSheet", back_populates="portfolio", uselist=False)
+    portfolio_value_snapshots = relationship("PortfolioValueHistory", back_populates="portfolio")
+    daily_summaries = relationship("DailyPortfolioSummary", back_populates="portfolio")
+    monthly_summaries = relationship("MonthlyPortfolioSummary", back_populates="portfolio")
+
+
 class UserSheet(Base):
-    """User-specific Google Sheets tab mapping"""
+    """Google Sheets tab mapping per user portfolio"""
     __tablename__ = "user_sheets"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), unique=True)
-    sheet_name = Column(String, unique=True)  # User ID-based sheet name (e.g., "user_123")
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    portfolio_id = Column(Integer, ForeignKey("investment_portfolios.id"), unique=True, nullable=True)
+    sheet_name = Column(String, unique=True)
     created_at = Column(DateTime, default=get_sast_now)
 
-    owner = relationship("User", back_populates="user_sheet")
+    owner = relationship("User", back_populates="user_sheets")
+    portfolio = relationship("InvestmentPortfolio", back_populates="sheet_mapping")
 
     @staticmethod
-    def generate_sheet_name(user_id: int) -> str:
-        """Generate a sheet name based on user ID"""
-        return f"user_{user_id}"
+    def generate_sheet_name(user_id: int, portfolio_slug: str) -> str:
+        safe_slug = (portfolio_slug or "portfolio").lower().replace(" ", "_")
+        return f"user_{user_id}_{safe_slug}"[:90]
 
 
 class Budget(Base):
@@ -181,6 +210,7 @@ class ETFHolding(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
+    portfolio_id = Column(Integer, ForeignKey("investment_portfolios.id"), index=True)
     jse_ticker = Column(String)          # e.g., "JSE:STX40"
     etf_name = Column(String)            # e.g., "Satrix Top 40"
     region = Column(String)              # e.g., "South Africa"
@@ -189,9 +219,11 @@ class ETFHolding(Base):
     current_price = Column(Float, nullable=True)  # Cached from Google Sheets
     price_updated_at = Column(DateTime, nullable=True)
     cost_basis = Column(Float, default=0)  # Total cost of shares purchased
+    instrument_type = Column(String, nullable=False, default="etf", server_default="etf")  # "etf" | "stock"
     created_at = Column(DateTime, default=get_sast_now)
 
     owner = relationship("User", back_populates="etf_holdings")
+    portfolio = relationship("InvestmentPortfolio", back_populates="etf_holdings")
     transactions = relationship("ETFTransaction", back_populates="holding")
     value_history = relationship("HoldingValueHistory", back_populates="holding")
 
@@ -202,6 +234,7 @@ class ETFTransaction(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
+    portfolio_id = Column(Integer, ForeignKey("investment_portfolios.id"), index=True)
     holding_id = Column(Integer, ForeignKey("etf_holdings.id"))
     transaction_type = Column(String)    # "BUY" or "SELL"
     shares = Column(Float)
@@ -211,6 +244,7 @@ class ETFTransaction(Base):
     created_at = Column(DateTime, default=get_sast_now)
 
     owner = relationship("User", back_populates="etf_transactions")
+    portfolio = relationship("InvestmentPortfolio", back_populates="etf_transactions")
     holding = relationship("ETFHolding", back_populates="transactions")
 
 
@@ -264,11 +298,12 @@ class ETFPriceHistory(Base):
 
 
 class PortfolioValueHistory(Base):
-    """Historical total portfolio value per user"""
+    """Historical total portfolio value per user portfolio"""
     __tablename__ = "portfolio_value_history"
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    portfolio_id = Column(Integer, ForeignKey("investment_portfolios.id"), index=True, nullable=False)
     total_value = Column(Float)
     total_contributions = Column(Float)  # Total TFSA deposits up to this point
     total_growth = Column(Float)         # total_value - total_contributions
@@ -276,6 +311,7 @@ class PortfolioValueHistory(Base):
     snapshot_type = Column(String, default="hourly")  # "hourly", "transaction", "eod", "monthly"
 
     owner = relationship("User", back_populates="portfolio_value_history")
+    portfolio = relationship("InvestmentPortfolio", back_populates="portfolio_value_snapshots")
 
 
 class HoldingValueHistory(Base):
@@ -301,9 +337,13 @@ class HoldingValueHistory(Base):
 class DailyPortfolioSummary(Base):
     """End-of-day aggregated portfolio summary for long-term storage"""
     __tablename__ = "daily_portfolio_summary"
+    __table_args__ = (
+        UniqueConstraint("user_id", "portfolio_id", "date", name="uq_daily_portfolio_summary_user_portfolio_date"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    portfolio_id = Column(Integer, ForeignKey("investment_portfolios.id"), index=True, nullable=False)
     date = Column(Date, index=True)
 
     # Portfolio totals
@@ -322,14 +362,22 @@ class DailyPortfolioSummary(Base):
     daily_change_percent = Column(Float)
 
     owner = relationship("User", back_populates="daily_portfolio_summaries")
+    portfolio = relationship("InvestmentPortfolio", back_populates="daily_summaries")
 
 
 class MonthlyPortfolioSummary(Base):
     """Monthly aggregated portfolio summary for multi-year views"""
     __tablename__ = "monthly_portfolio_summary"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "portfolio_id", "year", "month",
+            name="uq_monthly_portfolio_summary_user_portfolio_ym",
+        ),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    portfolio_id = Column(Integer, ForeignKey("investment_portfolios.id"), index=True, nullable=False)
     year = Column(Integer, index=True)
     month = Column(Integer, index=True)
 
@@ -350,6 +398,7 @@ class MonthlyPortfolioSummary(Base):
     monthly_change_percent = Column(Float)
 
     owner = relationship("User", back_populates="monthly_portfolio_summaries")
+    portfolio = relationship("InvestmentPortfolio", back_populates="monthly_summaries")
 
 
 # =====================================================

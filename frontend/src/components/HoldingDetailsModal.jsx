@@ -3,26 +3,39 @@ import GainLossIndicator from './GainLossIndicator'
 import BlurredValue from './BlurredValue'
 import { useState } from 'react'
 import axios from 'axios'
+import { formatCurrency as formatMoney } from '../utils/numberFormatting'
 
-export default function HoldingDetailsModal({ isOpen, onClose, holding, onHoldingUpdate, totalPortfolioValue, onEdit, onBuySell, onDelete }) {
+export default function HoldingDetailsModal({
+    isOpen,
+    onClose,
+    holding,
+    onHoldingUpdate,
+    totalPortfolioValue,
+    onEdit,
+    onBuySell,
+    onDelete,
+    portfolioId = null,
+    currencyCode = 'ZAR',
+    showTargetAllocation = true,
+}) {
     const [isEditingCostBasis, setIsEditingCostBasis] = useState(false)
     const [editedCostBasis, setEditedCostBasis] = useState('')
     const [isSaving, setIsSaving] = useState(false)
 
     if (!isOpen || !holding) return null
 
-    const isETF = holding.type === 'ETF'
     const isPositive = holding.gain_loss_percentage >= 0
 
     const formatCurrency = (value) => {
-        if (value === null || value === undefined) return '—'
-        return new Intl.NumberFormat('en-ZA', {
-            style: 'currency',
-            currency: 'ZAR',
+        if (value === null || value === undefined || Number.isNaN(Number(value))) return '—'
+        return formatMoney(value, {
+            currency: currencyCode,
             minimumFractionDigits: 2,
-            maximumFractionDigits: 2
-        }).format(value)
+            maximumFractionDigits: 2,
+        })
     }
+
+    const costBasisAffix = currencyCode === 'ZAR' ? 'R' : currencyCode
 
     const handleEditCostBasis = () => {
         setEditedCostBasis(holding.cost_basis.toString())
@@ -38,8 +51,11 @@ export default function HoldingDetailsModal({ isOpen, onClose, holding, onHoldin
 
         setIsSaving(true)
         try {
-            const endpoint = holding.type === 'ETF' ? `/api/etf/holdings/${holding.id}/cost-basis` : `/api/bond/holdings/${holding.id}/cost-basis`
-            const response = await axios.put(endpoint, { cost_basis: newCostBasis })
+            const response = await axios.put(
+                `/api/etf/holdings/${holding.id}/cost-basis`,
+                { cost_basis: newCostBasis },
+                portfolioId ? { params: { portfolio_id: portfolioId } } : undefined
+            )
 
             // Update the holding with new values
             if (onHoldingUpdate) {
@@ -78,13 +94,8 @@ export default function HoldingDetailsModal({ isOpen, onClose, holding, onHoldin
                 <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
                     <div className="flex items-center gap-3">
                         <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-                            {isETF ? holding.etf_name : holding.bond_name}
+                            {holding.etf_name}
                         </h2>
-                        {holding.type === 'BOND' && (
-                            <span className="px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium rounded">
-                                BOND
-                            </span>
-                        )}
                     </div>
                     <button
                         onClick={onClose}
@@ -104,7 +115,7 @@ export default function HoldingDetailsModal({ isOpen, onClose, holding, onHoldin
                                 <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Current Value</span>
                             </div>
                             <BlurredValue><div className="text-3xl font-bold text-gray-900 dark:text-white">
-                                {formatCurrency(isETF ? holding.total_value : holding.current_value)}
+                                {formatCurrency(holding.total_value)}
                             </div></BlurredValue>
                         </div>
 
@@ -171,36 +182,39 @@ export default function HoldingDetailsModal({ isOpen, onClose, holding, onHoldin
 
                             <div className="space-y-3">
                                 <div className="flex justify-between">
-                                    <span className="text-gray-600 dark:text-gray-400">Name:</span>
+                                    <span className="text-gray-600 dark:text-gray-400">Type:</span>
                                     <span className="font-medium text-gray-900 dark:text-white">
-                                        {isETF ? holding.etf_name : holding.bond_name}
+                                        {(holding.instrument_type || 'etf') === 'stock' ? 'Stock' : 'ETF'}
                                     </span>
                                 </div>
 
-                                {isETF && (
-                                    <>
-                                        <div className="flex justify-between">
-                                            <span className="text-gray-600 dark:text-gray-400">Ticker:</span>
-                                            <span className="font-medium text-gray-900 dark:text-white font-mono">
-                                                {holding.jse_ticker || '—'}
-                                            </span>
-                                        </div>
+                                <div className="flex justify-between">
+                                    <span className="text-gray-600 dark:text-gray-400">Name:</span>
+                                    <span className="font-medium text-gray-900 dark:text-white">
+                                        {holding.etf_name}
+                                    </span>
+                                </div>
 
-                                        <div className="flex justify-between">
-                                            <span className="text-gray-600 dark:text-gray-400">Shares:</span>
-                                            <BlurredValue><span className="font-medium text-gray-900 dark:text-white">
-                                                {holding.shares?.toFixed(4) || '—'}
-                                            </span></BlurredValue>
-                                        </div>
+                                <div className="flex justify-between">
+                                    <span className="text-gray-600 dark:text-gray-400">Ticker:</span>
+                                    <span className="font-medium text-gray-900 dark:text-white font-mono">
+                                        {holding.jse_ticker || '—'}
+                                    </span>
+                                </div>
 
-                                        <div className="flex justify-between">
-                                            <span className="text-gray-600 dark:text-gray-400">Price:</span>
-                                            <BlurredValue><span className="font-medium text-gray-900 dark:text-white">
-                                                {holding.current_price ? formatCurrency(holding.current_price) : '—'}
-                                            </span></BlurredValue>
-                                        </div>
-                                    </>
-                                )}
+                                <div className="flex justify-between">
+                                    <span className="text-gray-600 dark:text-gray-400">Shares:</span>
+                                    <BlurredValue><span className="font-medium text-gray-900 dark:text-white">
+                                        {holding.shares?.toFixed(4) || '—'}
+                                    </span></BlurredValue>
+                                </div>
+
+                                <div className="flex justify-between">
+                                    <span className="text-gray-600 dark:text-gray-400">Price:</span>
+                                    <BlurredValue><span className="font-medium text-gray-900 dark:text-white">
+                                        {holding.current_price ? formatCurrency(holding.current_price) : '—'}
+                                    </span></BlurredValue>
+                                </div>
 
                                 <div className="flex justify-between">
                                     <span className="text-gray-600 dark:text-gray-400">Region:</span>
@@ -223,7 +237,7 @@ export default function HoldingDetailsModal({ isOpen, onClose, holding, onHoldin
                                     {isEditingCostBasis ? (
                                         <div className="flex items-center gap-2">
                                             <div className="flex items-center">
-                                                <span className="mr-1 text-gray-500 dark:text-gray-400 text-sm">R</span>
+                                                <span className="mr-1 text-gray-500 dark:text-gray-400 text-sm">{costBasisAffix}</span>
                                                 <input
                                                     type="number"
                                                     inputMode="decimal"
@@ -268,17 +282,19 @@ export default function HoldingDetailsModal({ isOpen, onClose, holding, onHoldin
                                     <span className="text-gray-600 dark:text-gray-400">Actual %:</span>
                                     <BlurredValue><span className="font-medium text-gray-900 dark:text-white">
                                         {totalPortfolioValue > 0
-                                            ? ((isETF ? holding.total_value : holding.current_value || 0) / totalPortfolioValue * 100).toFixed(1)
+                                            ? ((holding.total_value || 0) / totalPortfolioValue * 100).toFixed(1)
                                             : '0.0'}%
                                     </span></BlurredValue>
                                 </div>
 
-                                <div className="flex justify-between">
-                                    <span className="text-gray-600 dark:text-gray-400">Target %:</span>
-                                    <BlurredValue><span className="font-medium text-gray-900 dark:text-white">
-                                        {holding.target_percentage.toFixed(1)}%
-                                    </span></BlurredValue>
-                                </div>
+                                {showTargetAllocation && (
+                                    <div className="flex justify-between">
+                                        <span className="text-gray-600 dark:text-gray-400">Target %:</span>
+                                        <BlurredValue><span className="font-medium text-gray-900 dark:text-white">
+                                            {(Number(holding.target_percentage) || 0).toFixed(1)}%
+                                        </span></BlurredValue>
+                                    </div>
+                                )}
 
                                 <div className="flex justify-between">
                                     <span className="text-gray-600 dark:text-gray-400">Gain/Loss %:</span>
@@ -298,7 +314,7 @@ export default function HoldingDetailsModal({ isOpen, onClose, holding, onHoldin
                     </div>
 
                     {/* Additional Info */}
-                    {isETF && holding.price_updated_at && (
+                    {holding.price_updated_at && (
                         <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
                             <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
                                 <Calendar className="w-4 h-4" />

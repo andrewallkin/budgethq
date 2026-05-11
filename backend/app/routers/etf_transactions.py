@@ -1,10 +1,11 @@
 import logging
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime, timedelta
 from .. import models, database, auth
+from ..portfolio_service import resolve_user_portfolio
 
 logger = logging.getLogger(__name__)
 from ..sheets_service import get_sheets_service
@@ -36,12 +37,15 @@ router = APIRouter(prefix="/etf", tags=["etf-transactions"])
 @router.get("/transactions")
 async def get_etf_transactions(
     holding_id: Optional[int] = None,
+    portfolio_id: Optional[int] = Query(default=None),
     current_user: models.User = Depends(auth.get_current_user),
     db: Session = Depends(database.get_db)
 ):
     """Get transaction history, optionally filtered by holding."""
+    portfolio = resolve_user_portfolio(db, current_user.id, portfolio_id=portfolio_id)
     query = db.query(models.ETFTransaction).filter(
-        models.ETFTransaction.user_id == current_user.id
+        models.ETFTransaction.user_id == current_user.id,
+        models.ETFTransaction.portfolio_id == portfolio.id,
     )
 
     if holding_id:
@@ -73,6 +77,7 @@ async def get_etf_transactions(
 @router.post("/transactions")
 async def create_etf_transaction(
     transaction: ETFTransactionCreate,
+    portfolio_id: Optional[int] = Query(default=None),
     current_user: models.User = Depends(auth.get_current_user),
     db: Session = Depends(database.get_db)
 ):
@@ -80,10 +85,12 @@ async def create_etf_transaction(
     Record a buy or sell transaction.
     This also updates the holding's share count.
     """
+    portfolio = resolve_user_portfolio(db, current_user.id, portfolio_id=portfolio_id)
     # Verify holding exists and belongs to user
     holding = db.query(models.ETFHolding).filter(
         models.ETFHolding.id == transaction.holding_id,
-        models.ETFHolding.user_id == current_user.id
+        models.ETFHolding.user_id == current_user.id,
+        models.ETFHolding.portfolio_id == portfolio.id,
     ).first()
 
     if not holding:
@@ -127,6 +134,7 @@ async def create_etf_transaction(
     # Create transaction record
     new_transaction = models.ETFTransaction(
         user_id=current_user.id,
+        portfolio_id=portfolio.id,
         holding_id=transaction.holding_id,
         transaction_type=transaction.transaction_type,
         shares=transaction.shares,
@@ -163,7 +171,7 @@ async def create_etf_transaction(
         holding.shares = 0
 
         # Delete from Google Sheet since it's no longer an active holding
-        sheets_service = get_sheets_service(current_user.id)
+        sheets_service = get_sheets_service(current_user.id, portfolio.id)
         if sheets_service.is_available():
             sheet_deleted = sheets_service.delete_etf_from_sheet(jse_ticker)
 
@@ -171,7 +179,7 @@ async def create_etf_transaction(
 
     elif transaction.transaction_type == "BUY" and shares_before_transaction == 0 and holding.shares > 0:
         # Re-activate holding by adding back to Google Sheet
-        sheets_service = get_sheets_service(current_user.id)
+        sheets_service = get_sheets_service(current_user.id, portfolio.id)
         if sheets_service.is_available():
             if not sheets_service.check_ticker_exists(holding.jse_ticker):
                 sheet_added = sheets_service.add_etf_to_sheet(holding.jse_ticker, holding.etf_name)
@@ -244,16 +252,19 @@ async def create_etf_transaction(
 @router.delete("/transactions/{transaction_id}")
 async def delete_etf_transaction(
     transaction_id: int,
+    portfolio_id: Optional[int] = Query(default=None),
     current_user: models.User = Depends(auth.get_current_user),
     db: Session = Depends(database.get_db)
 ):
     """
     Delete an ETF transaction and reverse its effects on the holding.
     """
+    portfolio = resolve_user_portfolio(db, current_user.id, portfolio_id=portfolio_id)
     # Verify transaction exists and belongs to user
     transaction = db.query(models.ETFTransaction).filter(
         models.ETFTransaction.id == transaction_id,
-        models.ETFTransaction.user_id == current_user.id
+        models.ETFTransaction.user_id == current_user.id,
+        models.ETFTransaction.portfolio_id == portfolio.id,
     ).first()
 
     if not transaction:
@@ -262,7 +273,8 @@ async def delete_etf_transaction(
     # Get the holding
     holding = db.query(models.ETFHolding).filter(
         models.ETFHolding.id == transaction.holding_id,
-        models.ETFHolding.user_id == current_user.id
+        models.ETFHolding.user_id == current_user.id,
+        models.ETFHolding.portfolio_id == portfolio.id,
     ).first()
 
     if not holding:
@@ -296,6 +308,7 @@ async def delete_etf_transaction(
 
         db.query(models.PortfolioValueHistory).filter(
             models.PortfolioValueHistory.user_id == current_user.id,
+            models.PortfolioValueHistory.portfolio_id == transaction.portfolio_id,
             models.PortfolioValueHistory.snapshot_type == "transaction",
             models.PortfolioValueHistory.recorded_at >= time_window_start,
             models.PortfolioValueHistory.recorded_at <= time_window_end

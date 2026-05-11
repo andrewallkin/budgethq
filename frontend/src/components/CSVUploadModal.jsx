@@ -2,9 +2,19 @@ import { useState, useRef } from 'react'
 import { X, Upload, FileText, AlertCircle, CheckCircle, Download } from 'lucide-react'
 import axios from 'axios'
 
-const REQUIRED_COLUMNS = ['jse_ticker', 'etf_name', 'region', 'shares', 'target_percentage']
+const BASE_REQUIRED_COLUMNS = ['jse_ticker', 'etf_name', 'region', 'shares']
 
-export default function CSVUploadModal({ isOpen, onClose, onSuccess }) {
+const ROW_TICKER_OK = /^[A-Z0-9:.\-^]+$/
+
+export default function CSVUploadModal({
+    isOpen,
+    onClose,
+    onSuccess,
+    portfolioId = null,
+    requireJsePrefix = true,
+    etfOnlyMode = true,
+    allocationOptional = false,
+}) {
     const [file, setFile] = useState(null)
     const [preview, setPreview] = useState([])
     const [errors, setErrors] = useState([])
@@ -50,8 +60,12 @@ export default function CSVUploadModal({ isOpen, onClose, onSuccess }) {
     const validateCSV = (headers, rows) => {
         const validationErrors = []
 
+        const requiredCols = allocationOptional
+            ? BASE_REQUIRED_COLUMNS
+            : [...BASE_REQUIRED_COLUMNS, 'target_percentage']
+
         // Check required columns
-        const missingCols = REQUIRED_COLUMNS.filter(col => !headers.includes(col))
+        const missingCols = requiredCols.filter(col => !headers.includes(col))
         if (missingCols.length > 0) {
             validationErrors.push(`Missing required columns: ${missingCols.join(', ')}`)
         }
@@ -60,12 +74,21 @@ export default function CSVUploadModal({ isOpen, onClose, onSuccess }) {
         rows.forEach((row, idx) => {
             const rowNum = idx + 2 // Account for header row and 0-index
 
-            if (!row.jse_ticker || !row.jse_ticker.startsWith('JSE:')) {
+            const tickerRaw = (row.jse_ticker || '').trim()
+            if (!tickerRaw) {
+                validationErrors.push(`Row ${rowNum}: Ticker column (jse_ticker) is required`)
+            } else if (requireJsePrefix && !tickerRaw.startsWith('JSE:')) {
                 validationErrors.push(`Row ${rowNum}: Invalid ticker format. Must start with "JSE:" (e.g., JSE:STX40)`)
+            } else if (!requireJsePrefix) {
+                const u = tickerRaw.toUpperCase()
+                if (!ROW_TICKER_OK.test(u) || u.length > 64) {
+                    validationErrors.push(`Row ${rowNum}: Invalid ticker characters or length`)
+                }
             }
 
+            const nameLabel = etfOnlyMode ? 'ETF name' : 'Instrument name'
             if (!row.etf_name) {
-                validationErrors.push(`Row ${rowNum}: ETF name is required`)
+                validationErrors.push(`Row ${rowNum}: ${nameLabel} is required`)
             }
 
             // Allow empty shares (for ETFs you plan to buy) or 0+
@@ -77,16 +100,26 @@ export default function CSVUploadModal({ isOpen, onClose, onSuccess }) {
                 }
             }
 
-            const targetPct = parseFloat(row.target_percentage)
+            const hasTargetCol = headers.includes('target_percentage')
+            const targetRaw = hasTargetCol ? row.target_percentage : ''
+
+            let targetPct
+            if (!hasTargetCol || targetRaw === undefined || targetRaw === null || String(targetRaw).trim() === '') {
+                targetPct = allocationOptional ? 0 : NaN
+            } else {
+                targetPct = parseFloat(targetRaw)
+            }
             if (isNaN(targetPct) || targetPct < 0 || targetPct > 100) {
                 validationErrors.push(`Row ${rowNum}: Target percentage must be between 0 and 100`)
             }
         })
 
-        // Check if target percentages sum to ~100%
-        const totalTarget = rows.reduce((sum, row) => sum + (parseFloat(row.target_percentage) || 0), 0)
-        if (Math.abs(totalTarget - 100) > 0.5) {
-            validationErrors.push(`Warning: Target percentages sum to ${totalTarget.toFixed(1)}% (should be 100%)`)
+        // Check if target percentages sum to ~100% (allocation-tracking portfolios only)
+        if (!allocationOptional) {
+            const totalTarget = rows.reduce((sum, row) => sum + (parseFloat(row.target_percentage) || 0), 0)
+            if (Math.abs(totalTarget - 100) > 0.5) {
+                validationErrors.push(`Warning: Target percentages sum to ${totalTarget.toFixed(1)}% (should be 100%)`)
+            }
         }
 
         return validationErrors
@@ -144,7 +177,8 @@ export default function CSVUploadModal({ isOpen, onClose, onSuccess }) {
 
         try {
             const response = await axios.post('/api/etf/bulk-import', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
+                headers: { 'Content-Type': 'multipart/form-data' },
+                ...(portfolioId ? { params: { portfolio_id: portfolioId } } : {})
             })
             setResult(response.data)
             if (response.data.created > 0 || response.data.updated > 0) {
@@ -163,16 +197,32 @@ export default function CSVUploadModal({ isOpen, onClose, onSuccess }) {
     }
 
     const downloadTemplate = () => {
-        const template = `jse_ticker,etf_name,region,shares,target_percentage
+        let template
+        if (allocationOptional) {
+            if (requireJsePrefix) {
+                template = `jse_ticker,etf_name,region,shares
+JSE:STX40,Satrix Top 40,South Africa,10.5
+JSE:STXNDQ,Satrix Nasdaq 100,USA,5.25`
+            } else {
+                template = `jse_ticker,etf_name,region,shares
+NASDAQ:AAPL,Apple Inc.,USA,2
+NYSE:KO,Coca-Cola,USA,5`
+            }
+        } else if (requireJsePrefix) {
+            template = `jse_ticker,etf_name,region,shares,target_percentage
 JSE:STX40,Satrix Top 40,South Africa,10.5,40
 JSE:STXNDQ,Satrix Nasdaq 100,USA,5.25,30
 JSE:SYGWD,Sygnia Itrix MSCI World,Global,8.0,30`
-
+        } else {
+            template = `jse_ticker,etf_name,region,shares,target_percentage
+NASDAQ:AAPL,Apple Inc.,USA,2,100
+NYSE:KO,Coca-Cola,USA,,0`
+        }
         const blob = new Blob([template], { type: 'text/csv' })
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
-        a.download = 'etf_holdings_template.csv'
+        a.download = etfOnlyMode ? 'etf_holdings_template.csv' : 'portfolio_holdings_template.csv'
         a.click()
         URL.revokeObjectURL(url)
     }
@@ -186,7 +236,7 @@ JSE:SYGWD,Sygnia Itrix MSCI World,Global,8.0,30`
                 <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
                     <div>
                         <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                            Import ETF Holdings
+                            {etfOnlyMode ? 'Import ETF Holdings' : 'Import holdings'}
                         </h2>
                         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                             Upload a CSV to create new holdings or update existing ones
@@ -247,7 +297,9 @@ JSE:SYGWD,Sygnia Itrix MSCI World,Global,8.0,30`
                                     Drop your CSV file here or click to browse
                                 </p>
                                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                                    Required: jse_ticker, etf_name, region, shares, target_percentage
+                                    Required: jse_ticker (ticker), etf_name, region, shares.
+                                    {!allocationOptional && ' Also target_percentage.'}
+                                    {requireJsePrefix ? ' Tickers must be JSE:…' : ' Tickers must be Google Finance symbols.'}
                                 </p>
                             </>
                         )}
@@ -301,7 +353,11 @@ JSE:SYGWD,Sygnia Itrix MSCI World,Global,8.0,30`
                                                     {row.shares}
                                                 </td>
                                                 <td className="px-3 py-2 text-right text-gray-900 dark:text-white">
-                                                    {row.target_percentage}%
+                                                    {allocationOptional &&
+                                                    (!row.target_percentage ||
+                                                        String(row.target_percentage).trim() === '')
+                                                        ? '—'
+                                                        : `${String(row.target_percentage)}%`}
                                                 </td>
                                             </tr>
                                         ))}
@@ -342,7 +398,7 @@ JSE:SYGWD,Sygnia Itrix MSCI World,Global,8.0,30`
                             )}
                             {result.added_to_sheet > 0 && (
                                 <p className="text-sm text-gray-700 dark:text-gray-300">
-                                    ✓ Added to Google Sheet: <strong>{result.added_to_sheet}</strong> ETFs
+                                    ✓ Added to Google Sheet: <strong>{result.added_to_sheet}</strong> tickers
                                 </p>
                             )}
                             {result.failed > 0 && (

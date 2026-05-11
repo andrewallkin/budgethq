@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { RefreshCw, Clock, CheckCircle, AlertCircle } from 'lucide-react'
 import axios from 'axios'
 
-export default function PriceRefreshIndicator({ onRefresh }) {
+export default function PriceRefreshIndicator({ onRefresh, portfolioId = null }) {
     const [lastSync, setLastSync] = useState(null)
     const [syncing, setSyncing] = useState(false)
     const [error, setError] = useState(null)
@@ -24,7 +24,10 @@ export default function PriceRefreshIndicator({ onRefresh }) {
 
     const fetchLastSync = async () => {
         try {
-            const res = await axios.get('/api/etf/last-sync')
+            const res = await axios.get(
+                '/api/etf/last-sync',
+                portfolioId ? { params: { portfolio_id: portfolioId } } : undefined
+            )
             setLastSync(res.data.last_sync)
             setError(null)
         } catch (err) {
@@ -37,7 +40,11 @@ export default function PriceRefreshIndicator({ onRefresh }) {
         setError(null)
 
         try {
-            await axios.post('/api/etf/sync-prices')
+            await axios.post(
+                '/api/etf/sync-prices',
+                {},
+                portfolioId ? { params: { portfolio_id: portfolioId } } : undefined
+            )
             await fetchLastSync()
             onRefresh?.()
         } catch (err) {

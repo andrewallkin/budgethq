@@ -1,10 +1,11 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy.orm import Session
 from typing import Optional
 from datetime import date
 from .. import models, database, auth
 from .. import history
 from ..utils import get_sast_now
+from ..portfolio_service import resolve_user_portfolio
 
 router = APIRouter(tags=["analytics"])
 
@@ -12,13 +13,16 @@ router = APIRouter(tags=["analytics"])
 async def update_etf_cost_basis(
     holding_id: int,
     data: dict,
+    portfolio_id: int | None = Query(default=None),
     current_user: models.User = Depends(auth.get_current_user),
     db: Session = Depends(database.get_db)
 ):
     """Update the cost basis for an ETF holding."""
+    portfolio = resolve_user_portfolio(db, current_user.id, portfolio_id=portfolio_id)
     holding = db.query(models.ETFHolding).filter(
         models.ETFHolding.id == holding_id,
-        models.ETFHolding.user_id == current_user.id
+        models.ETFHolding.user_id == current_user.id,
+        models.ETFHolding.portfolio_id == portfolio.id,
     ).first()
 
     if not holding:
@@ -151,72 +155,102 @@ async def trigger_snapshot(
     db: Session = Depends(database.get_db)
 ):
     """
-    Manually trigger a portfolio snapshot for debugging.
-    Records current portfolio state to history tables.
+    Manually trigger portfolio snapshots for debugging.
+    Records current state per investment portfolio (with holdings) to history tables.
     """
     now = get_sast_now()
 
-    # Calculate portfolio value and contributions
-    total_value, holdings_breakdown = history.calculate_portfolio_value(db, current_user.id)
-    total_contributions = history.calculate_total_contributions(db, current_user.id, as_of_date=now.date())
-    total_growth = total_value - total_contributions
+    portfolio_ids = [
+        row[0]
+        for row in db.query(models.ETFHolding.portfolio_id).filter(
+            models.ETFHolding.user_id == current_user.id,
+            models.ETFHolding.shares > 0,
+            models.ETFHolding.portfolio_id.isnot(None),
+        ).distinct().all()
+    ]
 
-    # Record portfolio value history
-    portfolio_record = models.PortfolioValueHistory(
-        user_id=current_user.id,
-        total_value=total_value,
-        total_contributions=total_contributions,
-        total_growth=total_growth,
-        recorded_at=now,
-        snapshot_type="manual"
-    )
-    db.add(portfolio_record)
-
-    # Record holding value history for each ETF (skip bonds - they have negative IDs)
     holdings_recorded = 0
-    for holding_id, data in holdings_breakdown.items():
-        # Skip bonds (negative IDs) - HoldingValueHistory only tracks ETFs
-        if holding_id < 0 or data.get('type') == 'BOND':
+    prices_recorded = 0
+    tickers_seen_global = set()
+    portfolio_totals = []
+
+    for portfolio_id in portfolio_ids:
+        portfolio = db.query(models.InvestmentPortfolio).filter(
+            models.InvestmentPortfolio.id == portfolio_id,
+            models.InvestmentPortfolio.user_id == current_user.id,
+        ).first()
+        if not portfolio:
             continue
 
-        holding_record = models.HoldingValueHistory(
+        total_value, holdings_breakdown = history.calculate_portfolio_value(
+            db, current_user.id, portfolio_id=portfolio_id
+        )
+        total_contributions = history.snapshot_contributions_for_portfolio(
+            db, current_user.id, portfolio_id, now.date()
+        )
+        total_growth = total_value - total_contributions
+
+        portfolio_record = models.PortfolioValueHistory(
             user_id=current_user.id,
-            holding_id=holding_id,
-            jse_ticker=data['jse_ticker'],
-            shares=data['shares'],
-            price=data['price'],
-            value=data['value'],
-            cost_basis=data['cost_basis'],
-            unrealized_gain=data['unrealized_gain'],
+            portfolio_id=portfolio_id,
+            total_value=total_value,
+            total_contributions=total_contributions,
+            total_growth=total_growth,
             recorded_at=now,
             snapshot_type="manual"
         )
-        db.add(holding_record)
-        holdings_recorded += 1
+        db.add(portfolio_record)
 
-    # Record ETF prices
-    prices_recorded = 0
-    tickers_seen = set()
-    for data in holdings_breakdown.values():
-        if data.get('jse_ticker') and data['jse_ticker'] not in tickers_seen and data.get('price'):
-            price_record = models.ETFPriceHistory(
+        for holding_id, data in holdings_breakdown.items():
+            if holding_id < 0 or data.get('type') == 'BOND':
+                continue
+            holding_record = models.HoldingValueHistory(
+                user_id=current_user.id,
+                holding_id=holding_id,
                 jse_ticker=data['jse_ticker'],
+                shares=data['shares'],
                 price=data['price'],
+                value=data['value'],
+                cost_basis=data['cost_basis'],
+                unrealized_gain=data['unrealized_gain'],
                 recorded_at=now,
                 snapshot_type="manual"
             )
-            db.add(price_record)
-            tickers_seen.add(data['jse_ticker'])
-            prices_recorded += 1
+            db.add(holding_record)
+            holdings_recorded += 1
+
+        for data in holdings_breakdown.values():
+            if data.get('jse_ticker') and data['jse_ticker'] not in tickers_seen_global and data.get('price'):
+                price_record = models.ETFPriceHistory(
+                    jse_ticker=data['jse_ticker'],
+                    price=data['price'],
+                    recorded_at=now,
+                    snapshot_type="manual"
+                )
+                db.add(price_record)
+                tickers_seen_global.add(data['jse_ticker'])
+                prices_recorded += 1
+
+        portfolio_totals.append({
+            "portfolio_id": portfolio_id,
+            "total_value": round(total_value, 2),
+            "total_contributions": round(total_contributions, 2),
+            "total_growth": round(total_growth, 2),
+        })
 
     db.commit()
+
+    agg_value = sum(p["total_value"] for p in portfolio_totals)
+    agg_contrib = sum(p["total_contributions"] for p in portfolio_totals)
 
     return {
         'status': 'success',
         'snapshot_time': now.isoformat() + 'Z',
-        'total_value': round(total_value, 2),
-        'total_contributions': round(total_contributions, 2),
-        'total_growth': round(total_growth, 2),
+        'portfolios_snapshotted': len(portfolio_totals),
+        'portfolio_breakdown': portfolio_totals,
+        'total_value': round(agg_value, 2),
+        'total_contributions': round(agg_contrib, 2),
+        'total_growth': round(agg_value - agg_contrib, 2),
         'holdings_recorded': holdings_recorded,
         'prices_recorded': prices_recorded
     }
@@ -224,6 +258,7 @@ async def trigger_snapshot(
 @router.get("/portfolio/history")
 async def get_portfolio_history(
     range: str = "1m",
+    portfolio_id: int | None = Query(default=None),
     current_user: models.User = Depends(auth.get_current_user),
     db: Session = Depends(database.get_db)
 ):
@@ -236,7 +271,16 @@ async def get_portfolio_history(
     if range not in ["1m", "3m", "6m", "1y", "all"]:
         raise HTTPException(status_code=400, detail="Invalid range. Use: 1m, 3m, 6m, 1y, all")
 
-    data = history.get_portfolio_history(db, current_user.id, range)
+    portfolio = resolve_user_portfolio(db, current_user.id, portfolio_id=portfolio_id)
+    include_overlay = bool(portfolio.is_default_tfsa)
+
+    data = history.get_portfolio_history(
+        db,
+        current_user.id,
+        range,
+        portfolio_id=portfolio.id,
+        include_tfsa_contribution_overlay=include_overlay,
+    )
 
     # Calculate summary statistics
     if data:
@@ -249,6 +293,7 @@ async def get_portfolio_history(
 
     return {
         "range": range,
+        "portfolio_id": portfolio.id,
         "data": data,
         "summary": {
             "period_start_value": round(period_start_value, 2),

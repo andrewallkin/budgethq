@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import axios from 'axios'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts'
 import { Plus, Trash2, Calculator, TrendingUp, TrendingDown, PiggyBank, Upload, Edit2, ArrowUpDown, ArrowUp, ArrowDown, Layers } from 'lucide-react'
@@ -6,7 +6,6 @@ import { Plus, Trash2, Calculator, TrendingUp, TrendingDown, PiggyBank, Upload, 
 // Import new components
 import CSVUploadModal from '../components/CSVUploadModal'
 import AddETFModal from '../components/AddETFModal'
-import AddBondModal from '../components/AddBondModal'
 import BuySellModal from '../components/BuySellModal'
 import EditHoldingModal from '../components/EditHoldingModal'
 import TransactionHistory from '../components/TransactionHistory'
@@ -20,19 +19,28 @@ import { formatCurrency, formatNumber, formatDateSafe } from '../utils/numberFor
 import BlurredValue from '../components/BlurredValue'
 
 
-export default function TFSAPortfolio() {
+const HEADER_EDIT_CURRENCIES = ['ZAR', 'USD', 'EUR', 'GBP']
+
+export default function TFSAPortfolio({
+    portfolioId = null,
+    portfolioName = 'TFSA Portfolio',
+    isTfsa = true,
+    showTargetAllocation = true,
+    currencyCode = 'ZAR',
+    onPortfolioMetaUpdated,
+}) {
     const { blurSensitiveValues } = useAuth()
     const [loading, setLoading] = useState(true)
     const [holdings, setHoldings] = useState([])
     const [threshold, setThreshold] = useState(5.0)
     const [rebalanceData, setRebalanceData] = useState(null)
     const [isSaving, setIsSaving] = useState(false)
+    const [allocToggleSaving, setAllocToggleSaving] = useState(false)
     const [transactionRefresh, setTransactionRefresh] = useState(0)
 
     // Modal states
     const [showCSVModal, setShowCSVModal] = useState(false)
     const [showAddETFModal, setShowAddETFModal] = useState(false)
-    const [showAddBondModal, setShowAddBondModal] = useState(false)
     const [showBuySellModal, setShowBuySellModal] = useState(false)
     const [showEditModal, setShowEditModal] = useState(false)
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -65,16 +73,62 @@ export default function TFSAPortfolio() {
     // What If Calculator
     const [whatIfAmount, setWhatIfAmount] = useState('')
 
-    useEffect(() => {
-        fetchHoldings()
-        fetchContributions()
-    }, [])
+    const portfolioCurrency = isTfsa ? 'ZAR' : (currencyCode || 'ZAR')
+    const portfolioFmtBase = useMemo(
+        () => ({
+            currency: portfolioCurrency,
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        }),
+        [portfolioCurrency]
+    )
+
+    const fmtPortfolio = useCallback(
+        (value, overrides = {}) => formatCurrency(value, { ...portfolioFmtBase, ...overrides }),
+        [portfolioFmtBase]
+    )
+
+    const fmtZar = useCallback(
+        (value, overrides = {}) =>
+            formatCurrency(value, {
+                currency: 'ZAR',
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+                ...overrides,
+            }),
+        []
+    )
+
+    const [editingPortfolioHeader, setEditingPortfolioHeader] = useState(false)
+    const [draftPortfolioName, setDraftPortfolioName] = useState(portfolioName)
+    const [draftPortfolioCurrency, setDraftPortfolioCurrency] = useState(portfolioCurrency)
 
     useEffect(() => {
+        setDraftPortfolioName(portfolioName)
+    }, [portfolioName])
+
+    useEffect(() => {
+        setDraftPortfolioCurrency(portfolioCurrency)
+    }, [portfolioCurrency])
+
+    useEffect(() => {
+        fetchHoldings()
+        if (isTfsa) {
+            fetchContributions()
+        } else {
+            hasLoadedContributions.current = true
+        }
+    }, [portfolioId, isTfsa])
+
+    useEffect(() => {
+        if (!showTargetAllocation) {
+            setRebalanceData(null)
+            return
+        }
         if (holdings.length > 0) {
             calculateRebalance()
         }
-    }, [holdings, threshold])
+    }, [holdings, threshold, showTargetAllocation])
 
     // Track if contributions data has been loaded and if user has edited
     const hasLoadedContributions = useRef(false)
@@ -98,32 +152,14 @@ export default function TFSAPortfolio() {
 
     const fetchHoldings = async () => {
         try {
-            // Fetch both ETFs and Bonds in parallel
-            const [etfRes, bondRes] = await Promise.all([
-                axios.get('/api/etf/holdings'),
-                axios.get('/api/bond/holdings')
-            ])
-
-            // Combine ETFs and Bonds with type indicator
+            const requestConfig = portfolioId ? { params: { portfolio_id: portfolioId } } : undefined
+            const etfRes = await axios.get('/api/etf/holdings', requestConfig)
             const etfs = (etfRes.data || []).map(etf => ({
                 ...etf,
-                type: 'ETF',
+                type: isTfsa ? 'ETF' : 'Holding',
                 total_value: etf.total_value || 0
             }))
-
-            const bonds = (bondRes.data || []).map(bond => ({
-                ...bond,
-                type: 'BOND',
-                // For bonds, use current_value as total_value for consistency
-                total_value: bond.current_value || 0,
-                // Add placeholder fields for compatibility
-                jse_ticker: null,
-                etf_name: bond.bond_name,
-                shares: null,
-                current_price: null
-            }))
-
-            setHoldings([...etfs, ...bonds])
+            setHoldings(etfs)
         } catch (err) {
             console.error("Failed to fetch holdings", err)
         } finally {
@@ -132,6 +168,7 @@ export default function TFSAPortfolio() {
     }
 
     const fetchContributions = async () => {
+        if (!isTfsa) return
         try {
             const res = await axios.get('/api/tfsa/contributions')
             if (res.data) {
@@ -194,6 +231,7 @@ export default function TFSAPortfolio() {
     }
 
     const saveContributions = async () => {
+        if (!isTfsa) return
         setIsSaving(true)
         try {
             await axios.post('/api/tfsa/contributions', {
@@ -228,11 +266,10 @@ export default function TFSAPortfolio() {
         if (!holdingToDelete) return
 
         try {
-            if (holdingToDelete.type === 'BOND') {
-                await axios.delete(`/api/bond/holdings/${holdingToDelete.id}`)
-            } else {
-                await axios.delete(`/api/etf/holdings/${holdingToDelete.id}?delete_from_sheet=true`)
-            }
+            await axios.delete(
+                `/api/etf/holdings/${holdingToDelete.id}?delete_from_sheet=true`,
+                portfolioId ? { params: { portfolio_id: portfolioId } } : undefined
+            )
             setHoldings(holdings.filter(h => h.id !== holdingToDelete.id))
             setTransactionRefresh(prev => prev + 1)
         } catch (err) {
@@ -280,15 +317,11 @@ export default function TFSAPortfolio() {
     }
 
     const getSortedHoldings = () => {
-        // Filter out zero holdings for table display, but include ETFs with non-zero target percentage
-        const activeHoldings = holdings.filter(h => {
-            if (h.type === 'BOND') {
-                return (h.current_value || 0) > 0
-            } else {
-                // Show ETFs if they have shares > 0 OR have a target percentage > 0
-                return (h.shares || 0) > 0 || (h.target_percentage || 0) > 0
-            }
-        })
+        const activeHoldings = holdings.filter((h) =>
+            showTargetAllocation
+                ? (h.shares || 0) > 0 || (h.target_percentage || 0) > 0
+                : (h.shares || 0) > 0
+        )
 
         if (!sortColumn) return activeHoldings
 
@@ -297,12 +330,12 @@ export default function TFSAPortfolio() {
 
             switch (sortColumn) {
                 case 'name':
-                    aVal = (a.type === 'ETF' ? a.etf_name : a.bond_name).toLowerCase()
-                    bVal = (b.type === 'ETF' ? b.etf_name : b.bond_name).toLowerCase()
+                    aVal = a.etf_name.toLowerCase()
+                    bVal = b.etf_name.toLowerCase()
                     break
                 case 'value':
-                    aVal = a.type === 'ETF' ? (a.total_value || 0) : (a.current_value || 0)
-                    bVal = b.type === 'ETF' ? (b.total_value || 0) : (b.current_value || 0)
+                    aVal = a.total_value || 0
+                    bVal = b.total_value || 0
                     break
                 case 'gain_loss':
                     // Sort by percentage first, then by amount
@@ -334,6 +367,44 @@ export default function TFSAPortfolio() {
             : <ArrowDown className="w-3 h-3" />
     }
 
+    const persistTargetAllocationToggle = async (enabled) => {
+        if (!portfolioId || isTfsa) return
+        setAllocToggleSaving(true)
+        try {
+            const { data } = await axios.patch(`/api/investments/${portfolioId}`, {
+                target_allocation_enabled: enabled,
+            })
+            onPortfolioMetaUpdated?.(data)
+        } catch (err) {
+            window.alert(err.response?.data?.detail || 'Could not update target allocation setting')
+        } finally {
+            setAllocToggleSaving(false)
+        }
+    }
+
+    const savePortfolioHeader = async () => {
+        if (!portfolioId) return
+        const body = {}
+        const trimmed = draftPortfolioName.trim()
+        if (trimmed && trimmed !== portfolioName) {
+            body.name = trimmed
+        }
+        if (!isTfsa && draftPortfolioCurrency !== portfolioCurrency) {
+            body.currency_code = draftPortfolioCurrency
+        }
+        if (Object.keys(body).length === 0) {
+            setEditingPortfolioHeader(false)
+            return
+        }
+        try {
+            const { data } = await axios.patch(`/api/investments/${portfolioId}`, body)
+            onPortfolioMetaUpdated?.(data)
+            setEditingPortfolioHeader(false)
+        } catch (err) {
+            window.alert(err.response?.data?.detail || 'Could not update portfolio')
+        }
+    }
+
     // Deposit management
     const addDeposit = () => {
         const amount = parseFloat(String(newDepositAmount).replace(/,/g, ''))
@@ -344,10 +415,7 @@ export default function TFSAPortfolio() {
             const exceed = newTotal - tfsaAnnualLimit
             if (
                 !window.confirm(
-                    `This will exceed your annual limit by ${formatCurrency(exceed, {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                    })}. Continue anyway?`
+                    `This will exceed your annual limit by ${fmtZar(exceed)}. Continue anyway?`
                 )
             ) {
                 return
@@ -386,10 +454,7 @@ export default function TFSAPortfolio() {
             const exceed = yearTotal - tfsaAnnualLimit
             if (
                 !window.confirm(
-                    `FY ${fy} will exceed annual limit by ${formatCurrency(exceed, {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                    })}. Continue anyway?`
+                    `FY ${fy} will exceed annual limit by ${fmtZar(exceed)}. Continue anyway?`
                 )
             ) {
                 return
@@ -401,10 +466,7 @@ export default function TFSAPortfolio() {
             const exceed = newLifetimeTotal - TFSA_LIFETIME_LIMIT
             if (
                 !window.confirm(
-                    `This will exceed your lifetime limit by ${formatCurrency(exceed, {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                    })}. Continue anyway?`
+                    `This will exceed your lifetime limit by ${fmtZar(exceed)}. Continue anyway?`
                 )
             ) {
                 return
@@ -440,6 +502,10 @@ export default function TFSAPortfolio() {
     // Lifetime contribution calculations
     const historicalTotal = historicalContributions.reduce((sum, h) => sum + h.amount, 0)
     const totalLifetimeContributions = historicalTotal + annualContributions
+    const totalInvested = isTfsa
+        ? totalLifetimeContributions
+        : holdings.reduce((sum, h) => sum + (h.cost_basis || 0), 0)
+
     const lifetimeRemaining = TFSA_LIFETIME_LIMIT - totalLifetimeContributions
     const lifetimePercentUsed = (totalLifetimeContributions / TFSA_LIFETIME_LIMIT) * 100
 
@@ -488,9 +554,88 @@ export default function TFSAPortfolio() {
         <div className="space-y-6 sm:space-y-8">
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">📈 TFSA Portfolio</h1>
+                <div className="flex flex-col gap-2 min-w-0 flex-1">
+                    {editingPortfolioHeader && portfolioId ? (
+                        <div className="flex flex-wrap items-end gap-2">
+                            <input
+                                type="text"
+                                value={draftPortfolioName}
+                                onChange={(e) => setDraftPortfolioName(e.target.value)}
+                                className="text-xl sm:text-2xl font-bold px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white min-w-0 flex-1 max-w-md"
+                            />
+                            {!isTfsa && (
+                                <select
+                                    value={draftPortfolioCurrency}
+                                    onChange={(e) => setDraftPortfolioCurrency(e.target.value)}
+                                    className="text-sm px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                    aria-label="Portfolio currency"
+                                >
+                                    {HEADER_EDIT_CURRENCIES.map((c) => (
+                                        <option key={c} value={c}>{c}</option>
+                                    ))}
+                                </select>
+                            )}
+                            <button
+                                type="button"
+                                onClick={savePortfolioHeader}
+                                className="px-3 py-2 text-sm bg-emerald-600 text-white rounded-lg hover:bg-emerald-700"
+                            >
+                                Save
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setDraftPortfolioName(portfolioName)
+                                    setDraftPortfolioCurrency(portfolioCurrency)
+                                    setEditingPortfolioHeader(false)
+                                }}
+                                className="px-3 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white truncate">
+                                📈 {portfolioName}
+                            </h1>
+                            {!isTfsa && (
+                                <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 shrink-0">
+                                    {portfolioCurrency}
+                                </span>
+                            )}
+                            {portfolioId && (
+                                <button
+                                    type="button"
+                                    onClick={() => setEditingPortfolioHeader(true)}
+                                    className="p-2 text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg shrink-0"
+                                    title="Edit portfolio name and currency"
+                                >
+                                    <Edit2 className="w-5 h-5" />
+                                </button>
+                            )}
+                        </div>
+                    )}
+                    {!isTfsa && portfolioId && (
+                        <label className="mt-2 flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 cursor-pointer select-none max-w-md">
+                            <input
+                                type="checkbox"
+                                className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                                checked={showTargetAllocation}
+                                disabled={allocToggleSaving}
+                                onChange={(e) => persistTargetAllocationToggle(e.target.checked)}
+                            />
+                            <span>
+                                Track target allocation
+                                <span className="block text-xs text-gray-500 dark:text-gray-500 font-normal mt-0.5">
+                                    Turn off for simple positions-only portfolios (hide targets, rebalance, and what-if split).
+                                </span>
+                            </span>
+                        </label>
+                    )}
+                </div>
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                    <PriceRefreshIndicator onRefresh={fetchHoldings} />
+                    <PriceRefreshIndicator onRefresh={fetchHoldings} portfolioId={portfolioId} />
                     <div className="flex flex-row gap-2 sm:gap-3 flex-1 sm:flex-initial">
                         <button
                             onClick={() => setShowCSVModal(true)}
@@ -504,14 +649,7 @@ export default function TFSAPortfolio() {
                             className="flex-1 min-w-0 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                         >
                             <Plus className="w-4 h-4 shrink-0" />
-                            <span className="truncate">Add ETF</span>
-                        </button>
-                        <button
-                            onClick={() => setShowAddBondModal(true)}
-                            className="flex-1 min-w-0 flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                        >
-                            <Plus className="w-4 h-4 shrink-0" />
-                            <span className="truncate">Add Bond</span>
+                            <span className="truncate">{isTfsa ? 'Add ETF' : 'Add ETF / stock'}</span>
                         </button>
                     </div>
                 </div>
@@ -523,7 +661,7 @@ export default function TFSAPortfolio() {
                     <div>
                         <h2 className="text-sm font-medium text-emerald-100 uppercase tracking-wide">Portfolio Value</h2>
                         <BlurredValue><p className="mt-2 text-4xl font-bold text-white">
-                            {formatCurrency(totalValue, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {fmtPortfolio(totalValue)}
                         </p></BlurredValue>
                         <p className="text-sm text-emerald-100 mt-1">{holdings.length} holding{holdings.length !== 1 ? 's' : ''} in portfolio</p>
                     </div>
@@ -531,21 +669,21 @@ export default function TFSAPortfolio() {
                     <div>
                         <h2 className="text-sm font-medium text-emerald-100 uppercase tracking-wide">Total Invested</h2>
                         <BlurredValue><p className="mt-2 text-3xl font-bold text-white">
-                            {formatCurrency(totalLifetimeContributions, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {fmtPortfolio(totalInvested)}
                         </p></BlurredValue>
-                        <p className="text-sm text-emerald-100 mt-1">Lifetime contributions</p>
+                        <p className="text-sm text-emerald-100 mt-1">{isTfsa ? 'Lifetime contributions' : 'Total cost basis'}</p>
                     </div>
 
                     <div>
                         <h2 className="text-sm font-medium text-emerald-100 uppercase tracking-wide">
-                            {totalValue >= totalLifetimeContributions ? 'Profit' : 'Loss'}
+                            {totalValue >= totalInvested ? 'Profit' : 'Loss'}
                         </h2>
-                        <BlurredValue><p className={`mt-2 text-3xl font-bold ${totalValue >= totalLifetimeContributions ? 'text-white' : 'text-red-200'}`}>
-                            {formatCurrency(totalValue - totalLifetimeContributions, { minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: 'always' })}
+                        <BlurredValue><p className={`mt-2 text-3xl font-bold ${totalValue >= totalInvested ? 'text-white' : 'text-red-200'}`}>
+                            {fmtPortfolio(totalValue - totalInvested, { signDisplay: 'always' })}
                         </p>
-                        <p className={`text-sm mt-1 font-medium ${totalValue >= totalLifetimeContributions ? 'text-emerald-100' : 'text-red-200'}`}>
-                            {totalLifetimeContributions > 0
-                                ? `${totalValue >= totalLifetimeContributions ? '+' : ''}${(((totalValue - totalLifetimeContributions) / totalLifetimeContributions) * 100).toFixed(2)}%`
+                        <p className={`text-sm mt-1 font-medium ${totalValue >= totalInvested ? 'text-emerald-100' : 'text-red-200'}`}>
+                            {totalInvested > 0
+                                ? `${totalValue >= totalInvested ? '+' : ''}${(((totalValue - totalInvested) / totalInvested) * 100).toFixed(2)}%`
                                 : '—'
                             } return
                         </p></BlurredValue>
@@ -553,13 +691,19 @@ export default function TFSAPortfolio() {
                 </div>
             </div>
 
-            {/* Portfolio Performance Chart */}
-            <div className={blurSensitiveValues ? 'blur-[5px] select-none' : ''}>
-                <PortfolioChart />
-            </div>
+            {/* Portfolio Performance Chart (scoped to this portfolio) */}
+            {portfolioId != null && (
+                <div className={blurSensitiveValues ? 'blur-[5px] select-none' : ''}>
+                    <PortfolioChart
+                        portfolioId={portfolioId}
+                        currencyCode={portfolioCurrency}
+                        isTfsa={isTfsa}
+                    />
+                </div>
+            )}
 
             {/* TFSA Contribution Tracking */}
-            <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-600 transition-colors">
+            {isTfsa && <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-600 transition-colors">
                 <div className="flex items-center justify-between mb-4">
                     <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
                         <PiggyBank className="w-5 h-5 text-blue-500" />
@@ -576,7 +720,7 @@ export default function TFSAPortfolio() {
                         <div className="flex items-center justify-between">
                             <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Annual Limit</h3>
                             <BlurredValue><span className="text-sm font-bold text-gray-900 dark:text-white">
-                                {formatCurrency(tfsaAnnualLimit, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                {fmtZar(tfsaAnnualLimit, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                             </span></BlurredValue>
                         </div>
 
@@ -612,7 +756,7 @@ export default function TFSAPortfolio() {
                                     <div key={deposit.id} className="flex items-center justify-between p-2 bg-blue-50 dark:bg-blue-900/20 rounded text-sm">
                                         <div className="flex items-center gap-2 min-w-0 flex-1">
                                             <BlurredValue><span className="font-medium text-blue-700 dark:text-blue-400 shrink-0">
-                                                {formatCurrency(deposit.amount, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                                {fmtZar(deposit.amount, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                                             </span></BlurredValue>
                                             <span className="text-gray-500 dark:text-gray-400 text-xs whitespace-nowrap shrink-0">
                                                 {formatDateSafe(deposit.date, { day: 'numeric', month: 'short', year: 'numeric' })}
@@ -632,10 +776,10 @@ export default function TFSAPortfolio() {
                         <div>
                             <div className="flex justify-between text-sm mb-1">
                                 <BlurredValue><span className="text-gray-600 dark:text-gray-400">
-                                    {formatCurrency(annualContributions, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                    {fmtZar(annualContributions, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                                 </span></BlurredValue>
                                 <BlurredValue><span className={`font-bold ${contributionsRemaining < 0 ? 'text-red-500' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                                    {formatCurrency(contributionsRemaining, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} left
+                                    {fmtZar(contributionsRemaining, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} left
                                 </span></BlurredValue>
                             </div>
                             <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden mb-1">
@@ -658,7 +802,7 @@ export default function TFSAPortfolio() {
                         <div className="flex items-center justify-between">
                             <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Lifetime Limit</h3>
                             <BlurredValue><span className="text-sm font-bold text-gray-900 dark:text-white">
-                                {formatCurrency(TFSA_LIFETIME_LIMIT, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                {fmtZar(TFSA_LIFETIME_LIMIT, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                             </span></BlurredValue>
                         </div>
 
@@ -697,7 +841,7 @@ export default function TFSAPortfolio() {
                                             <span className="font-medium text-purple-700 dark:text-purple-400">FY {hist.financial_year}</span>
                                             <span className="text-gray-500 dark:text-gray-400 text-xs">→</span>
                                             <BlurredValue><span className="font-medium text-gray-900 dark:text-white">
-                                                {formatCurrency(hist.amount, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                                {fmtZar(hist.amount, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                                             </span></BlurredValue>
                                         </div>
                                         <button
@@ -714,10 +858,10 @@ export default function TFSAPortfolio() {
                         <div className="p-4 bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 rounded-lg">
                             <div className="text-center mb-3">
                                 <BlurredValue><p className="text-2xl font-bold text-purple-700 dark:text-purple-400">
-                                    {formatCurrency(totalLifetimeContributions, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                    {fmtZar(totalLifetimeContributions, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                                 </p>
                                 <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                                    Total ({formatCurrency(historicalTotal, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} + {formatCurrency(annualContributions, { minimumFractionDigits: 0, maximumFractionDigits: 0 })})
+                                    Total ({fmtZar(historicalTotal, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} + {fmtZar(annualContributions, { minimumFractionDigits: 0, maximumFractionDigits: 0 })})
                                 </p></BlurredValue>
                             </div>
 
@@ -736,14 +880,14 @@ export default function TFSAPortfolio() {
                                         {formatNumber(lifetimePercentUsed, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}% used
                                     </span></BlurredValue>
                                     <BlurredValue><span className={`font-bold ${lifetimeRemaining < 0 ? 'text-red-500' : 'text-purple-600 dark:text-purple-400'}`}>
-                                        {formatCurrency(lifetimeRemaining, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} left
+                                        {fmtZar(lifetimeRemaining, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} left
                                     </span></BlurredValue>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
-            </div>
+            </div>}
 
             {/* Holdings Table */}
             {holdings.length > 0 && (
@@ -791,7 +935,7 @@ export default function TFSAPortfolio() {
                                 {getSortedHoldings().map((h) => {
                                     return (
                                         <tr
-                                            key={`${h.type}-${h.id}`}
+                                            key={h.id}
                                             className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer"
                                             onClick={(e) => {
                                                 if (e.target.closest('button')) return
@@ -802,29 +946,28 @@ export default function TFSAPortfolio() {
                                             <td className="py-3 px-2">
                                                 <div className="flex items-center gap-2">
                                                     <div className="font-medium text-gray-900 dark:text-white truncate">
-                                                        {h.type === 'ETF' ? h.etf_name : h.bond_name}
+                                                        {h.etf_name}
                                                     </div>
-                                                    {h.type === 'BOND' && (
-                                                        <span className="px-1.5 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium rounded shrink-0">
-                                                            BOND
+                                                    {!isTfsa && (
+                                                        <span className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300 shrink-0">
+                                                            {(h.instrument_type || 'etf') === 'stock' ? 'Stock' : 'ETF'}
                                                         </span>
                                                     )}
                                                 </div>
                                             </td>
                                             <td className="py-3 px-2 text-right font-semibold text-gray-900 dark:text-white">
-                                                <BlurredValue>{formatCurrency(h.type === 'ETF' ? h.total_value : h.current_value || 0, {
-                                                    minimumFractionDigits: 2,
-                                                    maximumFractionDigits: 2,
-                                                })}</BlurredValue>
+                                                <BlurredValue>{fmtPortfolio(h.total_value || 0)}</BlurredValue>
                                             </td>
                                             <td className="py-3 px-2 text-center">
                                                 <GainLossIndicator
                                                     percentage={h.gain_loss_percentage}
                                                     amount={h.gain_loss_amount}
+                                                    formatCurrencyOpts={portfolioFmtBase}
                                                 />
                                             </td>
                                             <td className="py-3 px-2" onClick={(e) => e.stopPropagation()}>
                                                 <div className="flex items-center justify-center gap-1">
+                                                    {showTargetAllocation && (
                                                     <button
                                                         onClick={() => handleEdit(h)}
                                                         className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors"
@@ -832,6 +975,7 @@ export default function TFSAPortfolio() {
                                                     >
                                                         <Edit2 className="w-4 h-4" />
                                                     </button>
+                                                    )}
                                                     <button
                                                         onClick={() => handleBuySell(h)}
                                                         className="p-1.5 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/30 rounded transition-colors"
@@ -855,7 +999,7 @@ export default function TFSAPortfolio() {
                         </table>
                     </div>
 
-                    {Math.abs(totalTarget - 100) > 0.1 && (
+                    {showTargetAllocation && Math.abs(totalTarget - 100) > 0.1 && (
                         <div className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-200 rounded-lg text-sm">
                             ⚠️ Target percentages sum to {totalTarget.toFixed(2)}% (should be 100%)
                         </div>
@@ -868,7 +1012,9 @@ export default function TFSAPortfolio() {
                     <div className="text-6xl mb-4">📊</div>
                     <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">No Holdings Yet</h3>
                     <p className="text-gray-500 dark:text-gray-400 mb-6">
-                        Get started by importing a CSV file, adding ETFs, or adding government bonds.
+                        {isTfsa
+                            ? 'Get started by importing a CSV file or adding ETFs.'
+                            : 'Get started by importing a CSV file or adding stocks or ETFs.'}
                     </p>
                     <div className="flex flex-row gap-2 sm:gap-3 flex-wrap justify-center">
                         <button
@@ -883,14 +1029,7 @@ export default function TFSAPortfolio() {
                             className="flex-1 sm:flex-initial min-w-0 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                         >
                             <Plus className="w-4 h-4 shrink-0" />
-                            Add ETF
-                        </button>
-                        <button
-                            onClick={() => setShowAddBondModal(true)}
-                            className="flex-1 sm:flex-initial min-w-0 flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                        >
-                            <Plus className="w-4 h-4 shrink-0" />
-                            Add Bond
+                            {isTfsa ? 'Add ETF' : 'Add ETF / stock'}
                         </button>
                     </div>
                 </div>
@@ -899,6 +1038,9 @@ export default function TFSAPortfolio() {
             {/* Transaction History */}
             <TransactionHistory
                 refreshTrigger={transactionRefresh}
+                portfolioId={portfolioId}
+                currencyFormatOpts={portfolioFmtBase}
+                transactionDeleteModalTitle={isTfsa ? 'Delete ETF Transaction' : 'Delete transaction'}
                 onTransactionDeleted={() => {
                     fetchHoldings()
                     setTransactionRefresh(prev => prev + 1)
@@ -906,7 +1048,7 @@ export default function TFSAPortfolio() {
             />
 
             {/* Target vs Actual Bar Chart */}
-            {holdings.length > 0 && (
+            {showTargetAllocation && holdings.length > 0 && (
                 <div className={`bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-600 transition-colors ${blurSensitiveValues ? 'blur-[5px] select-none' : ''}`}>
                     <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Target vs Actual Allocation</h2>
                     <div className="flex justify-center gap-6 mb-3 text-sm text-gray-500 dark:text-gray-400">
@@ -954,7 +1096,7 @@ export default function TFSAPortfolio() {
             )}
 
             {/* What If Calculator */}
-            {holdings.length > 0 && (
+            {showTargetAllocation && holdings.length > 0 && (
                 <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-600 transition-colors">
                     <div className="flex items-center gap-2 mb-4">
                         <Calculator className="w-5 h-5 text-purple-500" />
@@ -967,7 +1109,9 @@ export default function TFSAPortfolio() {
                     <div className="flex items-center gap-4 mb-6">
                         <label className="text-sm font-medium text-gray-700 dark:text-gray-300">If I invest:</label>
                         <BlurredValue as="div" className="flex items-center">
-                            <span className="mr-1 text-gray-500 dark:text-gray-400">R</span>
+                            <span className="mr-1 text-gray-500 dark:text-gray-400 font-mono text-sm">
+                                {portfolioCurrency === 'ZAR' ? 'R' : portfolioCurrency}
+                            </span>
                             <input
                                 type="number"
                                 inputMode="decimal"
@@ -991,7 +1135,7 @@ export default function TFSAPortfolio() {
                                     </div>
                                     <div className="text-right">
                                 <BlurredValue><div className="font-semibold text-purple-700 dark:text-purple-400">
-                                    {formatCurrency(item.buyAmount, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    {fmtPortfolio(item.buyAmount)}
                                 </div></BlurredValue>
                                         <div className="text-xs text-gray-500 dark:text-gray-400">
                                             {item.targetPercentage.toFixed(1)}% of total
@@ -1000,10 +1144,7 @@ export default function TFSAPortfolio() {
                                 </div>
                             ))}
                             <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg text-sm text-gray-600 dark:text-gray-400">
-                                💡 Total: <BlurredValue>{formatCurrency(whatIfDistribution.reduce((sum, item) => sum + item.buyAmount, 0), {
-                                    minimumFractionDigits: 2,
-                                    maximumFractionDigits: 2,
-                                })}</BlurredValue>
+                                💡 Total: <BlurredValue>{fmtPortfolio(whatIfDistribution.reduce((sum, item) => sum + item.buyAmount, 0))}</BlurredValue>
                             </div>
                         </div>
                     ) : (
@@ -1014,8 +1155,8 @@ export default function TFSAPortfolio() {
                 </div>
             )}
 
-            {/* Rebalancing */}
-            {rebalanceData && holdings.length > 0 && (
+            {/* Rebalancing & target mix */}
+            {showTargetAllocation && rebalanceData && holdings.length > 0 && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-600 transition-colors">
                         <div className="flex justify-between items-center mb-4">
@@ -1048,7 +1189,7 @@ export default function TFSAPortfolio() {
                                             <span>Buy <b>{action.buy_etf}</b></span>
                                         </div>
                                         <div className="mt-1 text-right font-semibold text-blue-700 dark:text-blue-400">
-                                            <BlurredValue>{formatCurrency(action.amount, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</BlurredValue>
+                                            <BlurredValue>{fmtPortfolio(action.amount)}</BlurredValue>
                                         </div>
                                     </div>
                                 ))}
@@ -1081,7 +1222,7 @@ export default function TFSAPortfolio() {
                                     </Pie>
                                     <Tooltip
                                         formatter={(value) =>
-                                            formatCurrency(value, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                                            fmtPortfolio(value)
                                         }
                                         contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#f3f4f6' }}
                                         itemStyle={{ color: '#f3f4f6' }}
@@ -1104,9 +1245,58 @@ export default function TFSAPortfolio() {
                 </div>
             )}
 
+            {!showTargetAllocation && holdings.length > 0 && (
+                <div
+                    className={`bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-600 transition-colors ${
+                        blurSensitiveValues ? 'blur-[5px] select-none' : ''
+                    }`}
+                >
+                    <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Holdings mix</h2>
+                    <div className="min-h-[280px] sm:h-64">
+                        <ResponsiveContainer width="100%" height={280}>
+                            <PieChart>
+                                <Pie
+                                    data={currentAllocationData}
+                                    cx="50%"
+                                    cy="40%"
+                                    innerRadius={50}
+                                    outerRadius={70}
+                                    paddingAngle={2}
+                                    dataKey="value"
+                                >
+                                    {currentAllocationData.map((entry, index) => (
+                                        <Cell key={`mix-cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" />
+                                    ))}
+                                </Pie>
+                                <Tooltip
+                                    formatter={(value) => fmtPortfolio(value)}
+                                    contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#f3f4f6' }}
+                                    itemStyle={{ color: '#f3f4f6' }}
+                                />
+                            </PieChart>
+                        </ResponsiveContainer>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-4 flex-wrap">
+                        {currentAllocationData.map((entry, index) => (
+                            <div key={index} className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                                <div
+                                    className="w-3 h-3 rounded-full shrink-0"
+                                    style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                                />
+                                <span className="truncate" title={entry.name}>{entry.name}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
             {/* Modals */}
             <CSVUploadModal
                 isOpen={showCSVModal}
+                portfolioId={portfolioId}
+                requireJsePrefix={isTfsa}
+                etfOnlyMode={isTfsa}
+                allocationOptional={!showTargetAllocation}
                 onClose={() => setShowCSVModal(false)}
                 onSuccess={() => {
                     fetchHoldings()
@@ -1116,15 +1306,12 @@ export default function TFSAPortfolio() {
 
             <AddETFModal
                 isOpen={showAddETFModal}
+                portfolioId={portfolioId}
+                requireJsePrefix={isTfsa}
+                etfOnlyMode={isTfsa}
+                portfolioCurrencyCode={portfolioCurrency}
+                allocationOptional={!showTargetAllocation}
                 onClose={() => setShowAddETFModal(false)}
-                onSuccess={() => {
-                    fetchHoldings()
-                }}
-            />
-
-            <AddBondModal
-                isOpen={showAddBondModal}
-                onClose={() => setShowAddBondModal(false)}
                 onSuccess={() => {
                     fetchHoldings()
                 }}
@@ -1132,6 +1319,9 @@ export default function TFSAPortfolio() {
 
             <BuySellModal
                 isOpen={showBuySellModal}
+                portfolioId={portfolioId}
+                etfOnlyMode={isTfsa}
+                portfolioCurrencyCode={portfolioCurrency}
                 onClose={() => {
                     setShowBuySellModal(false)
                     setSelectedHolding(null)
@@ -1142,6 +1332,7 @@ export default function TFSAPortfolio() {
 
             <EditHoldingModal
                 isOpen={showEditModal}
+                portfolioId={portfolioId}
                 onClose={() => {
                     setShowEditModal(false)
                     setSelectedHolding(null)
@@ -1157,12 +1348,12 @@ export default function TFSAPortfolio() {
                     setHoldingToDelete(null)
                 }}
                 onConfirm={handleDeleteConfirm}
-                title={`Delete ${holdingToDelete?.type === 'BOND' ? 'Bond' : 'ETF'} Holding`}
-                message={holdingToDelete ? `Are you sure you want to delete ${holdingToDelete.type === 'ETF' ? holdingToDelete.etf_name : holdingToDelete.bond_name}?` : ''}
+                title={isTfsa ? 'Delete ETF holding' : 'Delete holding'}
+                message={holdingToDelete ? `Are you sure you want to delete ${holdingToDelete.etf_name}?` : ''}
                 details={
-                    holdingToDelete?.type === 'BOND'
-                        ? ['Delete all associated transactions']
-                        : ['Delete all associated transactions', 'Remove the ETF from Google Sheets']
+                    isTfsa
+                        ? ['Delete all associated transactions', 'Remove the ETF from Google Sheets']
+                        : ['Delete all associated transactions', 'Remove the ticker from Google Sheets']
                 }
                 confirmText="Delete"
                 cancelText="Cancel"
@@ -1171,6 +1362,9 @@ export default function TFSAPortfolio() {
 
             <HoldingDetailsModal
                 isOpen={showDetailsModal}
+                portfolioId={portfolioId}
+                currencyCode={portfolioCurrency}
+                showTargetAllocation={showTargetAllocation}
                 onClose={() => {
                     setShowDetailsModal(false)
                     setSelectedHolding(null)
@@ -1178,7 +1372,7 @@ export default function TFSAPortfolio() {
                 holding={selectedHolding}
                 onHoldingUpdate={handleHoldingUpdate}
                 totalPortfolioValue={totalValue}
-                onEdit={handleEdit}
+                onEdit={showTargetAllocation ? handleEdit : undefined}
                 onBuySell={handleBuySell}
                 onDelete={handleDeleteClick}
             />

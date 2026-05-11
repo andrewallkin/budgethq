@@ -137,31 +137,38 @@ def update_holding_cost_basis(db: Session, holding_id: int) -> float:
     return cost_basis
 
 
-def calculate_portfolio_value(db: Session, user_id: int) -> Tuple[float, Dict[int, dict]]:
+def calculate_portfolio_value(
+    db: Session,
+    user_id: int,
+    portfolio_id: Optional[int] = None,
+) -> Tuple[float, Dict[int, dict]]:
     """
     Calculate current portfolio value for a user.
+    When portfolio_id is set, only holdings in that portfolio are included.
+    When portfolio_id is None, all holdings for the user are included (aggregate).
+
     Returns (total_value, holdings_breakdown) where holdings_breakdown is:
     {holding_id: {shares, price, value, cost_basis, unrealized_gain, jse_ticker, type}}
 
-    Note: ETF holding_ids are positive, Bond holding_ids use negative offset to avoid collision.
+    ETF-only portfolio value model.
     """
-    etf_holdings = db.query(models.ETFHolding).filter(
+    q = db.query(models.ETFHolding).filter(
         models.ETFHolding.user_id == user_id,
-        models.ETFHolding.shares > 0  # Only include holdings with actual shares
-    ).all()
-    
-    bond_holdings = db.query(models.BondHolding).filter(
-        models.BondHolding.user_id == user_id
-    ).all()
-    
+        models.ETFHolding.shares > 0,
+    )
+    if portfolio_id is not None:
+        q = q.filter(models.ETFHolding.portfolio_id == portfolio_id)
+
+    etf_holdings = q.all()
+
     total_value = 0.0
     holdings_breakdown = {}
-    
+
     for h in etf_holdings:
         value = (h.shares or 0) * (h.current_price or 0)
         cost_basis = h.cost_basis or 0
         unrealized_gain = value - cost_basis
-        
+
         holdings_breakdown[h.id] = {
             'type': 'ETF',
             'shares': h.shares or 0,
@@ -173,29 +180,24 @@ def calculate_portfolio_value(db: Session, user_id: int) -> Tuple[float, Dict[in
             'name': h.etf_name
         }
         total_value += value
-    
-    # Add bond values with cost_basis tracking
-    for b in bond_holdings:
-        value = b.current_value or 0
-        cost_basis = b.cost_basis or 0
-        unrealized_gain = value - cost_basis
-        
-        # Use negative ID offset for bonds to avoid collision with ETF IDs
-        bond_key = -b.id
-        holdings_breakdown[bond_key] = {
-            'type': 'BOND',
-            'shares': None,
-            'price': None,
-            'value': value,
-            'cost_basis': cost_basis,
-            'unrealized_gain': unrealized_gain,
-            'jse_ticker': None,
-            'name': b.bond_name,
-            'bond_id': b.id
-        }
-        total_value += value
-    
+
     return total_value, holdings_breakdown
+
+
+def snapshot_contributions_for_portfolio(
+    db: Session,
+    user_id: int,
+    portfolio_id: int,
+    as_of_date: date,
+) -> float:
+    """TFSA deposits/contributions line for charts; non-TFSA portfolios use 0."""
+    portfolio_rec = db.query(models.InvestmentPortfolio).filter(
+        models.InvestmentPortfolio.id == portfolio_id,
+        models.InvestmentPortfolio.user_id == user_id,
+    ).first()
+    if portfolio_rec and portfolio_rec.is_default_tfsa:
+        return calculate_total_contributions(db, user_id, as_of_date=as_of_date)
+    return 0.0
 
 
 def record_hourly_snapshot(db: Session) -> dict:
@@ -207,7 +209,7 @@ def record_hourly_snapshot(db: Session) -> dict:
     now = get_sast_now()
     STATS = {
         'prices_recorded': 0,
-        'users_processed': 0,
+        'portfolios_processed': 0,
         'holdings_recorded': 0
     }
     
@@ -241,24 +243,39 @@ def record_hourly_snapshot(db: Session) -> dict:
         extra={"prices_recorded": STATS["prices_recorded"]},
     )
     
-    # Get all users with holdings
-    users_with_holdings = db.query(models.ETFHolding.user_id).distinct().all()
-    user_ids = [u[0] for u in users_with_holdings]
-    
+    # Get all distinct user portfolios with holdings
+    portfolio_keys = db.query(
+        models.ETFHolding.user_id,
+        models.ETFHolding.portfolio_id,
+    ).filter(
+        models.ETFHolding.shares > 0,
+        models.ETFHolding.portfolio_id.isnot(None),
+    ).distinct().all()
+
     logger.info(
         "Processing snapshots",
-        extra={"user_count": len(user_ids)},
+        extra={"portfolio_count": len(portfolio_keys)},
     )
-    
-    for user_id in user_ids:
-        # Calculate portfolio value and contributions
-        total_value, holdings_breakdown = calculate_portfolio_value(db, user_id)
-        total_contributions = calculate_total_contributions(db, user_id, as_of_date=now.date())
+
+    for user_id, portfolio_id in portfolio_keys:
+        portfolio_rec = db.query(models.InvestmentPortfolio).filter(
+            models.InvestmentPortfolio.id == portfolio_id,
+            models.InvestmentPortfolio.user_id == user_id,
+        ).first()
+        if not portfolio_rec:
+            continue
+
+        total_value, holdings_breakdown = calculate_portfolio_value(
+            db, user_id, portfolio_id=portfolio_id
+        )
+        total_contributions = snapshot_contributions_for_portfolio(
+            db, user_id, portfolio_id, now.date()
+        )
         total_growth = total_value - total_contributions
-        
-        # Record portfolio value history
+
         portfolio_record = models.PortfolioValueHistory(
             user_id=user_id,
+            portfolio_id=portfolio_id,
             total_value=total_value,
             total_contributions=total_contributions,
             total_growth=total_growth,
@@ -266,13 +283,8 @@ def record_hourly_snapshot(db: Session) -> dict:
             snapshot_type="hourly"
         )
         db.add(portfolio_record)
-        
-        # Record holding value history for each ETF (skip bonds - they have negative IDs)
+
         for holding_id, data in holdings_breakdown.items():
-            # Skip bonds (negative IDs) - HoldingValueHistory only tracks ETFs
-            if holding_id < 0 or data.get('type') == 'BOND':
-                continue
-            
             holding_record = models.HoldingValueHistory(
                 user_id=user_id,
                 holding_id=holding_id,
@@ -287,11 +299,11 @@ def record_hourly_snapshot(db: Session) -> dict:
             )
             db.add(holding_record)
             STATS['holdings_recorded'] += 1
-        
-        STATS['users_processed'] += 1
+
+        STATS['portfolios_processed'] += 1
         logger.debug(
-            "User snapshot recorded",
-            extra={"user_id": user_id, "total_value": total_value},
+            "Portfolio snapshot recorded",
+            extra={"user_id": user_id, "portfolio_id": portfolio_id, "total_value": total_value},
         )
     
     db.commit()
@@ -313,15 +325,29 @@ def record_transaction_snapshot(db: Session, user_id: int, transaction_id: int) 
     
     if transaction:
         update_cost_basis_for_transaction(db, transaction.holding_id, transaction_id)
-    
-    # Calculate portfolio state
-    total_value, holdings_breakdown = calculate_portfolio_value(db, user_id)
-    total_contributions = calculate_total_contributions(db, user_id, as_of_date=now.date())
+
+    if not transaction or transaction.portfolio_id is None:
+        db.commit()
+        return {
+            'total_value': 0,
+            'total_contributions': 0,
+            'total_growth': 0,
+            'holdings_count': 0
+        }
+
+    portfolio_id = transaction.portfolio_id
+
+    total_value, holdings_breakdown = calculate_portfolio_value(
+        db, user_id, portfolio_id=portfolio_id
+    )
+    total_contributions = snapshot_contributions_for_portfolio(
+        db, user_id, portfolio_id, now.date()
+    )
     total_growth = total_value - total_contributions
-    
-    # Record portfolio value history with transaction type
+
     portfolio_record = models.PortfolioValueHistory(
         user_id=user_id,
+        portfolio_id=portfolio_id,
         total_value=total_value,
         total_contributions=total_contributions,
         total_growth=total_growth,
@@ -329,13 +355,8 @@ def record_transaction_snapshot(db: Session, user_id: int, transaction_id: int) 
         snapshot_type="transaction"
     )
     db.add(portfolio_record)
-    
-    # Record holding value history for each ETF (skip bonds - they have negative IDs)
+
     for holding_id, data in holdings_breakdown.items():
-        # Skip bonds (negative IDs) - HoldingValueHistory only tracks ETFs
-        if holding_id < 0 or data.get('type') == 'BOND':
-            continue
-        
         holding_record = models.HoldingValueHistory(
             user_id=user_id,
             holding_id=holding_id,
@@ -373,65 +394,75 @@ def create_daily_summary(db: Session, target_date: Optional[date] = None) -> dic
 
     STATS = {'summaries_created': 0}
 
-    # Get all users with portfolio history for this day
-    users_with_data = db.query(models.PortfolioValueHistory.user_id).filter(
+    pairs_with_data = db.query(
+        models.PortfolioValueHistory.user_id,
+        models.PortfolioValueHistory.portfolio_id,
+    ).filter(
         models.PortfolioValueHistory.recorded_at >= start_of_day,
         models.PortfolioValueHistory.recorded_at <= end_of_day
     ).distinct().all()
 
     logger.info(
         "Creating daily summaries",
-        extra={"user_count": len(users_with_data), "target_date": str(target_date)},
+        extra={"portfolio_count": len(pairs_with_data), "target_date": str(target_date)},
     )
 
-    for (user_id,) in users_with_data:
-        # Check if summary already exists
+    for user_id, portfolio_id in pairs_with_data:
         existing = db.query(models.DailyPortfolioSummary).filter(
             models.DailyPortfolioSummary.user_id == user_id,
+            models.DailyPortfolioSummary.portfolio_id == portfolio_id,
             models.DailyPortfolioSummary.date == target_date
         ).first()
-        
+
         if existing:
             logger.debug(
                 "Summary already exists, skipping",
-                extra={"user_id": user_id, "target_date": str(target_date)},
+                extra={
+                    "user_id": user_id,
+                    "portfolio_id": portfolio_id,
+                    "target_date": str(target_date),
+                },
             )
             continue
-        
-        # Get all snapshots for this user today
+
         snapshots = db.query(models.PortfolioValueHistory).filter(
             models.PortfolioValueHistory.user_id == user_id,
+            models.PortfolioValueHistory.portfolio_id == portfolio_id,
             models.PortfolioValueHistory.recorded_at >= start_of_day,
             models.PortfolioValueHistory.recorded_at <= end_of_day
         ).order_by(models.PortfolioValueHistory.recorded_at).all()
-        
+
         if not snapshots:
             continue
-        
-        # Calculate OHLC
+
+        portfolio_rec = db.query(models.InvestmentPortfolio).filter(
+            models.InvestmentPortfolio.id == portfolio_id,
+            models.InvestmentPortfolio.user_id == user_id,
+        ).first()
+
         values = [s.total_value for s in snapshots]
         opening_value = values[0]
         closing_value = values[-1]
         high_value = max(values)
         low_value = min(values)
-        
-        # Get contributions data from most recent snapshot
+
         total_contributions = snapshots[-1].total_contributions
         total_growth = snapshots[-1].total_growth
-        
-        # Calculate contributions made today
-        contributions_today = db.query(func.coalesce(func.sum(models.TFSADeposit.amount), 0)).filter(
-            models.TFSADeposit.user_id == user_id,
-            models.TFSADeposit.deposit_date == target_date
-        ).scalar() or 0
-        
-        # Calculate daily change
+
+        if portfolio_rec and portfolio_rec.is_default_tfsa:
+            contributions_today = db.query(func.coalesce(func.sum(models.TFSADeposit.amount), 0)).filter(
+                models.TFSADeposit.user_id == user_id,
+                models.TFSADeposit.deposit_date == target_date
+            ).scalar() or 0
+        else:
+            contributions_today = 0
+
         daily_change = closing_value - opening_value
         daily_change_percent = (daily_change / opening_value * 100) if opening_value > 0 else 0
-        
-        # Create summary
+
         summary = models.DailyPortfolioSummary(
             user_id=user_id,
+            portfolio_id=portfolio_id,
             date=target_date,
             opening_value=opening_value,
             closing_value=closing_value,
@@ -458,26 +489,28 @@ def create_monthly_summary(db: Session, year: int, month: int) -> dict:
     """
     stats = {'summaries_created': 0}
     
-    # Get all users with daily summaries for this month
-    users_with_data = db.query(models.DailyPortfolioSummary.user_id).filter(
+    pairs_with_data = db.query(
+        models.DailyPortfolioSummary.user_id,
+        models.DailyPortfolioSummary.portfolio_id,
+    ).filter(
         func.extract('year', models.DailyPortfolioSummary.date) == year,
         func.extract('month', models.DailyPortfolioSummary.date) == month
     ).distinct().all()
-    
-    for (user_id,) in users_with_data:
-        # Check if summary already exists
+
+    for user_id, portfolio_id in pairs_with_data:
         existing = db.query(models.MonthlyPortfolioSummary).filter(
             models.MonthlyPortfolioSummary.user_id == user_id,
+            models.MonthlyPortfolioSummary.portfolio_id == portfolio_id,
             models.MonthlyPortfolioSummary.year == year,
             models.MonthlyPortfolioSummary.month == month
         ).first()
-        
+
         if existing:
             continue
-        
-        # Get all daily summaries for this month
+
         daily_summaries = db.query(models.DailyPortfolioSummary).filter(
             models.DailyPortfolioSummary.user_id == user_id,
+            models.DailyPortfolioSummary.portfolio_id == portfolio_id,
             func.extract('year', models.DailyPortfolioSummary.date) == year,
             func.extract('month', models.DailyPortfolioSummary.date) == month
         ).order_by(models.DailyPortfolioSummary.date).all()
@@ -506,6 +539,7 @@ def create_monthly_summary(db: Session, year: int, month: int) -> dict:
         # Create summary
         summary = models.MonthlyPortfolioSummary(
             user_id=user_id,
+            portfolio_id=portfolio_id,
             year=year,
             month=month,
             opening_value=opening_value,
@@ -568,64 +602,79 @@ def cleanup_old_hourly_data(db: Session, retention_days: int = 90) -> dict:
 def get_portfolio_history(
     db: Session,
     user_id: int,
-    range_param: str = "1m"
+    range_param: str = "1m",
+    portfolio_id: int | None = None,
+    include_tfsa_contribution_overlay: bool = False,
 ) -> List[Dict]:
     """
     Get portfolio history data for charting.
-    Automatically selects the right granularity based on range.
-    
-    range_param options: "1m", "3m", "6m", "1y", "all"
-    
-    Returns list of {date, contributions, gain, total} for stacked area chart.
+    portfolio_id: required scope for series (callers should pass resolved portfolio id).
+
+    include_tfsa_contribution_overlay: when True, contributions/gain use TFSA deposit logic;
+    when False (non-TFSA portfolios), contributions line is 0 and gain equals total value.
     """
     now = get_sast_now()
-    
-    # Determine date range and data source
+
     if range_param == "1m":
-        # Use hourly data, aggregate to daily
         start_date = now - timedelta(days=30)
-        return _get_daily_from_hourly(db, user_id, start_date, now)
-    
+        return _get_daily_from_hourly(
+            db, user_id, portfolio_id, start_date, now, include_tfsa_contribution_overlay
+        )
+
     elif range_param == "3m":
-        # Use hourly data, aggregate to daily (retention is 90 days)
         start_date = now - timedelta(days=90)
-        return _get_daily_from_hourly(db, user_id, start_date, now)
-    
+        return _get_daily_from_hourly(
+            db, user_id, portfolio_id, start_date, now, include_tfsa_contribution_overlay
+        )
+
     elif range_param == "6m":
-        # Use daily summaries, aggregate to weekly
         start_date = now - timedelta(days=180)
-        return _get_weekly_from_daily(db, user_id, start_date, now)
-    
+        return _get_weekly_from_daily(
+            db, user_id, portfolio_id, start_date, now, include_tfsa_contribution_overlay
+        )
+
     elif range_param == "1y":
-        # Use daily summaries, aggregate to weekly
         start_date = now - timedelta(days=365)
-        return _get_weekly_from_daily(db, user_id, start_date, now)
-    
-    else:  # "all"
-        # Use monthly summaries
-        return _get_from_monthly_summary(db, user_id)
+        return _get_weekly_from_daily(
+            db, user_id, portfolio_id, start_date, now, include_tfsa_contribution_overlay
+        )
+
+    else:
+        return _get_from_monthly_summary(db, user_id, portfolio_id, include_tfsa_contribution_overlay)
 
 
-def _get_daily_from_hourly(db: Session, user_id: int, start_date: datetime, end_date: datetime) -> List[Dict]:
+def _get_daily_from_hourly(
+    db: Session,
+    user_id: int,
+    portfolio_id: int | None,
+    start_date: datetime,
+    end_date: datetime,
+    include_tfsa_contribution_overlay: bool,
+) -> List[Dict]:
     """Aggregate hourly data to daily points (using last value of the day)."""
-    # Get all hourly records in range
-    results = db.query(
+    q = db.query(
         models.PortfolioValueHistory.recorded_at,
         models.PortfolioValueHistory.total_value,
         models.PortfolioValueHistory.total_contributions,
-        models.PortfolioValueHistory.total_growth
+        models.PortfolioValueHistory.total_growth,
     ).filter(
         models.PortfolioValueHistory.user_id == user_id,
         models.PortfolioValueHistory.recorded_at >= start_date,
-        models.PortfolioValueHistory.recorded_at <= end_date
-    ).order_by(models.PortfolioValueHistory.recorded_at).all()
-    
-    # Process in Python to get last record per day
+        models.PortfolioValueHistory.recorded_at <= end_date,
+    )
+    if portfolio_id is not None:
+        q = q.filter(models.PortfolioValueHistory.portfolio_id == portfolio_id)
+
+    results = q.order_by(models.PortfolioValueHistory.recorded_at).all()
+
     daily_map = {}
     for r in results:
         point_date = r.recorded_at.date()
         day_str = str(point_date)
-        contributions = calculate_total_contributions(db, user_id, as_of_date=point_date)
+        if include_tfsa_contribution_overlay:
+            contributions = calculate_total_contributions(db, user_id, as_of_date=point_date)
+        else:
+            contributions = 0.0
         total_value = float(r.total_value or 0)
         daily_map[day_str] = {
             'date': day_str,
@@ -633,22 +682,36 @@ def _get_daily_from_hourly(db: Session, user_id: int, start_date: datetime, end_
             'gain': round(total_value - contributions, 2),
             'total': round(total_value, 2)
         }
-    
-    return list(daily_map.values())
+
+    return sorted(daily_map.values(), key=lambda x: x['date'])
 
 
-def _get_from_daily_summary(db: Session, user_id: int, start_date: datetime, end_date: datetime) -> List[Dict]:
+def _get_from_daily_summary(
+    db: Session,
+    user_id: int,
+    portfolio_id: int | None,
+    start_date: datetime,
+    end_date: datetime,
+    include_tfsa_contribution_overlay: bool,
+) -> List[Dict]:
     """Get data from daily summaries."""
-    results = db.query(models.DailyPortfolioSummary).filter(
+    q = db.query(models.DailyPortfolioSummary).filter(
         models.DailyPortfolioSummary.user_id == user_id,
         models.DailyPortfolioSummary.date >= start_date.date(),
-        models.DailyPortfolioSummary.date <= end_date.date()
-    ).order_by(models.DailyPortfolioSummary.date).all()
-    
+        models.DailyPortfolioSummary.date <= end_date.date(),
+    )
+    if portfolio_id is not None:
+        q = q.filter(models.DailyPortfolioSummary.portfolio_id == portfolio_id)
+
+    results = q.order_by(models.DailyPortfolioSummary.date).all()
+
     points = []
     for r in results:
         point_date = r.date
-        contributions = calculate_total_contributions(db, user_id, as_of_date=point_date)
+        if include_tfsa_contribution_overlay:
+            contributions = calculate_total_contributions(db, user_id, as_of_date=point_date)
+        else:
+            contributions = 0.0
         total_value = float(r.closing_value or 0)
         points.append({
             'date': str(point_date),
@@ -659,33 +722,39 @@ def _get_from_daily_summary(db: Session, user_id: int, start_date: datetime, end
     return points
 
 
-def _get_weekly_from_daily(db: Session, user_id: int, start_date: datetime, end_date: datetime) -> List[Dict]:
+def _get_weekly_from_daily(
+    db: Session,
+    user_id: int,
+    portfolio_id: int | None,
+    start_date: datetime,
+    end_date: datetime,
+    include_tfsa_contribution_overlay: bool,
+) -> List[Dict]:
     """Aggregate daily summaries to weekly points."""
-    # Get all daily data
-    daily_data = _get_from_daily_summary(db, user_id, start_date, end_date)
-    
+    daily_data = _get_from_daily_summary(
+        db, user_id, portfolio_id, start_date, end_date, include_tfsa_contribution_overlay
+    )
+
     if not daily_data:
         return []
-    
-    # Group by week (ISO week)
+
     weekly_data = {}
     for d in daily_data:
         date_obj = datetime.strptime(d['date'], '%Y-%m-%d')
         week_key = date_obj.strftime('%Y-W%W')
-        
+
         if week_key not in weekly_data:
             weekly_data[week_key] = {
-                'date': d['date'],  # Use first day of week
+                'date': d['date'],
                 'contributions': [],
                 'gain': [],
                 'total': []
             }
-        
+
         weekly_data[week_key]['contributions'].append(d['contributions'])
         weekly_data[week_key]['gain'].append(d['gain'])
         weekly_data[week_key]['total'].append(d['total'])
-    
-    # Average each week
+
     result = []
     for week_key in sorted(weekly_data.keys()):
         week = weekly_data[week_key]
@@ -695,24 +764,36 @@ def _get_weekly_from_daily(db: Session, user_id: int, start_date: datetime, end_
             'gain': round(sum(week['gain']) / len(week['gain']), 2),
             'total': round(sum(week['total']) / len(week['total']), 2)
         })
-    
+
     return result
 
 
-def _get_from_monthly_summary(db: Session, user_id: int) -> List[Dict]:
+def _get_from_monthly_summary(
+    db: Session,
+    user_id: int,
+    portfolio_id: int | None,
+    include_tfsa_contribution_overlay: bool,
+) -> List[Dict]:
     """Get data from monthly summaries."""
-    results = db.query(models.MonthlyPortfolioSummary).filter(
-        models.MonthlyPortfolioSummary.user_id == user_id
-    ).order_by(
+    q = db.query(models.MonthlyPortfolioSummary).filter(
+        models.MonthlyPortfolioSummary.user_id == user_id,
+    )
+    if portfolio_id is not None:
+        q = q.filter(models.MonthlyPortfolioSummary.portfolio_id == portfolio_id)
+
+    results = q.order_by(
         models.MonthlyPortfolioSummary.year,
         models.MonthlyPortfolioSummary.month
     ).all()
-    
+
     points = []
     for r in results:
         month_end_day = calendar.monthrange(r.year, r.month)[1]
         point_date = date(r.year, r.month, month_end_day)
-        contributions = calculate_total_contributions(db, user_id, as_of_date=point_date)
+        if include_tfsa_contribution_overlay:
+            contributions = calculate_total_contributions(db, user_id, as_of_date=point_date)
+        else:
+            contributions = 0.0
         total_value = float(r.closing_value or 0)
         points.append({
             'date': f"{r.year}-{r.month:02d}-01",
@@ -727,7 +808,7 @@ def get_holding_attribution(db: Session, user_id: int) -> List[Dict]:
     """
     Get per-holding gain/loss attribution for the current portfolio state.
     Returns breakdown of which holdings are driving gains/losses.
-    Includes both ETFs and Bonds.
+    ETF-only attribution.
     """
     result = []
     
@@ -750,30 +831,6 @@ def get_holding_attribution(db: Session, user_id: int) -> List[Dict]:
             'name': h.etf_name,
             'shares': h.shares,
             'current_price': h.current_price,
-            'value': round(value, 2),
-            'cost_basis': round(cost_basis, 2),
-            'unrealized_gain': round(unrealized_gain, 2),
-            'gain_percent': round(gain_percent, 2)
-        })
-    
-    # Bond holdings
-    bond_holdings = db.query(models.BondHolding).filter(
-        models.BondHolding.user_id == user_id
-    ).all()
-    
-    for b in bond_holdings:
-        value = b.current_value or 0
-        cost_basis = b.cost_basis or 0
-        unrealized_gain = value - cost_basis
-        gain_percent = (unrealized_gain / cost_basis * 100) if cost_basis > 0 else 0
-        
-        result.append({
-            'type': 'BOND',
-            'holding_id': b.id,
-            'jse_ticker': None,
-            'name': b.bond_name,
-            'shares': None,
-            'current_price': None,
             'value': round(value, 2),
             'cost_basis': round(cost_basis, 2),
             'unrealized_gain': round(unrealized_gain, 2),
