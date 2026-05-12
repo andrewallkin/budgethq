@@ -53,3 +53,4 @@ etf_bulk_upload.csv
 # Ignore all markdown files except README.md
 *.md
 !README.md
+!CLAUDE.md
