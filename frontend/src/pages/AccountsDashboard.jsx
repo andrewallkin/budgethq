@@ -4,6 +4,7 @@ import { RefreshCw, MoreVertical, Star, Shield, AlertTriangle, Plus, Trash2, Wal
 import { formatCurrency, formatDateSafe } from '../utils/numberFormatting'
 import BlurredValue from '../components/BlurredValue'
 import AddManualAccountModal from '../components/AddManualAccountModal'
+import HubBackLink from '../components/HubBackLink'
 
 export default function AccountsDashboard() {
     const [loading, setLoading] = useState(true)
@@ -155,6 +156,7 @@ export default function AccountsDashboard() {
 
     return (
         <div className="space-y-6 sm:space-y-8">
+            <HubBackLink to="/investec" label="Investec Banking" />
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
                 <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
                     Bank Accounts
@@ -214,8 +216,9 @@ export default function AccountsDashboard() {
                             ? formatDateSafe(lastSynced.toISOString(), {
                                 day: 'numeric',
                                 month: 'short',
+                                year: 'numeric',
                                 hour: '2-digit',
-                                minute: '2-digit'
+                                minute: '2-digit',
                             })
                             : '—'}
                     </p>

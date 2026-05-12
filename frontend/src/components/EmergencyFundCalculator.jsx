@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { AlertCircle, CheckCircle } from 'lucide-react'
 import BlurredValue from './BlurredValue'
-import { formatCurrency, formatNumber } from '../utils/numberFormatting'
+import { formatCurrency, formatNumber, formatDateTimeSafe } from '../utils/numberFormatting'
 import { EMERGENCY_FUND_SOURCES } from '../utils/emergencyFundSource'
 
 export default function EmergencyFundCalculator({
@@ -160,7 +160,16 @@ export default function EmergencyFundCalculator({
                     <BlurredValue as="div">
                     <input
                         type="number"
-                        value={currentFund === 0 ? '' : currentFund}
+                        step={fundSource === EMERGENCY_FUND_SOURCES.BANK_SYNC ? '0.01' : undefined}
+                        value={
+                            fundSource === EMERGENCY_FUND_SOURCES.BANK_SYNC
+                                ? currentFund === 0
+                                    ? ''
+                                    : Number(currentFund).toFixed(2)
+                                : currentFund === 0
+                                  ? ''
+                                  : currentFund
+                        }
                         onChange={(e) => {
                             if (fundSource !== EMERGENCY_FUND_SOURCES.MANUAL) return
                             setUserHasEdited(true)
@@ -186,7 +195,7 @@ export default function EmergencyFundCalculator({
                                 </span>
                                 {bankSyncMeta.balanceUpdatedAt && (
                                     <span className="ml-1 text-teal-700 dark:text-teal-300">
-                                        (last updated: {new Date(bankSyncMeta.balanceUpdatedAt).toLocaleString()})
+                                        (last updated: {formatDateTimeSafe(bankSyncMeta.balanceUpdatedAt)})
                                     </span>
                                 )}
                             </div>
@@ -385,7 +394,7 @@ export default function EmergencyFundCalculator({
                     </div>
                     <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-1">
                         <BlurredValue><span>
-                            {formatCurrency(currentFund, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                            {formatCurrency(currentFund, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </span></BlurredValue>
                         <BlurredValue><span>
                             {formatCurrency(targetAmount, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}

@@ -48,6 +48,7 @@ export default function InvestmentPortfolioPage() {
             currencyCode={portfolio.currency_code || 'ZAR'}
             isTfsa={portfolio.is_default_tfsa}
             showTargetAllocation={showTargetAllocation}
+            hubBackLink={{ to: '/investments', label: 'Investments' }}
             onPortfolioMetaUpdated={(data) =>
                 setPortfolio((p) =>
                     p && data.id === p.id

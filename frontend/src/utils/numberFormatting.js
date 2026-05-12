@@ -51,10 +51,35 @@ export const formatPercent = (value, options) => {
 }
 
 /**
+ * Date + time in South African locale (e.g. "12 May 2026, 05:58").
+ */
+export const formatDateTimeSafe = (
+    dateStr,
+    options = {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+    },
+) => {
+    if (dateStr == null || dateStr === '') return '—'
+    const d = new Date(dateStr)
+    if (isNaN(d.getTime())) return '—'
+    try {
+        return d.toLocaleString(DEFAULT_LOCALE, options)
+    } catch {
+        return formatDateSafe(
+            typeof dateStr === 'string' ? dateStr.split('T')[0] : dateStr,
+            { day: 'numeric', month: 'short', year: 'numeric' },
+        )
+    }
+}
+
+/**
  * Safely format a date string. Returns '—' for null, undefined, or invalid dates.
- * @param {string|null|undefined} dateStr - Date string (e.g. ISO format)
- * @param {Intl.DateTimeFormatOptions} options - toLocaleDateString options (default: { month: 'short', year: 'numeric' })
- * @returns {string}
  */
 export const formatDateSafe = (dateStr, options = { month: 'short', year: 'numeric' }) => {
     if (dateStr == null || dateStr === '') return '—'

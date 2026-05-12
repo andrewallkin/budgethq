@@ -40,7 +40,10 @@ export default function CSVUploadModal({
             return { headers: [], rows: [], error: 'CSV must have a header row and at least one data row' }
         }
 
-        const headers = lines[0].split(',').map(h => h.trim().toLowerCase())
+        const headers = lines[0].split(',').map(h => {
+            const t = h.trim().toLowerCase()
+            return t === 'ticker' ? 'jse_ticker' : t
+        })
         const rows = []
 
         for (let i = 1; i < lines.length; i++) {
@@ -67,7 +70,8 @@ export default function CSVUploadModal({
         // Check required columns
         const missingCols = requiredCols.filter(col => !headers.includes(col))
         if (missingCols.length > 0) {
-            validationErrors.push(`Missing required columns: ${missingCols.join(', ')}`)
+            const labels = missingCols.map((col) => (col === 'jse_ticker' ? 'ticker' : col))
+            validationErrors.push(`Missing required columns: ${labels.join(', ')}`)
         }
 
         // Validate each row
@@ -76,7 +80,7 @@ export default function CSVUploadModal({
 
             const tickerRaw = (row.jse_ticker || '').trim()
             if (!tickerRaw) {
-                validationErrors.push(`Row ${rowNum}: Ticker column (jse_ticker) is required`)
+                validationErrors.push(`Row ${rowNum}: Ticker is required`)
             } else if (requireJsePrefix && !tickerRaw.startsWith('JSE:')) {
                 validationErrors.push(`Row ${rowNum}: Invalid ticker format. Must start with "JSE:" (e.g., JSE:STX40)`)
             } else if (!requireJsePrefix) {
@@ -200,21 +204,21 @@ export default function CSVUploadModal({
         let template
         if (allocationOptional) {
             if (requireJsePrefix) {
-                template = `jse_ticker,etf_name,region,shares
+                template = `ticker,etf_name,region,shares
 JSE:STX40,Satrix Top 40,South Africa,10.5
 JSE:STXNDQ,Satrix Nasdaq 100,USA,5.25`
             } else {
-                template = `jse_ticker,etf_name,region,shares
+                template = `ticker,etf_name,region,shares
 NASDAQ:AAPL,Apple Inc.,USA,2
 NYSE:KO,Coca-Cola,USA,5`
             }
         } else if (requireJsePrefix) {
-            template = `jse_ticker,etf_name,region,shares,target_percentage
+            template = `ticker,etf_name,region,shares,target_percentage
 JSE:STX40,Satrix Top 40,South Africa,10.5,40
 JSE:STXNDQ,Satrix Nasdaq 100,USA,5.25,30
 JSE:SYGWD,Sygnia Itrix MSCI World,Global,8.0,30`
         } else {
-            template = `jse_ticker,etf_name,region,shares,target_percentage
+            template = `ticker,etf_name,region,shares,target_percentage
 NASDAQ:AAPL,Apple Inc.,USA,2,100
 NYSE:KO,Coca-Cola,USA,,0`
         }
@@ -296,10 +300,20 @@ NYSE:KO,Coca-Cola,USA,,0`
                                 <p className="text-gray-600 dark:text-gray-300 font-medium">
                                     Drop your CSV file here or click to browse
                                 </p>
-                                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                                    Required: jse_ticker (ticker), etf_name, region, shares.
-                                    {!allocationOptional && ' Also target_percentage.'}
-                                    {requireJsePrefix ? ' Tickers must be JSE:…' : ' Tickers must be Google Finance symbols.'}
+                                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 space-y-1">
+                                    <span className="block">
+                                        Required: ticker, etf_name, region, shares
+                                        {!allocationOptional && '. Also target_percentage.'}
+                                    </span>
+                                    {requireJsePrefix ? (
+                                        <span className="block text-xs">
+                                            Tickers must be JSE symbols with the JSE: prefix (e.g. JSE:STX40).
+                                        </span>
+                                    ) : (
+                                        <span className="block text-xs">
+                                            Tickers must be valid Google Finance symbols (e.g. NASDAQ:AAPL).
+                                        </span>
+                                    )}
                                 </p>
                             </>
                         )}
@@ -439,7 +453,7 @@ NYSE:KO,Coca-Cola,USA,,0`
                             ) : (
                                 <>
                                     <Upload className="w-4 h-4" />
-                                    Import Holdings
+                                    Import
                                 </>
                             )}
                         </button>

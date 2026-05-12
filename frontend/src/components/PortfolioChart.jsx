@@ -13,7 +13,7 @@ import {
 import { TrendingUp, TrendingDown, Calendar, RefreshCw, Layers } from 'lucide-react'
 import BlurredValue from './BlurredValue'
 import { useAuth } from '../context/AuthContext'
-import { formatCurrency as formatCurrencyUtil } from '../utils/numberFormatting'
+import { formatCurrency as formatCurrencyUtil, formatDateSafe } from '../utils/numberFormatting'
 
 const TIME_RANGES = [
     { key: '1m', label: '1M' },
@@ -78,21 +78,12 @@ export default function PortfolioChart({
         return formatCurrencyUtil(value, chartFmtOpts)
     }
 
-    const formatAxisMoney = (value) =>
-        formatCurrencyUtil(value, {
-            currency: currencyCode,
-            notation: 'compact',
-            maximumFractionDigits: 1,
-            minimumFractionDigits: 0,
-        })
-
     const formatDate = (dateStr) => {
         if (!dateStr) return ''
-        const date = new Date(dateStr)
         if (selectedRange === 'all' || selectedRange === '1y') {
-            return date.toLocaleDateString('en-ZA', { month: 'short', year: '2-digit' })
+            return formatDateSafe(dateStr, { month: 'short', year: '2-digit' })
         }
-        return date.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })
+        return formatDateSafe(dateStr, { day: 'numeric', month: 'short' })
     }
 
     // Handle negative gains by adjusting the data
@@ -235,6 +226,38 @@ export default function PortfolioChart({
     const yAxisConfig = useMemo(() => {
         return calculateYAxisDomain(processedData, showContributions)
     }, [processedData, showContributions])
+
+    const formatAxisMoney = useMemo(() => {
+        const ticks = yAxisConfig.ticks
+        let step = null
+        if (Array.isArray(ticks) && ticks.length >= 2) {
+            step = Math.abs(ticks[1] - ticks[0])
+        }
+        return (value) => {
+            const useCompact = step != null && step >= 5000
+            if (!useCompact) {
+                let frac = 0
+                if (step != null && step > 0) {
+                    if (step < 1) frac = 2
+                    else if (step < 100) frac = 2
+                    else frac = 0
+                } else {
+                    frac = 2
+                }
+                return formatCurrencyUtil(value, {
+                    currency: currencyCode,
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: frac,
+                })
+            }
+            return formatCurrencyUtil(value, {
+                currency: currencyCode,
+                notation: 'compact',
+                maximumFractionDigits: 1,
+                minimumFractionDigits: 0,
+            })
+        }
+    }, [yAxisConfig.ticks, currencyCode])
 
     const xTicks = useMemo(() => {
         return computeXTicks(processedData, selectedRange)
@@ -444,7 +467,7 @@ export default function PortfolioChart({
                             <YAxis
                                 domain={yAxisConfig.domain}
                                 ticks={yAxisConfig.ticks}
-                                tickFormatter={(value) => formatAxisMoney(value)}
+                                tickFormatter={formatAxisMoney}
                                 stroke="#9CA3AF"
                                 fontSize={12}
                                 tickLine={false}

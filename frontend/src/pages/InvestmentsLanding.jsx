@@ -4,7 +4,7 @@ import { Plus, Trash2, Wallet, X, Edit2 } from 'lucide-react'
 import axios from 'axios'
 import ConfirmModal from '../components/ConfirmModal'
 import BlurredValue from '../components/BlurredValue'
-import { formatCurrency } from '../utils/numberFormatting'
+import { formatCurrency, formatDateTimeSafe } from '../utils/numberFormatting'
 
 const PORTFOLIO_CURRENCIES = ['ZAR', 'USD', 'EUR', 'GBP']
 
@@ -12,7 +12,7 @@ export default function InvestmentsLanding() {
     const [loading, setLoading] = useState(true)
     const [portfolios, setPortfolios] = useState([])
     const [newName, setNewName] = useState('')
-    const [newCurrencyCode, setNewCurrencyCode] = useState('ZAR')
+    const [newCurrencyCode, setNewCurrencyCode] = useState('')
     const [creating, setCreating] = useState(false)
     const [error, setError] = useState('')
     const [portfolioToDelete, setPortfolioToDelete] = useState(null)
@@ -52,7 +52,7 @@ export default function InvestmentsLanding() {
     }
 
     const createPortfolio = async () => {
-        if (!newName.trim()) return
+        if (!newName.trim() || !newCurrencyCode) return
         setCreating(true)
         setError('')
         try {
@@ -61,7 +61,7 @@ export default function InvestmentsLanding() {
                 currency_code: newCurrencyCode,
             })
             setNewName('')
-            setNewCurrencyCode('ZAR')
+            setNewCurrencyCode('')
             await fetchPortfolios()
         } catch (err) {
             setError(err.response?.data?.detail || 'Failed to create portfolio')
@@ -137,7 +137,7 @@ export default function InvestmentsLanding() {
                                 <div className="mt-2 space-y-1 text-sm text-emerald-100/95 leading-snug">
                                     {fxSummary?.as_of ? (
                                         <p>
-                                            Converted at {new Date(fxSummary.as_of).toLocaleString()} (
+                                            Rates as at {formatDateTimeSafe(fxSummary.as_of)} (
                                             {fxRateSourceLabel(fxSummary.source)}).
                                         </p>
                                     ) : null}
@@ -147,7 +147,7 @@ export default function InvestmentsLanding() {
                                 </div>
                             )}
                             <p className="mt-2 text-xs text-emerald-50/85">
-                                Base currency: {baseCurrencyDisplay} — override with INVESTMENTS_FX_BASE_CURRENCY on the server.
+                                Totals are converted using your FX sheet and shown in {baseCurrencyDisplay}.
                             </p>
                         </>
                     ) : (
@@ -175,6 +175,9 @@ export default function InvestmentsLanding() {
                         aria-label="Portfolio currency"
                         className="lg:col-span-3 px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                     >
+                        <option value="" disabled className="text-gray-500">
+                            Select currency
+                        </option>
                         {PORTFOLIO_CURRENCIES.map((c) => (
                             <option key={c} value={c}>
                                 {c}
@@ -184,7 +187,7 @@ export default function InvestmentsLanding() {
                     <button
                         type="button"
                         onClick={createPortfolio}
-                        disabled={creating || !newName.trim()}
+                        disabled={creating || !newName.trim() || !newCurrencyCode}
                         className="lg:col-span-4 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <Plus className="w-4 h-4" />

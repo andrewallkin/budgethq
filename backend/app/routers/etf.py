@@ -366,7 +366,7 @@ async def bulk_import_holdings(
     - If holding doesn't exist: Creates new holding
     - Google Sheets: Adds ticker if not present, skips if exists
 
-    Required columns: jse_ticker, etf_name, region, shares (target_percentage required when portfolio tracks allocation).
+    Required columns: ticker (CSV header `ticker` or `jse_ticker`), etf_name, region, shares (target_percentage required when portfolio tracks allocation).
     Optional column: instrument_type (etf or stock); defaults to etf.
 
     For portfolios with target allocation off, omit target_percentage (each row defaults to 0%).
@@ -385,12 +385,21 @@ async def bulk_import_holdings(
     if strict_targets:
         required_columns.add('target_percentage')
 
-    # Validate headers
-    if not required_columns.issubset(set(reader.fieldnames or [])):
-        missing = required_columns - set(reader.fieldnames or [])
+    raw_fields = set(reader.fieldnames or [])
+    has_ticker_col = 'jse_ticker' in raw_fields or 'ticker' in raw_fields
+
+    missing_labels = []
+    for col in sorted(required_columns):
+        if col == 'jse_ticker':
+            if not has_ticker_col:
+                missing_labels.append('ticker')
+        elif col not in raw_fields:
+            missing_labels.append(col)
+
+    if missing_labels:
         raise HTTPException(
             status_code=400,
-            detail=f"Missing required columns: {', '.join(missing)}"
+            detail=f"Missing required columns: {', '.join(missing_labels)}"
         )
 
     sheets_service = get_sheets_service(current_user.id, portfolio.id)
@@ -409,8 +418,12 @@ async def bulk_import_holdings(
 
     for row_num, row in enumerate(reader, start=2):
         try:
-            jse_ticker = row['jse_ticker'].strip()
+            jse_ticker = (row.get('jse_ticker') or row.get('ticker') or '').strip()
             etf_name = row['etf_name'].strip()
+            if not jse_ticker:
+                errors.append(f"Row {row_num}: Ticker is required")
+                failed_count += 1
+                continue
 
             # Check if already exists in database
             existing = db.query(models.ETFHolding).filter(

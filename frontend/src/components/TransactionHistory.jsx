@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { TrendingUp, TrendingDown, ChevronDown, ChevronUp, History, Trash2 } from 'lucide-react'
 import axios from 'axios'
 import ConfirmModal from './ConfirmModal'
-import { formatCurrency, formatNumber } from '../utils/numberFormatting'
+import { formatCurrency, formatNumber, formatDateSafe } from '../utils/numberFormatting'
 import BlurredValue from './BlurredValue'
 
 export default function TransactionHistory({
@@ -126,10 +126,10 @@ export default function TransactionHistory({
                         {displayedTransactions.map((tx) => (
                             <tr key={`${tx.type}-${tx.id}`} className="text-sm hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                                 <td className="py-3 px-2 text-gray-600 dark:text-gray-400">
-                                    {new Date(tx.transaction_date).toLocaleDateString('en-ZA', {
-                                        day: '2-digit',
+                                    {formatDateSafe(tx.transaction_date, {
+                                        day: 'numeric',
                                         month: 'short',
-                                        year: 'numeric'
+                                        year: 'numeric',
                                     })}
                                 </td>
                                 <td className="py-3 px-2">

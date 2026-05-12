@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Routes, Route, Link, useLocation, Navigate } from 'react-router-dom'
-import { LayoutDashboard, PieChart, Home, Moon, Sun, LogOut, Settings as SettingsIcon, ChevronLeft, ChevronRight, ChevronDown, Calculator, Shield, TrendingUp, Menu, CreditCard, Receipt, Tag, HelpCircle, Building2 } from 'lucide-react'
+import { LayoutDashboard, PieChart, Home, Moon, Sun, LogOut, Settings as SettingsIcon, ChevronLeft, ChevronRight, ChevronDown, Calculator, Shield, TrendingUp, Menu, CreditCard, Receipt, Tag, HelpCircle, Building2, Landmark } from 'lucide-react'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import BudgetDashboard from './pages/BudgetDashboard'
 import RATaxCalculator from './pages/RATaxCalculator'
@@ -17,6 +17,7 @@ import BudgetAnalysis from './pages/BudgetAnalysis'
 import CategoryGuide from './pages/CategoryGuide'
 import InvestmentsLanding from './pages/InvestmentsLanding'
 import InvestmentPortfolioPage from './pages/InvestmentPortfolioPage'
+import InvestecLanding from './pages/InvestecLanding'
 
 function ProtectedRoute({ children }) {
     const { user } = useAuth()
@@ -87,6 +88,7 @@ function AppContent() {
             label: 'Investec Banking',
             icon: Building2,
             children: [
+                { path: '/investec', label: 'Overview', icon: Landmark },
                 { path: '/investec/accounts', label: 'Bank Accounts', icon: CreditCard },
                 { path: '/investec/transactions', label: 'Transactions', icon: Receipt },
                 { path: '/investec/budget-analysis', label: 'Budget Analysis', icon: TrendingUp },
@@ -144,7 +146,7 @@ function AppContent() {
                             return (
                                 <Link
                                     key={item.label}
-                                    to="/investec/accounts"
+                                    to="/investec"
                                     className={`flex items-center justify-center px-2 py-3 rounded-lg transition-colors ${isInvestecActive
                                         ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
                                         : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
@@ -308,6 +310,7 @@ function AppContent() {
                         <Route path="/emergency-savings" element={<ProtectedRoute><EmergencySavings /></ProtectedRoute>} />
                         <Route path="/ra" element={<ProtectedRoute><RAPerformance /></ProtectedRoute>} />
                         <Route path="/ra-calculator" element={<ProtectedRoute><RATaxCalculator /></ProtectedRoute>} />
+                        <Route path="/investec" element={<ProtectedRoute><InvestecLanding /></ProtectedRoute>} />
                         <Route path="/investec/accounts" element={<ProtectedRoute><AccountsDashboard /></ProtectedRoute>} />
                         <Route path="/investec/transactions" element={<ProtectedRoute><BankTransactions /></ProtectedRoute>} />
                         <Route path="/investec/rules" element={<ProtectedRoute><CategorizationRules /></ProtectedRoute>} />
@@ -704,7 +707,7 @@ function HomePage() {
                         </div>
 
                         <Link
-                            to="/investec/accounts"
+                            to="/investec"
                             className="mt-auto block w-full text-center px-6 py-3 bg-teal-600 text-white font-semibold rounded-lg hover:bg-teal-700 transition-colors"
                         >
                             Open Investec Banking →

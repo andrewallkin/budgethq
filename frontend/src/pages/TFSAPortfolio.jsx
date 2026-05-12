@@ -14,6 +14,7 @@ import ConfirmModal from '../components/ConfirmModal'
 import PortfolioChart from '../components/PortfolioChart'
 import GainLossIndicator from '../components/GainLossIndicator'
 import HoldingDetailsModal from '../components/HoldingDetailsModal'
+import HubBackLink from '../components/HubBackLink'
 import { useAuth } from '../context/AuthContext'
 import { formatCurrency, formatNumber, formatDateSafe } from '../utils/numberFormatting'
 import BlurredValue from '../components/BlurredValue'
@@ -28,6 +29,7 @@ export default function TFSAPortfolio({
     showTargetAllocation = true,
     currencyCode = 'ZAR',
     onPortfolioMetaUpdated,
+    hubBackLink = null,
 }) {
     const { blurSensitiveValues } = useAuth()
     const [loading, setLoading] = useState(true)
@@ -552,6 +554,9 @@ export default function TFSAPortfolio({
 
     return (
         <div className="space-y-6 sm:space-y-8">
+            {portfolioId != null && hubBackLink?.to && hubBackLink?.label && (
+                <HubBackLink to={hubBackLink.to} label={hubBackLink.label} className="mb-1" />
+            )}
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div className="flex flex-col gap-2 min-w-0 flex-1">
@@ -642,14 +647,14 @@ export default function TFSAPortfolio({
                             className="flex-1 min-w-0 flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
                         >
                             <Upload className="w-4 h-4 shrink-0" />
-                            <span className="truncate">Import CSV</span>
+                            <span className="truncate">Import</span>
                         </button>
                         <button
                             onClick={() => setShowAddETFModal(true)}
                             className="flex-1 min-w-0 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                         >
                             <Plus className="w-4 h-4 shrink-0" />
-                            <span className="truncate">{isTfsa ? 'Add ETF' : 'Add ETF / stock'}</span>
+                            <span className="truncate">Add</span>
                         </button>
                     </div>
                 </div>
@@ -910,6 +915,11 @@ export default function TFSAPortfolio({
                                             <SortIcon column="name" />
                                         </div>
                                     </th>
+                                    {!isTfsa && (
+                                        <th className="text-center py-3 px-2 text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                            Type
+                                        </th>
+                                    )}
                                     <th
                                         onClick={() => handleSort('value')}
                                         className="text-right py-3 px-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
@@ -944,17 +954,17 @@ export default function TFSAPortfolio({
                                             }}
                                         >
                                             <td className="py-3 px-2">
-                                                <div className="flex items-center gap-2">
-                                                    <div className="font-medium text-gray-900 dark:text-white truncate">
-                                                        {h.etf_name}
-                                                    </div>
-                                                    {!isTfsa && (
-                                                        <span className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300 shrink-0">
-                                                            {(h.instrument_type || 'etf') === 'stock' ? 'Stock' : 'ETF'}
-                                                        </span>
-                                                    )}
+                                                <div className="font-medium text-gray-900 dark:text-white truncate">
+                                                    {h.etf_name}
                                                 </div>
                                             </td>
+                                            {!isTfsa && (
+                                                <td className="py-3 px-2 text-center">
+                                                    <span className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300 inline-block">
+                                                        {(h.instrument_type || 'etf') === 'stock' ? 'Stock' : 'ETF'}
+                                                    </span>
+                                                </td>
+                                            )}
                                             <td className="py-3 px-2 text-right font-semibold text-gray-900 dark:text-white">
                                                 <BlurredValue>{fmtPortfolio(h.total_value || 0)}</BlurredValue>
                                             </td>
@@ -1022,14 +1032,14 @@ export default function TFSAPortfolio({
                             className="flex-1 sm:flex-initial min-w-0 flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
                         >
                             <Upload className="w-4 h-4 shrink-0" />
-                            Import CSV
+                            Import
                         </button>
                         <button
                             onClick={() => setShowAddETFModal(true)}
                             className="flex-1 sm:flex-initial min-w-0 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                         >
                             <Plus className="w-4 h-4 shrink-0" />
-                            {isTfsa ? 'Add ETF' : 'Add ETF / stock'}
+                            Add
                         </button>
                     </div>
                 </div>

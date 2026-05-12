@@ -4,6 +4,7 @@ import { Search, Filter, AlertTriangle, Sparkles, Zap, RefreshCw, Trash2 } from 
 import { formatCurrency, formatDateSafe } from '../utils/numberFormatting'
 import BlurredValue from '../components/BlurredValue'
 import TransactionDetailsModal from '../components/TransactionDetailsModal'
+import HubBackLink from '../components/HubBackLink'
 
 const INCOME_CATEGORIES = ['salary', 'side_income', 'investment_income', 'refund', 'other_income']
 const EXPENSE_CATEGORIES = ['groceries_household', 'bills', 'subscriptions', 'transport', 'lifestyle_misc', 'savings', 'loan_repayment']
@@ -240,6 +241,7 @@ export default function BankTransactions() {
 
     return (
         <div className="space-y-6 sm:space-y-8">
+            <HubBackLink to="/investec" label="Investec Banking" />
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
                 <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
                     Bank Transactions
