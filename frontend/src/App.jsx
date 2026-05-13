@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Routes, Route, Link, useLocation, Navigate } from 'react-router-dom'
-import { LayoutDashboard, PieChart, Home, Moon, Sun, LogOut, Settings as SettingsIcon, ChevronLeft, ChevronRight, Calculator, Shield, TrendingUp, Menu, HelpCircle, Building2 } from 'lucide-react'
+import { LayoutDashboard, PieChart as PieChartIcon, Home, Moon, Sun, LogOut, Settings as SettingsIcon, ChevronLeft, ChevronRight, Calculator, Shield, TrendingUp, Menu, HelpCircle, Building2 } from 'lucide-react'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import BudgetDashboard from './pages/BudgetDashboard'
 import RATaxCalculator from './pages/RATaxCalculator'
@@ -18,6 +18,7 @@ import CategoryGuide from './pages/CategoryGuide'
 import InvestmentsLanding from './pages/InvestmentsLanding'
 import InvestmentPortfolioPage from './pages/InvestmentPortfolioPage'
 import InvestecLanding from './pages/InvestecLanding'
+import HomeOverview from './pages/HomeOverview'
 
 function ProtectedRoute({ children }) {
     const { user } = useAuth()
@@ -73,7 +74,7 @@ function AppContent() {
         { path: '/', label: 'Home', icon: Home },
         { path: '/salary', label: 'Payslip & Tax', icon: Calculator },
         { path: '/budget', label: 'Budget Dashboard', icon: LayoutDashboard },
-        { path: '/investments', label: 'Investments', icon: PieChart },
+        { path: '/investments', label: 'Investments', icon: PieChartIcon },
         { path: '/emergency-savings', label: 'Emergency Savings', icon: Shield },
         ...(showInvestecNav ? [{ path: '/investec', label: 'Investec Banking', icon: Building2 }] : []),
         { path: '/category-guide', label: 'Budget Category Guide', icon: HelpCircle },
@@ -219,7 +220,7 @@ function AppContent() {
             <div className="flex-1 overflow-y-auto pt-14 lg:pt-0">
                 <div className="p-4 sm:p-6 lg:p-8">
                     <Routes>
-                        <Route path="/" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
+                        <Route path="/" element={<ProtectedRoute><HomeOverview /></ProtectedRoute>} />
                         <Route path="/budget" element={<ProtectedRoute><BudgetDashboard /></ProtectedRoute>} />
                         <Route path="/salary" element={<ProtectedRoute><SalaryPage /></ProtectedRoute>} />
                         <Route path="/investments/ra/calculator" element={<ProtectedRoute><RaSectionRoute><RATaxCalculator /></RaSectionRoute></ProtectedRoute>} />
@@ -244,6 +245,7 @@ function AppContent() {
     )
 }
 
+// eslint-disable-next-line no-unused-vars
 function HomePage() {
     const { showRaUnderInvestments } = useAuth()
 
@@ -372,7 +374,7 @@ function HomePage() {
                     <div className="p-4 sm:p-6 lg:p-8 flex-1 flex flex-col">
                         <div className="flex items-center mb-6">
                             <div className="p-4 bg-emerald-600 rounded-xl">
-                                <PieChart className="w-8 h-8 text-white" />
+                                <PieChartIcon className="w-8 h-8 text-white" />
                             </div>
                             <h2 className="text-2xl font-bold text-gray-900 dark:text-white ml-4">Investments</h2>
                         </div>

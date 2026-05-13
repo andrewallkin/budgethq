@@ -137,7 +137,7 @@ async def list_investments(
         ra_value_zar = _latest_ra_value_zar(db, current_user.id)
         ra_entry = {
             "id": None,
-            "name": "Retirement annuity (RA)",
+            "name": "Retirement Annuity",
             "slug": "ra",
             "is_default_tfsa": False,
             "target_allocation_enabled": False,
