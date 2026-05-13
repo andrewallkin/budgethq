@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { TrendingUp, TrendingDown, ChevronDown, ChevronUp, History, Trash2 } from 'lucide-react'
+import { TrendingUp, TrendingDown, ChevronDown, ChevronUp, History, Trash2, AlertCircle } from 'lucide-react'
 import axios from 'axios'
 import ConfirmModal from './ConfirmModal'
 import { formatCurrency, formatNumber, formatDateSafe } from '../utils/numberFormatting'
@@ -17,6 +17,7 @@ export default function TransactionHistory({
     const [expanded, setExpanded] = useState(false)
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
     const [transactionToDelete, setTransactionToDelete] = useState(null)
+    const [deleteError, setDeleteError] = useState('')
 
     useEffect(() => {
         fetchTransactions()
@@ -50,6 +51,7 @@ export default function TransactionHistory({
     }
 
     const handleDeleteClick = (transaction) => {
+        setDeleteError('')
         setTransactionToDelete(transaction)
         setShowDeleteConfirm(true)
     }
@@ -68,9 +70,10 @@ export default function TransactionHistory({
             if (onTransactionDeleted) {
                 onTransactionDeleted()
             }
+            setDeleteError('')
         } catch (err) {
             console.error('Failed to delete transaction', err)
-            alert(err.response?.data?.detail || 'Failed to delete transaction')
+            setDeleteError(err.response?.data?.detail || 'Failed to delete transaction')
         } finally {
             setTransactionToDelete(null)
         }
@@ -107,6 +110,13 @@ export default function TransactionHistory({
                     {transactions.length} transaction{transactions.length !== 1 ? 's' : ''}
                 </span>
             </div>
+
+            {deleteError && (
+                <div className="mb-3 p-3 bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200 rounded-lg flex items-center gap-2 text-sm">
+                    <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                    <span>{deleteError}</span>
+                </div>
+            )}
 
             <p className="text-xs text-gray-500 dark:text-gray-400 mb-2 sm:hidden">Swipe horizontally to see all columns</p>
             <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
@@ -215,6 +225,7 @@ export default function TransactionHistory({
                 onClose={() => {
                     setShowDeleteConfirm(false)
                     setTransactionToDelete(null)
+                    setDeleteError('')
                 }}
                 onConfirm={handleDeleteConfirm}
                 title={transactionDeleteModalTitle}

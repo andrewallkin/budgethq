@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import axios from 'axios'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts'
-import { Plus, Trash2, Calculator, TrendingUp, TrendingDown, PiggyBank, Upload, Edit2, ArrowUpDown, ArrowUp, ArrowDown, Layers } from 'lucide-react'
+import { Plus, Trash2, Calculator, TrendingUp, TrendingDown, PiggyBank, Upload, Edit2, ArrowUpDown, ArrowUp, ArrowDown, Layers, AlertTriangle } from 'lucide-react'
 
 // Import new components
 import CSVUploadModal from '../components/CSVUploadModal'
@@ -49,6 +49,10 @@ export default function TFSAPortfolio({
     const [showDetailsModal, setShowDetailsModal] = useState(false)
     const [selectedHolding, setSelectedHolding] = useState(null)
     const [holdingToDelete, setHoldingToDelete] = useState(null)
+    const [inlineError, setInlineError] = useState('')
+    const [showLimitConfirm, setShowLimitConfirm] = useState(false)
+    const [limitConfirmMessage, setLimitConfirmMessage] = useState('')
+    const limitProceedRef = useRef(null)
 
     // Sorting state
     const [sortColumn, setSortColumn] = useState(null)
@@ -260,6 +264,7 @@ export default function TFSAPortfolio({
     }
 
     const handleDeleteClick = (holding) => {
+        setInlineError('')
         setHoldingToDelete(holding)
         setShowDeleteConfirm(true)
     }
@@ -274,9 +279,10 @@ export default function TFSAPortfolio({
             )
             setHoldings(holdings.filter(h => h.id !== holdingToDelete.id))
             setTransactionRefresh(prev => prev + 1)
+            setInlineError('')
         } catch (err) {
             console.error("Failed to delete holding", err)
-            alert(err.response?.data?.detail || 'Failed to delete holding')
+            setInlineError(err.response?.data?.detail || 'Failed to delete holding')
         } finally {
             setHoldingToDelete(null)
         }
@@ -369,8 +375,29 @@ export default function TFSAPortfolio({
             : <ArrowDown className="w-3 h-3" />
     }
 
+    const openLimitConfirm = (message, proceed) => {
+        setLimitConfirmMessage(message)
+        limitProceedRef.current = proceed
+        setShowLimitConfirm(true)
+    }
+
+    const closeLimitConfirm = () => {
+        setShowLimitConfirm(false)
+        limitProceedRef.current = null
+    }
+
+    const handleLimitConfirmClick = () => {
+        const fn = limitProceedRef.current
+        limitProceedRef.current = null
+        fn?.()
+        if (!limitProceedRef.current) {
+            setShowLimitConfirm(false)
+        }
+    }
+
     const persistTargetAllocationToggle = async (enabled) => {
         if (!portfolioId || isTfsa) return
+        setInlineError('')
         setAllocToggleSaving(true)
         try {
             const { data } = await axios.patch(`/api/investments/${portfolioId}`, {
@@ -378,7 +405,7 @@ export default function TFSAPortfolio({
             })
             onPortfolioMetaUpdated?.(data)
         } catch (err) {
-            window.alert(err.response?.data?.detail || 'Could not update target allocation setting')
+            setInlineError(err.response?.data?.detail || 'Could not update target allocation setting')
         } finally {
             setAllocToggleSaving(false)
         }
@@ -398,42 +425,45 @@ export default function TFSAPortfolio({
             setEditingPortfolioHeader(false)
             return
         }
+        setInlineError('')
         try {
             const { data } = await axios.patch(`/api/investments/${portfolioId}`, body)
             onPortfolioMetaUpdated?.(data)
             setEditingPortfolioHeader(false)
         } catch (err) {
-            window.alert(err.response?.data?.detail || 'Could not update portfolio')
+            setInlineError(err.response?.data?.detail || 'Could not update portfolio')
         }
     }
 
     // Deposit management
+    const applyDeposit = (amount, dateStr) => {
+        const newDeposit = {
+            id: Date.now(),
+            amount: amount,
+            date: dateStr
+        }
+        setHasUserEditedContributions(true)
+        setDeposits(prev => [...prev, newDeposit])
+        setNewDepositAmount('')
+        setNewDepositDate(new Date().toISOString().split('T')[0])
+    }
+
     const addDeposit = () => {
         const amount = parseFloat(String(newDepositAmount).replace(/,/g, ''))
         if (!amount || amount <= 0) return
+        const dateStr = newDepositDate
 
         const newTotal = annualContributions + amount
         if (newTotal > tfsaAnnualLimit) {
             const exceed = newTotal - tfsaAnnualLimit
-            if (
-                !window.confirm(
-                    `This will exceed your annual limit by ${fmtZar(exceed)}. Continue anyway?`
-                )
-            ) {
-                return
-            }
+            openLimitConfirm(
+                `This will exceed your annual limit by ${fmtZar(exceed)}. Continue anyway?`,
+                () => applyDeposit(amount, dateStr)
+            )
+            return
         }
 
-        const newDeposit = {
-            id: Date.now(),
-            amount: amount,
-            date: newDepositDate
-        }
-
-        setHasUserEditedContributions(true)
-        setDeposits([...deposits, newDeposit])
-        setNewDepositAmount('')
-        setNewDepositDate(new Date().toISOString().split('T')[0])
+        applyDeposit(amount, dateStr)
     }
 
     const removeDeposit = (id) => {
@@ -442,6 +472,18 @@ export default function TFSAPortfolio({
     }
 
     // Historical contribution management
+    const commitHistoricalContribution = (fy, amount) => {
+        const newHistorical = {
+            id: Date.now(),
+            financial_year: fy,
+            amount: amount
+        }
+        setHasUserEditedContributions(true)
+        setHistoricalContributions(prev => [...prev, newHistorical])
+        setNewHistoricalYear('')
+        setNewHistoricalAmount('')
+    }
+
     const addHistoricalContribution = () => {
         const fy = newHistoricalYear.trim()
         const amount = parseFloat(String(newHistoricalAmount).replace(/,/g, ''))
@@ -452,39 +494,30 @@ export default function TFSAPortfolio({
             .reduce((sum, h) => sum + h.amount, 0)
         const yearTotal = existingForYear + amount
 
+        const tryLifetimeCheck = () => {
+            const histTotal = historicalContributions.reduce((sum, h) => sum + h.amount, 0)
+            const annual = deposits.reduce((sum, d) => sum + d.amount, 0)
+            const newLifetimeTotal = histTotal + annual + amount
+            if (newLifetimeTotal > TFSA_LIFETIME_LIMIT) {
+                const exceed = newLifetimeTotal - TFSA_LIFETIME_LIMIT
+                openLimitConfirm(
+                    `This will exceed your lifetime limit by ${fmtZar(exceed)}. Continue anyway?`,
+                    () => commitHistoricalContribution(fy, amount)
+                )
+                return
+            }
+            commitHistoricalContribution(fy, amount)
+        }
+
         if (yearTotal > tfsaAnnualLimit) {
             const exceed = yearTotal - tfsaAnnualLimit
-            if (
-                !window.confirm(
-                    `FY ${fy} will exceed annual limit by ${fmtZar(exceed)}. Continue anyway?`
-                )
-            ) {
-                return
-            }
+            openLimitConfirm(
+                `FY ${fy} will exceed annual limit by ${fmtZar(exceed)}. Continue anyway?`,
+                tryLifetimeCheck
+            )
+            return
         }
-
-        const newLifetimeTotal = historicalTotal + annualContributions + amount
-        if (newLifetimeTotal > TFSA_LIFETIME_LIMIT) {
-            const exceed = newLifetimeTotal - TFSA_LIFETIME_LIMIT
-            if (
-                !window.confirm(
-                    `This will exceed your lifetime limit by ${fmtZar(exceed)}. Continue anyway?`
-                )
-            ) {
-                return
-            }
-        }
-
-        const newHistorical = {
-            id: Date.now(),
-            financial_year: fy,
-            amount: amount
-        }
-
-        setHasUserEditedContributions(true)
-        setHistoricalContributions([...historicalContributions, newHistorical])
-        setNewHistoricalYear('')
-        setNewHistoricalAmount('')
+        tryLifetimeCheck()
     }
 
     const removeHistoricalContribution = (id) => {
@@ -557,6 +590,14 @@ export default function TFSAPortfolio({
             {portfolioId != null && hubBackLink?.to && hubBackLink?.label && (
                 <HubBackLink to={hubBackLink.to} label={hubBackLink.label} className="mb-1" />
             )}
+
+            {inlineError && (
+                <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200 rounded-lg flex items-center gap-2">
+                    <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+                    <span>{inlineError}</span>
+                </div>
+            )}
+
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div className="flex flex-col gap-2 min-w-0 flex-1">
@@ -593,6 +634,7 @@ export default function TFSAPortfolio({
                                     setDraftPortfolioName(portfolioName)
                                     setDraftPortfolioCurrency(portfolioCurrency)
                                     setEditingPortfolioHeader(false)
+                                    setInlineError('')
                                 }}
                                 className="px-3 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
                             >
@@ -1365,6 +1407,18 @@ export default function TFSAPortfolio({
                 confirmText="Delete"
                 cancelText="Cancel"
                 variant="danger"
+            />
+
+            <ConfirmModal
+                isOpen={showLimitConfirm}
+                onClose={closeLimitConfirm}
+                onConfirm={handleLimitConfirmClick}
+                closeOnConfirm={false}
+                title="Contribution limit"
+                message={limitConfirmMessage}
+                confirmText="Continue"
+                cancelText="Cancel"
+                variant="warning"
             />
 
             <HoldingDetailsModal

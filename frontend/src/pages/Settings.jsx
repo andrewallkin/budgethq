@@ -5,6 +5,7 @@ import axios from 'axios'
 import { CheckCircle, XCircle, RefreshCw, AlertTriangle, LayoutDashboard, HelpCircle } from 'lucide-react'
 import { formatDateSafe } from '../utils/numberFormatting'
 import ConfirmModal from '../components/ConfirmModal'
+import { useAutoClearingMessage } from '../hooks/useAutoClearingMessage'
 
 export default function Settings() {
     const {
@@ -20,20 +21,20 @@ export default function Settings() {
     const [newPassword, setNewPassword] = useState('')
     const [confirmPassword, setConfirmPassword] = useState('')
     const [error, setError] = useState('')
-    const [success, setSuccess] = useState('')
+    const [success, setSuccess] = useAutoClearingMessage(8000)
     const [loading, setLoading] = useState(false)
 
     // Username change state
     const [username, setUsername] = useState('')
     const [usernameError, setUsernameError] = useState('')
-    const [usernameSuccess, setUsernameSuccess] = useState('')
+    const [usernameSuccess, setUsernameSuccess] = useAutoClearingMessage(8000)
     const [usernameLoading, setUsernameLoading] = useState(false)
 
     // OpenAI API Key state
     const [openaiApiKey, setOpenaiApiKey] = useState('')
     const [hasApiKey, setHasApiKey] = useState(false)
     const [apiKeyError, setApiKeyError] = useState('')
-    const [apiKeySuccess, setApiKeySuccess] = useState('')
+    const [apiKeySuccess, setApiKeySuccess] = useAutoClearingMessage(8000)
     const [apiKeyLoading, setApiKeyLoading] = useState(false)
 
     // Investec settings state
@@ -46,19 +47,19 @@ export default function Settings() {
     const [investecSaving, setInvestecSaving] = useState(false)
     const [syncing, setSyncing] = useState(false)
     const [investecError, setInvestecError] = useState('')
-    const [investecSuccess, setInvestecSuccess] = useState('')
+    const [investecSuccess, setInvestecSuccess] = useAutoClearingMessage(8000)
     const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false)
     const [showDeleteApiKeyConfirm, setShowDeleteApiKeyConfirm] = useState(false)
     const [showChangePasswordConfirm, setShowChangePasswordConfirm] = useState(false)
     const [syncingHistorical, setSyncingHistorical] = useState(null)
-    const [syncSuccess, setSyncSuccess] = useState('')
+    const [syncSuccess, setSyncSuccess] = useAutoClearingMessage(8000)
 
     // Budget period settings
     const [budgetPeriodStartDay, setBudgetPeriodStartDay] = useState(1)
     const [budgetPeriodLoading, setBudgetPeriodLoading] = useState(false)
     const [budgetPeriodSaving, setBudgetPeriodSaving] = useState(false)
     const [budgetPeriodError, setBudgetPeriodError] = useState('')
-    const [budgetPeriodSuccess, setBudgetPeriodSuccess] = useState('')
+    const [budgetPeriodSuccess, setBudgetPeriodSuccess] = useAutoClearingMessage(8000)
 
     // Initialize username from user
     useEffect(() => {
@@ -120,7 +121,6 @@ export default function Settings() {
                 budget_period_start_day: Math.max(1, Math.min(31, budgetPeriodStartDay)) || 1
             })
             setBudgetPeriodSuccess('Budget period saved')
-            setTimeout(() => setBudgetPeriodSuccess(''), 3000)
         } catch (err) {
             setBudgetPeriodError(err.response?.data?.detail || 'Failed to save budget period')
         } finally {
@@ -193,7 +193,6 @@ export default function Settings() {
                 `Synced ${response.data.new_transactions} transactions from the last ${months} month(s) ` +
                 `(${response.data.categorized} categorized by rules)`
             )
-            setTimeout(() => setSyncSuccess(''), 5000)
         } catch (err) {
             setInvestecError(err.response?.data?.detail || 'Failed to sync historical transactions')
         } finally {

@@ -1,6 +1,6 @@
 import { AlertTriangle, X } from 'lucide-react'
 
-export default function ConfirmDeleteModal({ isOpen, onClose, onConfirm, title, message, monthYear }) {
+export default function ConfirmDeleteModal({ isOpen, onClose, onConfirm, title, message, monthYear, actionError }) {
     if (!isOpen) return null
 
     return (
@@ -26,6 +26,11 @@ export default function ConfirmDeleteModal({ isOpen, onClose, onConfirm, title, 
 
                 {/* Content */}
                 <div className="p-6">
+                    {actionError && (
+                        <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-800 dark:text-red-200">
+                            {actionError}
+                        </div>
+                    )}
                     {monthYear && (
                         <p className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
                             {monthYear}

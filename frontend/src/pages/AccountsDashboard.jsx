@@ -5,6 +5,8 @@ import { formatCurrency, formatDateSafe } from '../utils/numberFormatting'
 import BlurredValue from '../components/BlurredValue'
 import AddManualAccountModal from '../components/AddManualAccountModal'
 import HubBackLink from '../components/HubBackLink'
+import ConfirmModal from '../components/ConfirmModal'
+import { useAutoClearingMessage } from '../hooks/useAutoClearingMessage'
 
 export default function AccountsDashboard() {
     const [loading, setLoading] = useState(true)
@@ -12,7 +14,11 @@ export default function AccountsDashboard() {
     const [accounts, setAccounts] = useState([])
     const [manualAccounts, setManualAccounts] = useState([])
     const [error, setError] = useState('')
-    const [success, setSuccess] = useState('')
+    const [success, setSuccess] = useAutoClearingMessage(8000)
+    const [confirmDeactivateOpen, setConfirmDeactivateOpen] = useState(false)
+    const [confirmDeleteManualOpen, setConfirmDeleteManualOpen] = useState(false)
+    const [pendingInvestecAccountId, setPendingInvestecAccountId] = useState(null)
+    const [pendingManualAccountId, setPendingManualAccountId] = useState(null)
     const [activeDropdown, setActiveDropdown] = useState(null)
     const [manualDropdown, setManualDropdown] = useState(null)
     const [addModalOpen, setAddModalOpen] = useState(false)
@@ -89,13 +95,19 @@ export default function AccountsDashboard() {
         }
     }
 
-    const handleDeactivate = async (accountId) => {
-        if (!confirm('Deactivate this account? Transaction history will be preserved.')) return
+    const handleDeactivateRequest = (accountId) => {
+        setPendingInvestecAccountId(accountId)
+        setConfirmDeactivateOpen(true)
+        setActiveDropdown(null)
+    }
 
+    const handleDeactivateConfirm = async () => {
+        if (pendingInvestecAccountId == null) return
+        const accountId = pendingInvestecAccountId
+        setPendingInvestecAccountId(null)
         try {
             await axios.patch(`/api/investec/accounts/${accountId}`, { is_active: false })
             setSuccess('Account deactivated')
-            setActiveDropdown(null)
             await fetchAllAccounts()
         } catch (err) {
             setError(err.response?.data?.detail || 'Failed to deactivate account')
@@ -114,12 +126,19 @@ export default function AccountsDashboard() {
         }
     }
 
-    const handleDeleteManualAccount = async (accountId) => {
-        if (!confirm('Delete this manual account?')) return
+    const handleDeleteManualRequest = (accountId) => {
+        setPendingManualAccountId(accountId)
+        setConfirmDeleteManualOpen(true)
+        setManualDropdown(null)
+    }
+
+    const handleDeleteManualConfirm = async () => {
+        if (pendingManualAccountId == null) return
+        const accountId = pendingManualAccountId
+        setPendingManualAccountId(null)
         try {
             await axios.delete(`/api/manual-accounts/${accountId}`)
             setSuccess('Account deleted')
-            setManualDropdown(null)
             await fetchAllAccounts()
         } catch (err) {
             setError(err.response?.data?.detail || 'Failed to delete account')
@@ -279,7 +298,7 @@ export default function AccountsDashboard() {
                                                 </button>
                                             )}
                                             <button
-                                                onClick={() => handleDeactivate(account.id)}
+                                                onClick={() => handleDeactivateRequest(account.id)}
                                                 className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-600 text-red-600 dark:text-red-400"
                                             >
                                                 Deactivate
@@ -393,7 +412,7 @@ export default function AccountsDashboard() {
                                                 {account.is_emergency_savings ? 'Remove from Emergency Fund' : 'Add to Emergency Fund'}
                                             </button>
                                             <button
-                                                onClick={() => handleDeleteManualAccount(account.id)}
+                                                onClick={() => handleDeleteManualRequest(account.id)}
                                                 className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-600 text-red-600 dark:text-red-400 flex items-center gap-2"
                                             >
                                                 <Trash2 className="w-4 h-4" />
@@ -453,7 +472,36 @@ export default function AccountsDashboard() {
             <AddManualAccountModal
                 isOpen={addModalOpen}
                 onClose={() => setAddModalOpen(false)}
-                onSuccess={fetchAllAccounts}
+                onSuccess={() => {
+                    setSuccess('Manual account added')
+                    fetchAllAccounts()
+                }}
+            />
+
+            <ConfirmModal
+                isOpen={confirmDeactivateOpen}
+                onClose={() => {
+                    setConfirmDeactivateOpen(false)
+                    setPendingInvestecAccountId(null)
+                }}
+                onConfirm={handleDeactivateConfirm}
+                title="Deactivate account?"
+                message="Deactivate this account? Transaction history will be preserved."
+                confirmText="Deactivate"
+                variant="warning"
+            />
+
+            <ConfirmModal
+                isOpen={confirmDeleteManualOpen}
+                onClose={() => {
+                    setConfirmDeleteManualOpen(false)
+                    setPendingManualAccountId(null)
+                }}
+                onConfirm={handleDeleteManualConfirm}
+                title="Delete manual account?"
+                message="Delete this manual account?"
+                confirmText="Delete"
+                variant="danger"
             />
         </div>
     )

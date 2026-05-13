@@ -1,7 +1,7 @@
-import { X, TrendingUp, TrendingDown, Target, Calendar, Edit2, Check, X as XIcon, Trash2 } from 'lucide-react'
+import { X, TrendingUp, TrendingDown, Target, Calendar, Edit2, Check, X as XIcon, Trash2, AlertCircle } from 'lucide-react'
 import GainLossIndicator from './GainLossIndicator'
 import BlurredValue from './BlurredValue'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import axios from 'axios'
 import { formatCurrency as formatMoney } from '../utils/numberFormatting'
 
@@ -21,6 +21,12 @@ export default function HoldingDetailsModal({
     const [isEditingCostBasis, setIsEditingCostBasis] = useState(false)
     const [editedCostBasis, setEditedCostBasis] = useState('')
     const [isSaving, setIsSaving] = useState(false)
+    const [saveError, setSaveError] = useState('')
+
+    useEffect(() => {
+        if (!isOpen || !holding) return
+        setSaveError('')
+    }, [isOpen, holding?.id])
 
     if (!isOpen || !holding) return null
 
@@ -38,6 +44,7 @@ export default function HoldingDetailsModal({
     const costBasisAffix = currencyCode === 'ZAR' ? 'R' : currencyCode
 
     const handleEditCostBasis = () => {
+        setSaveError('')
         setEditedCostBasis(holding.cost_basis.toString())
         setIsEditingCostBasis(true)
     }
@@ -45,10 +52,11 @@ export default function HoldingDetailsModal({
     const handleSaveCostBasis = async () => {
         const newCostBasis = parseFloat(editedCostBasis)
         if (isNaN(newCostBasis) || newCostBasis < 0) {
-            alert('Please enter a valid positive number')
+            setSaveError('Please enter a valid positive number')
             return
         }
 
+        setSaveError('')
         setIsSaving(true)
         try {
             const response = await axios.put(
@@ -71,13 +79,14 @@ export default function HoldingDetailsModal({
             setEditedCostBasis('')
         } catch (error) {
             console.error('Failed to update cost basis:', error)
-            alert('Failed to update cost basis. Please try again.')
+            setSaveError('Failed to update cost basis. Please try again.')
         } finally {
             setIsSaving(false)
         }
     }
 
     const handleCancelEdit = () => {
+        setSaveError('')
         setIsEditingCostBasis(false)
         setEditedCostBasis('')
     }
@@ -107,6 +116,12 @@ export default function HoldingDetailsModal({
 
                 {/* Content */}
                 <div className="p-6 space-y-6">
+                    {saveError && (
+                        <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200 rounded-lg flex items-center gap-2">
+                            <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                            <span>{saveError}</span>
+                        </div>
+                    )}
                     {/* Current Value & Performance */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="bg-gray-50 dark:bg-gray-700/50 p-6 rounded-lg text-left">

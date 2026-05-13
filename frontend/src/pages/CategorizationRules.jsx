@@ -5,12 +5,13 @@ import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, CATEGORIES, CATEGORY_LABELS } fr
 import BlurredValue from '../components/BlurredValue'
 import { formatCurrency, formatDateSafe } from '../utils/numberFormatting'
 import HubBackLink from '../components/HubBackLink'
+import { useAutoClearingMessage } from '../hooks/useAutoClearingMessage'
 
 export default function CategorizationRules() {
     const [loading, setLoading] = useState(true)
     const [rules, setRules] = useState([])
     const [error, setError] = useState('')
-    const [success, setSuccess] = useState('')
+    const [success, setSuccess] = useAutoClearingMessage(8000)
 
     const [newRule, setNewRule] = useState({
         pattern: '',
