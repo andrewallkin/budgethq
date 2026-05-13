@@ -183,7 +183,7 @@ export default function InvestmentsLanding() {
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                 {portfolios.map((portfolio) => (
                     <div
-                        key={portfolio.id}
+                        key={portfolio.id ?? 'ra'}
                         className={`relative bg-white dark:bg-gray-800 p-5 rounded-xl ${portfolioCardHoverRingClasses}`}
                     >
                         <Link
@@ -197,35 +197,43 @@ export default function InvestmentsLanding() {
                             <div className="flex items-start justify-between gap-3 pointer-events-none">
                                 <div className="min-w-0 pointer-events-none">
                                     <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{portfolio.name}</h3>
-                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                        Sheet tab: {portfolio.sheet_name || 'Not set'}
-                                    </p>
-                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                                    {!portfolio.is_retirement_annuity && (
+                                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                            Sheet tab: {portfolio.sheet_name || 'Not set'}
+                                        </p>
+                                    )}
+                                    <p
+                                        className={`text-xs text-gray-500 dark:text-gray-400 ${
+                                            portfolio.is_retirement_annuity ? 'mt-1' : 'mt-0.5'
+                                        }`}
+                                    >
                                         Currency: {portfolio.currency_code || 'ZAR'}
                                     </p>
                                 </div>
-                                <div className="flex items-center shrink-0 pointer-events-auto">
-                                    <button
-                                        type="button"
-                                        onClick={() => openEditPortfolio(portfolio)}
-                                        className="p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
-                                        title="Rename / currency"
-                                        aria-label={`Edit ${portfolio.name}`}
-                                    >
-                                        <Edit2 className="w-4 h-4" />
-                                    </button>
-                                    {!portfolio.is_default_tfsa && (
+                                {portfolio.id != null && !portfolio.is_retirement_annuity && (
+                                    <div className="flex items-center shrink-0 pointer-events-auto">
                                         <button
                                             type="button"
-                                            onClick={() => setPortfolioToDelete(portfolio)}
-                                            className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg"
-                                            title="Delete portfolio"
-                                            aria-label={`Delete ${portfolio.name}`}
+                                            onClick={() => openEditPortfolio(portfolio)}
+                                            className="p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+                                            title="Rename / currency"
+                                            aria-label={`Edit ${portfolio.name}`}
                                         >
-                                            <Trash2 className="w-4 h-4" />
+                                            <Edit2 className="w-4 h-4" />
                                         </button>
-                                    )}
-                                </div>
+                                        {!portfolio.is_default_tfsa && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setPortfolioToDelete(portfolio)}
+                                                className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg"
+                                                title="Delete portfolio"
+                                                aria-label={`Delete ${portfolio.name}`}
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                             <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400 pointer-events-none">
                                 <Wallet className="w-4 h-4" aria-hidden />

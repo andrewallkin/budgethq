@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { Link } from 'react-router-dom'
 import axios from 'axios'
 import {
     LineChart,
@@ -10,9 +11,10 @@ import {
     Legend,
     ResponsiveContainer,
 } from 'recharts'
-import { TrendingUp, Edit2, Trash2 } from 'lucide-react'
+import { TrendingUp, Edit2, Trash2, Calculator } from 'lucide-react'
 import ConfirmModal from '../components/ConfirmModal'
 import BlurredValue from '../components/BlurredValue'
+import HubBackLink from '../components/HubBackLink'
 import { useAuth } from '../context/AuthContext'
 import { formatCurrency, formatDateSafe } from '../utils/numberFormatting'
 
@@ -299,11 +301,21 @@ export default function RAPerformance() {
 
     return (
         <div className="space-y-6 sm:space-y-8 pb-6">
+            <HubBackLink to="/investments" label="Investments" className="mb-1" />
             <div>
                 <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-2">📈 RA Performance</h1>
                 <p className="text-gray-600 dark:text-gray-400">
                     Track your retirement annuity portfolio value and contributions over time.
                 </p>
+                <div className="mt-4">
+                    <Link
+                        to="/investments/ra/calculator"
+                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 text-sm font-medium transition-colors"
+                    >
+                        <Calculator className="w-4 h-4 shrink-0" />
+                        RA tax calculator
+                    </Link>
+                </div>
             </div>
 
             {/* Overview */}

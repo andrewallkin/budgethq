@@ -7,7 +7,15 @@ import { formatDateSafe } from '../utils/numberFormatting'
 import ConfirmModal from '../components/ConfirmModal'
 
 export default function Settings() {
-    const { user, showInvestecNav, updateInvestecNavPreference, blurSensitiveValues, setBlurSensitiveValues } = useAuth()
+    const {
+        user,
+        showInvestecNav,
+        updateInvestecNavPreference,
+        showRaUnderInvestments,
+        updateRaUnderInvestmentsPreference,
+        blurSensitiveValues,
+        setBlurSensitiveValues,
+    } = useAuth()
     const [currentPassword, setCurrentPassword] = useState('')
     const [newPassword, setNewPassword] = useState('')
     const [confirmPassword, setConfirmPassword] = useState('')
@@ -455,6 +463,32 @@ export default function Settings() {
                             )}
                         </div>
                     </form>
+                </div>
+
+                {/* RA under Investments */}
+                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h2 className="text-base font-semibold text-gray-900 dark:text-white">RA tools under Investments</h2>
+                            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                                Shows RA Performance and the RA tax calculator on the Investments page and home
+                            </p>
+                        </div>
+                        <button
+                            role="switch"
+                            aria-checked={showRaUnderInvestments}
+                            onClick={() => updateRaUnderInvestmentsPreference(!showRaUnderInvestments)}
+                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                                showRaUnderInvestments ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-600'
+                            }`}
+                        >
+                            <span
+                                className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                    showRaUnderInvestments ? 'translate-x-5' : 'translate-x-0'
+                                }`}
+                            />
+                        </button>
+                    </div>
                 </div>
 
                 {/* Investec Integration */}

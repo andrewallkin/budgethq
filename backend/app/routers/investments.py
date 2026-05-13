@@ -19,6 +19,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/investments", tags=["investments"])
 
 ALLOWED_CURRENCY_CODES = frozenset({"ZAR", "USD", "EUR", "GBP"})
+# Synthetic RA portfolio uses slug "ra"; user-created portfolios must not take it.
+RESERVED_INVESTMENT_SLUGS = frozenset({"ra"})
 
 
 def _normalize_currency_code(code: str | None) -> str:
@@ -49,6 +51,29 @@ def _portfolio_value(db: Session, portfolio_id: int) -> float:
         .scalar()
         or 0
     )
+
+
+def _latest_ra_value_zar(db: Session, user_id: int) -> float:
+    """Latest RA portfolio value from RAValueHistory (same rule as /api/ra/default_user)."""
+    latest = (
+        db.query(models.RAValueHistory)
+        .filter(models.RAValueHistory.user_id == user_id)
+        .order_by(models.RAValueHistory.record_date.desc())
+        .first()
+    )
+    return round(latest.portfolio_value or 0, 2) if latest else 0.0
+
+
+def _allocate_portfolio_slug(db: Session, user_id: int, base_slug: str) -> str:
+    slug = base_slug
+    suffix = 2
+    while slug in RESERVED_INVESTMENT_SLUGS or db.query(models.InvestmentPortfolio).filter(
+        models.InvestmentPortfolio.user_id == user_id,
+        models.InvestmentPortfolio.slug == slug,
+    ).first():
+        slug = f"{base_slug}-{suffix}"
+        suffix += 1
+    return slug
 
 
 def _fx_public_snapshot(fx: FxRatesResult) -> dict:
@@ -107,10 +132,31 @@ async def list_investments(
             "total_value": value,
         })
 
+    ra_value_zar = 0.0
+    if bool(getattr(current_user, "show_ra_under_investments", None)):
+        ra_value_zar = _latest_ra_value_zar(db, current_user.id)
+        ra_entry = {
+            "id": None,
+            "name": "Retirement annuity (RA)",
+            "slug": "ra",
+            "is_default_tfsa": False,
+            "target_allocation_enabled": False,
+            "currency_code": "ZAR",
+            "sheet_name": None,
+            "total_value": ra_value_zar,
+            "is_retirement_annuity": True,
+        }
+        if result and result[0].get("is_default_tfsa"):
+            result.insert(1, ra_entry)
+        else:
+            result.insert(0, ra_entry)
+
     fx = get_fx_rates_cached()
     value_currency_pairs = [
         (_portfolio_value(db, p.id), p.currency_code or "ZAR") for p in portfolios
     ]
+    if bool(getattr(current_user, "show_ra_under_investments", None)):
+        value_currency_pairs.append((ra_value_zar, "ZAR"))
     total_base, agg_err = aggregate_portfolios_base(value_currency_pairs, fx)
     fx_snap = _fx_public_snapshot(fx)
     fx_snap["aggregate_error"] = agg_err
@@ -224,14 +270,7 @@ async def create_investment(
     db: Session = Depends(database.get_db),
 ):
     base_slug = slugify_portfolio_name(request.name)
-    slug = base_slug
-    suffix = 2
-    while db.query(models.InvestmentPortfolio).filter(
-        models.InvestmentPortfolio.user_id == current_user.id,
-        models.InvestmentPortfolio.slug == slug,
-    ).first():
-        slug = f"{base_slug}-{suffix}"
-        suffix += 1
+    slug = _allocate_portfolio_slug(db, current_user.id, base_slug)
 
     cc = _normalize_currency_code(request.currency_code)
 

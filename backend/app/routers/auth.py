@@ -34,6 +34,7 @@ class UsernameChangeRequest(BaseModel):
 
 class UserPreferences(BaseModel):
     has_investec_account: bool
+    show_ra_under_investments: bool
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -178,7 +179,10 @@ async def get_user_preferences(
         current_user.investec_client_secret,
         current_user.investec_api_key
     ])
-    return {"has_investec_account": bool(current_user.has_investec_account) or has_credentials}
+    return {
+        "has_investec_account": bool(current_user.has_investec_account) or has_credentials,
+        "show_ra_under_investments": bool(current_user.show_ra_under_investments),
+    }
 
 
 @router.put("/user/preferences", response_model=UserPreferences)
@@ -189,8 +193,12 @@ async def update_user_preferences(
 ):
     """Update user preferences."""
     current_user.has_investec_account = preferences.has_investec_account
+    current_user.show_ra_under_investments = preferences.show_ra_under_investments
     db.commit()
-    return {"has_investec_account": current_user.has_investec_account}
+    return {
+        "has_investec_account": current_user.has_investec_account,
+        "show_ra_under_investments": bool(current_user.show_ra_under_investments),
+    }
 
 
 @router.put("/user/username")

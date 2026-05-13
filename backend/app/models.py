@@ -17,6 +17,7 @@ class User(Base):
     investec_client_secret = Column(String, nullable=True)
     investec_api_key = Column(String, nullable=True)
     has_investec_account = Column(Boolean, default=False, server_default='false')
+    show_ra_under_investments = Column(Boolean, default=False, server_default='false')
 
     # Emergency fund designation
     emergency_fund_account_id = Column(Integer, ForeignKey("investec_accounts.id"), nullable=True)

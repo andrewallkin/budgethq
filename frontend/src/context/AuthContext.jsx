@@ -12,12 +12,26 @@ export const AuthProvider = ({ children }) => {
         const saved = localStorage.getItem('showInvestecNav')
         return saved ? JSON.parse(saved) : false
     })
+    const [showRaUnderInvestments, setShowRaUnderInvestments] = useState(() => {
+        const saved = localStorage.getItem('showRaUnderInvestments')
+        return saved ? JSON.parse(saved) : false
+    })
     const [blurSensitiveValues, setBlurSensitiveValuesState] = useState(() => {
         const saved = localStorage.getItem('blurSensitiveValues')
         return saved ? JSON.parse(saved) : false
     })
 
     const logoutTimerRef = useRef(null)
+    const investecNavRef = useRef(showInvestecNav)
+    const raUnderInvestmentsRef = useRef(showRaUnderInvestments)
+
+    useEffect(() => {
+        investecNavRef.current = showInvestecNav
+    }, [showInvestecNav])
+
+    useEffect(() => {
+        raUnderInvestmentsRef.current = showRaUnderInvestments
+    }, [showRaUnderInvestments])
 
     const setBlurSensitiveValues = (value) => {
         setBlurSensitiveValuesState(value)
@@ -34,9 +48,11 @@ export const AuthProvider = ({ children }) => {
     const logout = () => {
         localStorage.removeItem('token')
         localStorage.removeItem('showInvestecNav')
+        localStorage.removeItem('showRaUnderInvestments')
         delete axios.defaults.headers.common['Authorization']
         setUser(null)
         setShowInvestecNav(false)
+        setShowRaUnderInvestments(false)
         clearLogoutTimer()
     }
 
@@ -61,9 +77,14 @@ export const AuthProvider = ({ children }) => {
     const fetchAndApplyPreferences = async () => {
         try {
             const response = await axios.get('/api/auth/user/preferences')
-            const value = response.data.has_investec_account
-            setShowInvestecNav(value)
-            localStorage.setItem('showInvestecNav', JSON.stringify(value))
+            const investec = response.data.has_investec_account
+            const ra = response.data.show_ra_under_investments
+            setShowInvestecNav(investec)
+            setShowRaUnderInvestments(ra)
+            investecNavRef.current = investec
+            raUnderInvestmentsRef.current = ra
+            localStorage.setItem('showInvestecNav', JSON.stringify(investec))
+            localStorage.setItem('showRaUnderInvestments', JSON.stringify(ra))
         } catch (err) {
             // Silently ignore — preferences are non-critical
         }
@@ -71,9 +92,27 @@ export const AuthProvider = ({ children }) => {
 
     const updateInvestecNavPreference = async (value) => {
         setShowInvestecNav(value)
+        investecNavRef.current = value
         localStorage.setItem('showInvestecNav', JSON.stringify(value))
         try {
-            await axios.put('/api/auth/user/preferences', { has_investec_account: value })
+            await axios.put('/api/auth/user/preferences', {
+                has_investec_account: value,
+                show_ra_under_investments: raUnderInvestmentsRef.current,
+            })
+        } catch (err) {
+            // Best-effort — local state is already updated
+        }
+    }
+
+    const updateRaUnderInvestmentsPreference = async (value) => {
+        setShowRaUnderInvestments(value)
+        raUnderInvestmentsRef.current = value
+        localStorage.setItem('showRaUnderInvestments', JSON.stringify(value))
+        try {
+            await axios.put('/api/auth/user/preferences', {
+                has_investec_account: investecNavRef.current,
+                show_ra_under_investments: value,
+            })
         } catch (err) {
             // Best-effort — local state is already updated
         }
@@ -145,7 +184,7 @@ export const AuthProvider = ({ children }) => {
             (response) => response,
             (error) => {
                 if (error.response?.status === 401) {
-                    // Token expired or invalid - auto logout
+                    // Token expired or invalid — auto logout
                     logout()
                 }
                 return Promise.reject(error)
@@ -157,7 +196,21 @@ export const AuthProvider = ({ children }) => {
     }, [])
 
     return (
-        <AuthContext.Provider value={{ user, login, register, logout, loading, showInvestecNav, updateInvestecNavPreference, blurSensitiveValues, setBlurSensitiveValues }}>
+        <AuthContext.Provider
+            value={{
+                user,
+                login,
+                register,
+                logout,
+                loading,
+                showInvestecNav,
+                updateInvestecNavPreference,
+                showRaUnderInvestments,
+                updateRaUnderInvestmentsPreference,
+                blurSensitiveValues,
+                setBlurSensitiveValues,
+            }}
+        >
             {!loading && children}
         </AuthContext.Provider>
     )
