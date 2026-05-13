@@ -6,7 +6,7 @@ Contains core functions for recording and aggregating portfolio history data.
 import logging
 import calendar
 from datetime import datetime, date, timedelta
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Set
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
@@ -378,6 +378,98 @@ def record_transaction_snapshot(db: Session, user_id: int, transaction_id: int) 
         'total_contributions': total_contributions,
         'total_growth': total_growth,
         'holdings_count': len(holdings_breakdown)
+    }
+
+
+def record_manual_portfolio_snapshot(
+    db: Session,
+    user_id: int,
+    portfolio_id: int,
+    *,
+    snapshot_type: str = "manual",
+    price_tickers_seen: Optional[Set[str]] = None,
+) -> dict:
+    """
+    Persist portfolio total and per-holding snapshot rows for one portfolio (non-hourly).
+    Optionally append ETF price rows; when price_tickers_seen is provided, dedupe across calls.
+    """
+    now = get_sast_now()
+    seen = price_tickers_seen if price_tickers_seen is not None else set()
+
+    portfolio_rec = db.query(models.InvestmentPortfolio).filter(
+        models.InvestmentPortfolio.id == portfolio_id,
+        models.InvestmentPortfolio.user_id == user_id,
+    ).first()
+    if not portfolio_rec:
+        return {
+            "skipped": True,
+            "total_value": 0.0,
+            "total_contributions": 0.0,
+            "total_growth": 0.0,
+            "holdings_recorded": 0,
+            "prices_recorded": 0,
+        }
+
+    total_value, holdings_breakdown = calculate_portfolio_value(
+        db, user_id, portfolio_id=portfolio_id
+    )
+    total_contributions = snapshot_contributions_for_portfolio(
+        db, user_id, portfolio_id, now.date()
+    )
+    total_growth = total_value - total_contributions
+
+    portfolio_record = models.PortfolioValueHistory(
+        user_id=user_id,
+        portfolio_id=portfolio_id,
+        total_value=total_value,
+        total_contributions=total_contributions,
+        total_growth=total_growth,
+        recorded_at=now,
+        snapshot_type=snapshot_type,
+    )
+    db.add(portfolio_record)
+
+    holdings_recorded = 0
+    for holding_id, data in holdings_breakdown.items():
+        holding_record = models.HoldingValueHistory(
+            user_id=user_id,
+            holding_id=holding_id,
+            jse_ticker=data["jse_ticker"],
+            shares=data["shares"],
+            price=data["price"],
+            value=data["value"],
+            cost_basis=data["cost_basis"],
+            unrealized_gain=data["unrealized_gain"],
+            recorded_at=now,
+            snapshot_type=snapshot_type,
+        )
+        db.add(holding_record)
+        holdings_recorded += 1
+
+    prices_recorded = 0
+    for data in holdings_breakdown.values():
+        ticker = data.get("jse_ticker")
+        price = data.get("price")
+        if ticker and price and ticker not in seen:
+            seen.add(ticker)
+            price_record = models.ETFPriceHistory(
+                jse_ticker=ticker,
+                price=price,
+                recorded_at=now,
+                snapshot_type=snapshot_type,
+            )
+            db.add(price_record)
+            prices_recorded += 1
+
+    db.commit()
+
+    return {
+        "skipped": False,
+        "total_value": round(total_value, 2),
+        "total_contributions": round(total_contributions, 2),
+        "total_growth": round(total_growth, 2),
+        "holdings_recorded": holdings_recorded,
+        "prices_recorded": prices_recorded,
     }
 
 

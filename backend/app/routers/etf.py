@@ -128,14 +128,20 @@ async def create_etf_holding(
         existing.current_price = current_price
         existing.price_updated_at = price_updated_at
 
-        # Initialize or override cost_basis
+        intended_cost_basis = 0.0
         if holding.cost_basis is not None:
             if holding.cost_basis < 0:
                 raise HTTPException(status_code=400, detail="cost_basis must be non-negative")
-            existing.cost_basis = float(holding.cost_basis)
+            intended_cost_basis = float(holding.cost_basis)
         elif existing.shares and existing.current_price:
-            # Fallback: initialize to current market value
-            existing.cost_basis = existing.shares * existing.current_price
+            intended_cost_basis = existing.shares * existing.current_price
+
+        if existing.shares > 0:
+            existing.cost_basis = 0.0
+        elif holding.cost_basis is not None:
+            existing.cost_basis = float(holding.cost_basis)
+        else:
+            existing.cost_basis = 0.0
 
         # Re-add to Google Sheet if not already there
         sheet_added = False
@@ -144,6 +150,37 @@ async def create_etf_holding(
 
         db.commit()
         db.refresh(existing)
+
+        transaction_created = False
+        if existing.shares > 0:
+            price_per_share = 0.0
+            total_tx_value = 0.0
+            if intended_cost_basis > 0:
+                price_per_share = intended_cost_basis / existing.shares
+                total_tx_value = intended_cost_basis
+            elif existing.current_price and existing.current_price > 0:
+                price_per_share = existing.current_price
+                total_tx_value = existing.shares * existing.current_price
+
+            new_transaction = models.ETFTransaction(
+                user_id=current_user.id,
+                portfolio_id=portfolio.id,
+                holding_id=existing.id,
+                transaction_type="BUY",
+                shares=existing.shares,
+                price_per_share=price_per_share,
+                total_value=total_tx_value,
+                transaction_date=get_sast_now(),
+            )
+            db.add(new_transaction)
+            db.commit()
+            db.refresh(new_transaction)
+            transaction_created = True
+            try:
+                history.record_transaction_snapshot(db, current_user.id, new_transaction.id)
+            except Exception as e:
+                logger.warning("Failed to record transaction snapshot for reactivated holding: %s", e)
+            db.refresh(existing)
 
         total_value = (existing.shares * existing.current_price) if existing.current_price else None
 
@@ -160,7 +197,8 @@ async def create_etf_holding(
             "instrument_type": existing.instrument_type or "etf",
             "price_updated_at": (existing.price_updated_at.isoformat() + "Z") if existing.price_updated_at else None,
             "reactivated": True,
-            "sheet_added": sheet_added
+            "sheet_added": sheet_added,
+            "transaction_created": transaction_created,
         }
 
     new_holding = models.ETFHolding(
@@ -506,6 +544,17 @@ async def bulk_import_holdings(
             failed_count += 1
 
     db.commit()
+
+    if created_count + updated_count > 0:
+        try:
+            history.record_manual_portfolio_snapshot(
+                db,
+                current_user.id,
+                portfolio.id,
+                snapshot_type="manual",
+            )
+        except Exception as e:
+            logger.warning("bulk-import portfolio snapshot failed: %s", e)
 
     return {
         "created": created_count,

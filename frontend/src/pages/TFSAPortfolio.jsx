@@ -632,29 +632,26 @@ export default function TFSAPortfolio({
                             />
                             <span>
                                 Track target allocation
-                                <span className="block text-xs text-gray-500 dark:text-gray-500 font-normal mt-0.5">
-                                    Turn off for simple positions-only portfolios (hide targets, rebalance, and what-if split).
-                                </span>
                             </span>
                         </label>
                     )}
                 </div>
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                     <PriceRefreshIndicator onRefresh={fetchHoldings} portfolioId={portfolioId} />
-                    <div className="flex flex-row gap-2 sm:gap-3 flex-1 sm:flex-initial">
+                    <div className="flex flex-row flex-wrap gap-2 sm:gap-3 w-full sm:w-auto sm:justify-end">
                         <button
                             onClick={() => setShowCSVModal(true)}
-                            className="flex-1 min-w-0 flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                            className="inline-flex shrink-0 items-center justify-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
                         >
                             <Upload className="w-4 h-4 shrink-0" />
-                            <span className="truncate">Import</span>
+                            <span className="whitespace-nowrap">Import</span>
                         </button>
                         <button
                             onClick={() => setShowAddETFModal(true)}
-                            className="flex-1 min-w-0 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                            className="inline-flex shrink-0 items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                         >
                             <Plus className="w-4 h-4 shrink-0" />
-                            <span className="truncate">Add</span>
+                            <span className="whitespace-nowrap">Add</span>
                         </button>
                     </div>
                 </div>
@@ -1026,20 +1023,20 @@ export default function TFSAPortfolio({
                             ? 'Get started by importing a CSV file or adding ETFs.'
                             : 'Get started by importing a CSV file or adding stocks or ETFs.'}
                     </p>
-                    <div className="flex flex-row gap-2 sm:gap-3 flex-wrap justify-center">
+                    <div className="flex flex-row flex-wrap gap-2 sm:gap-3 justify-center">
                         <button
                             onClick={() => setShowCSVModal(true)}
-                            className="flex-1 sm:flex-initial min-w-0 flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                            className="inline-flex shrink-0 items-center justify-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
                         >
                             <Upload className="w-4 h-4 shrink-0" />
-                            Import
+                            <span className="whitespace-nowrap">Import</span>
                         </button>
                         <button
                             onClick={() => setShowAddETFModal(true)}
-                            className="flex-1 sm:flex-initial min-w-0 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                            className="inline-flex shrink-0 items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                         >
                             <Plus className="w-4 h-4 shrink-0" />
-                            Add
+                            <span className="whitespace-nowrap">Add</span>
                         </button>
                     </div>
                 </div>

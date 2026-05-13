@@ -438,7 +438,7 @@ export default function PortfolioChart({
                     <ResponsiveContainer width="100%" height="100%">
                         <AreaChart
                             data={processedData}
-                            margin={{ top: 10, right: 5, left: 0, bottom: 0 }}
+                            margin={{ top: 10, right: 8, left: 20, bottom: 4 }}
                         >
                             <defs>
                                 <linearGradient id="colorContributions" x1="0" y1="0" x2="0" y2="1">
@@ -472,7 +472,8 @@ export default function PortfolioChart({
                                 fontSize={12}
                                 tickLine={false}
                                 axisLine={false}
-                                width={60}
+                                width={84}
+                                tickMargin={8}
                             />
                             <Tooltip content={<CustomTooltip />} />
                             {showContributions ? (

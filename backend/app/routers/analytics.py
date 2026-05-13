@@ -175,70 +175,23 @@ async def trigger_snapshot(
     portfolio_totals = []
 
     for portfolio_id in portfolio_ids:
-        portfolio = db.query(models.InvestmentPortfolio).filter(
-            models.InvestmentPortfolio.id == portfolio_id,
-            models.InvestmentPortfolio.user_id == current_user.id,
-        ).first()
-        if not portfolio:
+        stats = history.record_manual_portfolio_snapshot(
+            db,
+            current_user.id,
+            portfolio_id,
+            snapshot_type="manual",
+            price_tickers_seen=tickers_seen_global,
+        )
+        if stats.get("skipped"):
             continue
-
-        total_value, holdings_breakdown = history.calculate_portfolio_value(
-            db, current_user.id, portfolio_id=portfolio_id
-        )
-        total_contributions = history.snapshot_contributions_for_portfolio(
-            db, current_user.id, portfolio_id, now.date()
-        )
-        total_growth = total_value - total_contributions
-
-        portfolio_record = models.PortfolioValueHistory(
-            user_id=current_user.id,
-            portfolio_id=portfolio_id,
-            total_value=total_value,
-            total_contributions=total_contributions,
-            total_growth=total_growth,
-            recorded_at=now,
-            snapshot_type="manual"
-        )
-        db.add(portfolio_record)
-
-        for holding_id, data in holdings_breakdown.items():
-            if holding_id < 0 or data.get('type') == 'BOND':
-                continue
-            holding_record = models.HoldingValueHistory(
-                user_id=current_user.id,
-                holding_id=holding_id,
-                jse_ticker=data['jse_ticker'],
-                shares=data['shares'],
-                price=data['price'],
-                value=data['value'],
-                cost_basis=data['cost_basis'],
-                unrealized_gain=data['unrealized_gain'],
-                recorded_at=now,
-                snapshot_type="manual"
-            )
-            db.add(holding_record)
-            holdings_recorded += 1
-
-        for data in holdings_breakdown.values():
-            if data.get('jse_ticker') and data['jse_ticker'] not in tickers_seen_global and data.get('price'):
-                price_record = models.ETFPriceHistory(
-                    jse_ticker=data['jse_ticker'],
-                    price=data['price'],
-                    recorded_at=now,
-                    snapshot_type="manual"
-                )
-                db.add(price_record)
-                tickers_seen_global.add(data['jse_ticker'])
-                prices_recorded += 1
-
+        holdings_recorded += stats["holdings_recorded"]
+        prices_recorded += stats["prices_recorded"]
         portfolio_totals.append({
             "portfolio_id": portfolio_id,
-            "total_value": round(total_value, 2),
-            "total_contributions": round(total_contributions, 2),
-            "total_growth": round(total_growth, 2),
+            "total_value": stats["total_value"],
+            "total_contributions": stats["total_contributions"],
+            "total_growth": stats["total_growth"],
         })
-
-    db.commit()
 
     agg_value = sum(p["total_value"] for p in portfolio_totals)
     agg_contrib = sum(p["total_contributions"] for p in portfolio_totals)

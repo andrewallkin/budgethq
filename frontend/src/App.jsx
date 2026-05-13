@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Routes, Route, Link, useLocation, Navigate } from 'react-router-dom'
-import { LayoutDashboard, PieChart, Home, Moon, Sun, LogOut, Settings as SettingsIcon, ChevronLeft, ChevronRight, ChevronDown, Calculator, Shield, TrendingUp, Menu, CreditCard, Receipt, Tag, HelpCircle, Building2, Landmark } from 'lucide-react'
+import { LayoutDashboard, PieChart, Home, Moon, Sun, LogOut, Settings as SettingsIcon, ChevronLeft, ChevronRight, Calculator, Shield, TrendingUp, Menu, HelpCircle, Building2 } from 'lucide-react'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import BudgetDashboard from './pages/BudgetDashboard'
 import RATaxCalculator from './pages/RATaxCalculator'
@@ -41,12 +41,6 @@ function AppContent() {
         return saved ? JSON.parse(saved) : false
     })
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
-    const [investecExpanded, setInvestecExpanded] = useState(() => {
-        const saved = localStorage.getItem('investecNavExpanded')
-        if (saved !== null) return JSON.parse(saved)
-        return location.pathname.startsWith('/investec')
-    })
-
     // Close mobile menu when route changes
     useEffect(() => {
         setIsMobileMenuOpen(false)
@@ -65,17 +59,6 @@ function AppContent() {
         localStorage.setItem('sidebarCollapsed', JSON.stringify(isSidebarCollapsed))
     }, [isSidebarCollapsed])
 
-    useEffect(() => {
-        localStorage.setItem('investecNavExpanded', JSON.stringify(investecExpanded))
-    }, [investecExpanded])
-
-    // Auto-expand Investec group when navigating to an Investec page
-    useEffect(() => {
-        if (location.pathname.startsWith('/investec') && !investecExpanded) {
-            setInvestecExpanded(true)
-        }
-    }, [location.pathname, investecExpanded])
-
     const navItems = [
         { path: '/', label: 'Home', icon: Home },
         { path: '/salary', label: 'Payslip & Tax', icon: Calculator },
@@ -84,17 +67,7 @@ function AppContent() {
         { path: '/emergency-savings', label: 'Emergency Savings', icon: Shield },
         { path: '/ra', label: 'RA Performance', icon: TrendingUp },
         { path: '/ra-calculator', label: 'RA Tax Calculator', icon: Calculator },
-        {
-            label: 'Investec Banking',
-            icon: Building2,
-            children: [
-                { path: '/investec', label: 'Overview', icon: Landmark },
-                { path: '/investec/accounts', label: 'Bank Accounts', icon: CreditCard },
-                { path: '/investec/transactions', label: 'Transactions', icon: Receipt },
-                { path: '/investec/budget-analysis', label: 'Budget Analysis', icon: TrendingUp },
-                { path: '/investec/rules', label: 'Categorization Rules', icon: Tag },
-            ],
-        },
+        ...(showInvestecNav ? [{ path: '/investec', label: 'Investec Banking', icon: Building2 }] : []),
         { path: '/category-guide', label: 'Budget Category Guide', icon: HelpCircle },
         { path: '/settings', label: 'Settings', icon: SettingsIcon },
     ]
@@ -136,74 +109,11 @@ function AppContent() {
             </div>
             <nav className={`flex-1 ${collapsed && !isMobile ? 'px-2' : 'px-4'} space-y-2`}>
                 {navItems.map((item) => {
-                    if (item.children) {
-                        if (!showInvestecNav) return null
-                        const GroupIcon = item.icon
-                        const isInvestecActive = location.pathname.startsWith('/investec')
-                        const showExpanded = investecExpanded && (!collapsed || isMobile)
-
-                        if (collapsed && !isMobile) {
-                            return (
-                                <Link
-                                    key={item.label}
-                                    to="/investec"
-                                    className={`flex items-center justify-center px-2 py-3 rounded-lg transition-colors ${isInvestecActive
-                                        ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
-                                        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                                        }`}
-                                    title={item.label}
-                                >
-                                    <GroupIcon className="w-5 h-5" />
-                                </Link>
-                            )
-                        }
-
-                        return (
-                            <div key={item.label}>
-                                <button
-                                    type="button"
-                                    onClick={() => setInvestecExpanded(!investecExpanded)}
-                                    className={`flex items-center w-full px-4 py-3 rounded-lg transition-colors ${isInvestecActive
-                                        ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
-                                        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                                        }`}
-                                >
-                                    <GroupIcon className="w-5 h-5 mr-3" />
-                                    <span className="font-medium flex-1 text-left">{item.label}</span>
-                                    {showExpanded ? (
-                                        <ChevronDown className="w-4 h-4 shrink-0" />
-                                    ) : (
-                                        <ChevronRight className="w-4 h-4 shrink-0" />
-                                    )}
-                                </button>
-                                {showExpanded && (
-                                    <div className="mt-1 ml-2 pl-4 border-l border-gray-200 dark:border-gray-600 space-y-1">
-                                        {item.children.map((child) => {
-                                            const ChildIcon = child.icon
-                                            const isChildActive = location.pathname === child.path
-                                            return (
-                                                <Link
-                                                    key={child.path}
-                                                    to={child.path}
-                                                    className={`flex items-center px-3 py-2 rounded-lg transition-colors text-sm ${isChildActive
-                                                        ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
-                                                        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                                                        }`}
-                                                >
-                                                    <ChildIcon className="w-4 h-4 mr-2" />
-                                                    <span className="font-medium">{child.label}</span>
-                                                </Link>
-                                            )
-                                        })}
-                                    </div>
-                                )}
-                            </div>
-                        )
-                    }
-
                     const Icon = item.icon
                     const isActive = item.path === '/investments'
                         ? location.pathname.startsWith('/investments') || location.pathname === '/portfolio'
+                        : item.path === '/investec'
+                        ? location.pathname.startsWith('/investec')
                         : location.pathname === item.path
                     return (
                         <Link
