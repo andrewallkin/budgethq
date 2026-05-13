@@ -67,7 +67,11 @@ async def create_manual_account(
     db.refresh(account)
     logger.info(
         "Manual account created",
-        extra={"user_id": current_user.id, "account_id": account.id, "name": data.name},
+        extra={
+            "user_id": current_user.id,
+            "account_id": account.id,
+            "account_name": data.name,
+        },
     )
     return {
         "id": account.id,
