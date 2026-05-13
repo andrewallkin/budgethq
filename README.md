@@ -1,520 +1,204 @@
-## 💰 Financial Dashboard
+# BudgetHQ
 
-A personal finance dashboard for South African users, built with **React** and **FastAPI**, focused (for now) on two core areas: a monthly **Budget Dashboard** and a **TFSA Portfolio** view.
+BudgetHQ is a personal finance dashboard for **South African** users: budgeting against take-home pay, tax-oriented salary tooling, emergency savings targets, retirement annuity (RA) planning, optional **Investec banking** connectivity, and **investment portfolios** (including an automated TFSA view with ETFs, government bonds, Google Sheets pricing, FX-aware holdings, contribution limits, rebalancing helpers, and history).
 
-**🌟 Key Highlights:**
-- 🔄 **Live ETF Price Sync** via Google Sheets integration with background scheduler
-- 🛡️ **Emergency Savings Tracking** with automated expense coverage calculation
-- 👴 **RA Tax Calculator** to optimize retirement annuity contributions
-- 🏦 **Multi-Asset Support** for ETFs and Government Bonds in TFSA tracking
-- 📊 **Smart Rebalancing Engine** with automated buy/sell recommendations
-- 🔐 **Secure Authentication** with JWT tokens and restricted registration
-- 🐳 **Full Docker Support** with separate dev and production environments
-- �️ **Database Migrations** via Alembic for safe schema updates
-- �🎨 **Modern UI** with dark mode, sortable tables, and interactive modals
-- 📈 **TFSA Limit Tracking** for annual and lifetime contributions
-- 🔄 **CI/CD Pipeline** with automated deployments and health checks
+Primary stack: **React + Vite + TailwindCSS + Recharts** (`frontend/`), **FastAPI + SQLAlchemy + Pandas + APScheduler** (`backend/`), **PostgreSQL** with **Alembic** migrations (`backend/alembic/`), **Docker Compose** for dev and VPS-style production, **GitHub Actions** (`.github/workflows/deploy.yml`). A checked-in [openapi.json](openapi.json) reflects the REST API snapshot; interactive docs are at `/docs` when the backend is running.
 
-### Core Features
+---
 
-- **Authentication**
-  - Email/username + password with JWT-based auth.
-  - Per-user storage of budget and TFSA portfolio in the database.
-  - **Restricted Registration**: Registration limited to authorized email addresses for security.
+## Highlights
 
-- **💸 Payslip & Tax**
-  - **Detailed Salary Management**: Input your complete payslip with earnings, deductions, and fringe benefits.
-  - **Fringe Benefit Tracking**: Account for non-cash benefits that affect your taxable income (Medical Aid, Group Life, etc.).
-  - **Accurate Tax Calculations**: SARS-compliant PAYE calculations that include fringe benefits in taxable income.
-  - **Net Income Focus**: All budgeting is based on your actual take-home pay after all deductions.
-  - **Flexible Deduction Management**: Add any custom deductions or contributions without predefined placeholders.
-  - **Real-time Updates**: Automatic recalculation of taxes and net income as you modify your salary structure.
+| Area | What you get |
+|------|----------------|
+| **Auth** | JWT-based login and registration restricted to emails listed in `AUTHORIZED_USERS`; per-user data isolation. |
+| **Tax & payslip** | SARS-aligned PAYE/UIF/medical rebate logic driven by FY-specific tables in the backend (`tax_engine`). Detailed payslip model, fringe benefits; optional payslip PDF storage in Google Cloud Storage (GCS). |
+| **Budget** | Needs / wants / savings structure, charts, autosave against the authenticated user—not a single demo user. |
+| **Emergency savings** | Goals tied to budget “Needs” (e.g. 3/6/12 months), progress and time-to-goal views. |
+| **RA** | Performance and RA tax-benefit scenarios using the same tax engine as the budget flow. |
+| **Investments** | Multiple portfolios (e.g. default TFSA at `/portfolio` redirecting to `/investments/tfsa`), target allocation, transactions, Sheets-backed ETF prices where configured, FX worksheet integration, rebalancing calculator, snapshots and summaries (scheduled). |
+| **Investec** (optional) | Account sync, transactions, categorization rules, budget analysis (`/investec/*`). Stored API credentials require `ENCRYPTION_KEY`. The sidebar entry is a **Settings** preference (persisted locally) regardless of connectivity. |
+| **Ops** | Docker Compose (`docker-compose.dev.yml` vs `docker-compose.yml`), Makefile helpers, VPS deploy with migrations (`run_migrations.sh` inside the backend container). |
 
-- **💰 Budget Dashboard**
-  - **Income & Tax**: Capture monthly gross salary and age and get automatic SARS 2025/2026 PAYE and UIF calculations.
-  - **50/30/20 Style Categories**: Organise spending into **Needs**, **Wants**, and **Savings** with fully editable sub‑categories.
-  - **Auto-Save**: All edits to salary, age, and categories are saved automatically to your account.
-  - **Visualisations**:
-    - Overall pie chart showing Needs/Wants/Savings/Unallocated net income.
-    - Per‑tab pie chart showing the breakdown within the currently selected category.
-  - **Summary Stats**: Net income, total Needs/Wants/Savings, and remaining amount.
+---
 
-- **🛡️ Emergency Savings**
-  - **Expense-Linked Goals**: Set targets based on 3, 6, or 12 months of "Needs" from your budget.
-  - **Flexible Targets**: Choose between "Months of Expenses" or a specific "Target Value".
-  - **Progress Tracking**: Visual status indicators (Adequate, Good, Insufficient) with progress bars.
-  - **Time-to-Goal Calculator**: Automatically estimates how many months of saving are required to reach your target.
-  - **Auto-Save**: Seamless persistence of savings progress and goals.
+## Repository layout
 
-- **👴 RA Tax Calculator**
-  - **Tax Benefit Optimization**: See real-time PAYE savings based on different Retirement Annuity (RA) contribution levels.
-  - **Scenario Comparison**: Compare your current contribution against 10% and 15% salary contribution scenarios.
-  - **Unified Tracking**: Store your current RA valuation and monthly contributions.
-  - **Smart Integration**: Uses the same SARS tax engine as the main budget dashboard.
+| Path | Role |
+|------|------|
+| `frontend/src/pages/` | Route-level screens |
+| `frontend/src/components/` | Shared and feature UI |
+| `frontend/src/utils/` | Formatting and helpers |
+| `backend/app/routers/` | FastAPI routers by feature |
+| `backend/app/models.py` | SQLAlchemy models |
+| `backend/alembic/versions/` | Migration scripts |
+| `tests/` | Python tests |
+| `openapi.json` | API schema snapshot |
 
-- **📈 TFSA Portfolio**
-  - **Multi-Asset Support**: 
-    - Track **ETFs** with JSE tickers and live price updates from Google Sheets
-    - Manage **Government Bonds** with manual value tracking (no ticker needed)
-    - Unified holdings view with type badges to distinguish between ETFs and bonds
-  - **Live Price Integration**: 
-    - Automatic price sync from Google Sheets every 5 minutes via background scheduler
-    - Manual refresh button with real-time sync status indicator
-    - "Last updated" timestamp with color-coded freshness (green/yellow/gray)
-    - GOOGLEFINANCE formula integration for real-time ETF pricing
-  - **Transaction Management**:
-    - Dedicated **Buy/Sell Modal** with automatic share calculation for ETFs
-    - **Transaction History Component** showing all ETF and bond transactions
-    - Transaction type badges (BUY/SELL) with visual indicators
-    - Automatic share count updates for ETFs based on transactions
-    - Value tracking for bond transactions
-    - Expandable transaction list (shows recent 5, expand for all)
-  - **Portfolio Analytics**:
-    - Real-time profit/loss calculation vs. total contributions
-    - Target vs. actual allocation comparison with color-coded deviations
-    - **Advanced Sortable Holdings Table**:
-      - Sort by: name, ticker, region, shares, price, value, target %, actual %
-      - Visual sort direction indicators (ascending/descending)
-      - Responsive design with hover effects
-    - **Click-to-edit target percentages** via dedicated edit modal
-    - Color-coded allocation status (green = balanced, yellow/red = needs rebalancing)
-  - **Modern UI Components**:
-    - **AddETFModal**: Create new ETF holdings with Google Sheets sync
-    - **AddBondModal**: Create government bond holdings with region selection
-    - **BuySellModal**: Record transactions with automatic calculations
-    - **EditHoldingModal**: Update target allocation percentages
-    - **CSVUploadModal**: Bulk import ETFs with validation and preview
-    - **ConfirmModal**: Reusable confirmation dialogs with customizable variants
-    - **PriceRefreshIndicator**: Live sync status with manual refresh capability
-    - **TransactionHistory**: Comprehensive transaction log with filtering
-  - **Smart Rebalancing Engine**:
-    - Set deviation threshold (e.g., 5%)
-    - Get step-by-step "sell X / buy Y" instructions
-    - Includes both ETFs and bonds in rebalancing calculations
-    - Visual deviation indicators per holding
-  - **Bulk Operations**: 
-    - CSV import for multiple ETF holdings at once
-    - Automatic Google Sheets sync on import
-    - Validation and error handling for bulk uploads
-  - **TFSA Contribution Tracking**: 
-    - Monitor annual limit (R36,000) and lifetime limit (R500,000)
-    - Visual progress bars with color-coded warnings
-    - SA Financial Year aware (March - February)
-    - Historical contribution management by financial year
-    - Automatic validation to prevent exceeding limits
-    - Deposit tracking with date stamps
-  - **Visualizations**:
-    - Pie chart of current allocation by value
-    - Target vs. actual bar charts (responsive height based on holdings count)
-    - "What-if" calculator for investment scenarios based on target allocations
-    - Deviation indicators showing over/under-allocated positions
-  - **Dark Mode Support**: Complete dark mode theming across all components and modals
-  - **Auto-Save**: All changes automatically persisted per user
+---
 
-### Architecture
-
-- **Frontend**: React + Vite + TailwindCSS + Recharts
-- **Backend**: FastAPI + SQLAlchemy + Pandas
-- **Auth**: JWT bearer tokens with secure password hashing
-- **Database**: PostgreSQL with Alembic migrations for schema management
-- **External Integrations**: Google Sheets API for live ETF price data
-- **Background Jobs**: APScheduler for periodic price synchronization
-- **Containerization**: Docker + Docker Compose with automated CI/CD deployments
-
-## Running with Docker
+## Running with Docker (recommended)
 
 ### Prerequisites
-- Docker and Docker Compose
-- Make (optional, but recommended for easier commands)
-- `.env` file in project root (see Environment Setup below)
 
-### Docker Compose Files
+- [Docker](https://docs.docker.com/get-docker/) and Docker Compose plugin
+- [Make](https://www.gnu.org/software/make/) (optional; mirrors the commands below)
 
-This project uses separate configs for development and production:
+### Compose files
 
-| File | Purpose | Usage |
-|------|---------|-------|
-| `docker-compose.yml` | Production (default) | VPS deployment via CI/CD |
-| `docker-compose.dev.yml` | Development | Local coding with hot reload |
+| File | Purpose |
+|------|---------|
+| `docker-compose.yml` | Production-style stack (matches typical VPS deployment) |
+| `docker-compose.dev.yml` | Local development: backend `--reload`, bind-mounted frontend `src`, exposed Postgres |
 
-### Environment Setup
+### Environment
 
-Create a `.env` file in the project root:
+Copy [.env.example](.env.example) to `.env` and fill values. Important details:
 
-```bash
-# Database
-POSTGRES_USER=budget_user
-POSTGRES_PASSWORD=your_secure_password
-POSTGRES_DB=budget_db
-POSTGRES_PORT=5432
+- **Database URL**: The backend **builds** the connection string from `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_HOST`, `POSTGRES_PORT`, and `POSTGRES_DB`—it does not read a separate `DATABASE_URL` variable.
+- **Auth**: `AUTHORIZED_USERS` is a comma-separated list of allowed registrant emails.
+- **`ENCRYPTION_KEY`**: Required **Fernet** key (see `.env.example`) if users store encrypted secrets (for example Investec credentials or OpenAI keys in-app).
+- **Google**: `GCP_SERVICE_ACCOUNT_CREDENTIALS` must be the service account JSON **encoded as Base64** (not a filesystem path).
+- **`GOOGLE_SPREADSHEET_ID`**: Used for ETF tab sync and FX rates (FX worksheet/tab is created/seeding when missing; see `.env.example` for optional overrides).
 
-# Application Ports
-BACKEND_PORT=8000
-FRONTEND_PORT=3000
+Production-style deploy also needs matching secrets from the same conceptual set (below).
 
-# Database URL (must match POSTGRES_* variables)
-DATABASE_URL=postgresql://budget_user:your_secure_password@postgres:5432/budget_db
-
-# Google Sheets (get from Google Cloud Console)
-GCP_SERVICE_ACCOUNT_CREDENTIALS={"type":"service_account",...}
-GOOGLE_SPREADSHEET_ID=your_spreadsheet_id
-
-# Authentication & Security
-AUTHORIZED_USERS=user1@example.com,user2@example.com  # Comma-separated list of authorized usernames
-```
-
-Local development uses a normal persistent PostgreSQL volume; apply schema with `make migrate` after `make dev-up`. This repository does not import production database dumps.
-
-### Database persistence (development)
-
-With **`make dev-up`**, database state persists between container restarts so schema changes and test data are kept for iterative work.
-
-**Usage example:**
+### Start development
 
 ```bash
-# Start with persistent database (default)
 make dev-up
-
-# Make schema changes and run migrations
-make migrate-create MSG="add_feature"
-make migrate
-
-# Continue development (database persists)
-make dev-up
-
-# Wipe local data and start clean (removes the dev Postgres volume)
-make clean && make dev-up
+# Equivalent:
+# docker-compose -f docker-compose.dev.yml up -d
 ```
 
-### Start the stack
+- **Frontend:** http://localhost:3000  
+- **Backend / OpenAPI:** http://localhost:8000 and http://localhost:8000/docs  
+- **Postgres (host):** `localhost:${POSTGRES_PORT:-5432}`
 
-**For Development (Recommended):**
-```bash
-# Using Makefile (easiest)
-make dev-up
-
-# Or manually
-docker-compose -f docker-compose.dev.yml up -d
-```
-
-**Features in dev mode:**
-- ✅ Hot reload for backend and frontend code changes
-- ✅ Migration files appear on local filesystem
-- ✅ Direct database access (localhost:5432)
-- ✅ Automatic code sync between host and container
-
-**For Production (testing locally):**
-```bash
-docker-compose up -d
-# or: make prod-up
-# (VPS runs this via CI/CD automatically)
-```
-
-### Access the Application
-
-- **Frontend:** http://localhost:3000
-- **Backend API:** http://localhost:8000
-- **API Docs:** http://localhost:8000/docs
-- **Database:** localhost:5432 (dev mode only)
-
-### Development Commands
+### Makefile reference
 
 ```bash
-# Container Management
-make dev-up          # Start with persistent database (default)
-make dev-build       # Rebuild and start with persistent database
-make dev-down        # Stop development environment
-make dev-logs        # View all development logs
-make dev-shell       # Access backend shell
+make help              # All targets
+make dev-up            # Start dev stack
+make dev-build         # Rebuild images and start
+make dev-down          # Stop dev stack
+make dev-logs          # Follow logs
+make dev-shell         # Shell in backend container
 
-# Database Migrations (see section below)
-make migrate                        # Run pending migrations
-make migrate-create MSG="desc"      # Create new migration
-make migrate-stamp                  # Mark DB as up-to-date
-make migrate-history                # View migration history
-make migrate-rollback               # Undo last migration
+make migrate                      # alembic upgrade head
+make migrate-create MSG='...'      # alembic revision --autogenerate
+make migrate-stamp                # Stamp DB (see migrations section)
+make migrate-history
+make migrate-rollback
 
-# Utilities
-make clean           # Remove all containers and volumes
-make help            # Show all available commands
+make prod-up / make prod-down     # Production compose locally
+make clean                        # Dev compose down WITH volumes + docker system prune -af (destructive—removes unrelated unused images too)
 ```
 
-For detailed Docker setup information, see [DOCKER_SETUP.md](DOCKER_SETUP.md).
+---
 
-## Google Sheets Integration
+## Frontend routes (conceptual map)
 
-The application uses Google Sheets as a data source for ETF prices and as a sync target for holdings:
+Protected app routes include home, budget, salary/payslip, emergency savings, investments landing and `/investments/:portfolioSlug`, RA calculator and RA performance (`/investments/ra`), category guide, settings, and (when Investec nav is enabled) Investec dashboard, accounts, transactions, rules, and budget analysis. Login and register stay public.
 
-### Setup Steps
+Legacy paths `/portfolio`, `/ra`, and `/ra-calculator` redirect to the investments URL structure above.
 
-1. **Create a Google Cloud Project**:
-   - Go to [Google Cloud Console](https://console.cloud.google.com/)
-   - Create a new project or select an existing one
-   - Enable the Google Sheets API
+---
 
-2. **Create a Service Account**:
-   - Navigate to "IAM & Admin" → "Service Accounts"
-   - Create a new service account
-   - Generate a JSON key file
-   - Copy the entire JSON content for your `.env` file
+## Google Sheets integration
 
-3. **Create Your Google Sheet**:
-   - Create a new Google Sheet (this will contain per-user tabs)
-   - The application will automatically create user-specific tabs (e.g., "user_1", "user_2")
-   - Each user's tab will have columns: `Ticker`, `ETF Name`, `Price`
-   - Price formulas will be auto-generated: `=GOOGLEFINANCE(A2,"price")/100`
+Designed for ETF tickers wired with `GOOGLEFINANCE` plus optional **portfolio FX**: the spreadsheet is shared **Editor** with the Sheets service account. User-specific holdings tabs isolate data per user ID.
 
-4. **Share the Sheet**:
-   - Copy the service account email (from the JSON key)
-   - Share your Google Sheet with this email address (Editor access)
-   - Copy the spreadsheet ID from the URL for your `.env` file
+Steps (summary):
 
-5. **Configure Environment**:
-   - Add `GCP_SERVICE_ACCOUNT_CREDENTIALS` (entire JSON as string)
-   - Add `GOOGLE_SPREADSHEET_ID` (from sheet URL)
+1. Create a Google Cloud project and enable **Sheets API**.
+2. Create a service account JSON key **Base64-encode** the entire JSON string for `GCP_SERVICE_ACCOUNT_CREDENTIALS`.
+3. Create/spreadsheet → share with the service account email → set `GOOGLE_SPREADSHEET_ID`.
 
-### How It Works
+The scheduler runs periodic price sync (`backend/app/scheduler.py`); holdings changes from the UI can push back into the workbook when credentials are configured. If Sheets is unavailable, the app degrades gracefully to cached values where possible.
 
-- **Price Sync**: Background job runs every 5 minutes fetching latest prices from each user's sheet
-- **Holdings Sync**: When you add/update ETFs via the UI, changes sync to your user-specific sheet tab
-- **Manual Refresh**: Click the refresh button to trigger an immediate price update from your sheet
-- **Offline Mode**: If Google Sheets is unavailable, the app continues using last known prices
-- **Per-User Sheets**: Each user gets their own sheet tab (e.g., "user_123") for complete data isolation
+---
 
-## Local Development
+## Local backend / frontend without full Docker Compose
 
-### Prerequisites
-- [uv](https://github.com/astral-sh/uv) - Fast Python package installer and resolver
-- Node.js 18+ (for frontend)
-- Docker and Docker Compose (for containerized development)
+You normally only need Postgres available (for example Docker’s `postgres` service alone) matching `.env`.
 
-### Backend
-Backend code lives in `backend/`.
+From the **repository root** (`pyproject.toml` lives here):
 
-To run it locally:
 ```bash
-# Install uv if you haven't already
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# Install dependencies and run
-uv sync
-uv run uvicorn app.main:app --reload
+uv sync --extra backend
+export POSTGRES_HOST=localhost   # … plus other POSTGRES_* from .env
+PYTHONPATH=backend uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-The FastAPI app exposes:
+For the SPA only:
 
-**Budget Management:**
-- `/api/budget/default_user` – read/write the authenticated user's budget
-
-**TFSA Portfolio:**
-- `/api/etf/holdings` – manage ETF holdings with live price tracking
-- `/api/etf/transactions` – record buy/sell transactions for ETFs
-- `/api/etf/sync-prices` – manually sync prices from Google Sheets
-- `/api/etf/bulk-import` – import multiple ETFs from CSV
-- `/api/bond/holdings` – manage government bond holdings
-- `/api/bond/transactions` – record buy/sell transactions for bonds
-- `/api/tfsa/contributions` – track TFSA contribution limits
-
-**Calculations:**
-- `/api/calculate/tax` – SARS PAYE + UIF calculation endpoint
-- `/api/calculate/ra-tax` - RA tax benefit scenario calculator
-- `/api/calculate/rebalance` – portfolio rebalancing engine (ETFs + bonds)
-
-**Emergency Savings:**
-- `/api/emergency-savings/default_user` - manage emergency fund goals and progress
-
-**Retirement Annuity:**
-- `/api/ra/default_user` - manage RA valuation and contributions
-
-**Authentication:**
-- `/api/auth/*` – register, login, change password endpoints
-
-### Frontend
-Frontend code lives in `frontend/`.
-
-To run it locally:
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-By default the Vite dev server runs on `http://localhost:3000` and expects the FastAPI backend to be accessible (usually on `http://localhost:8000`, proxied in Docker).
+The bundled Vite config proxies `/api` to `http://backend:8000` for the **Docker Compose** frontend container. Running Vite entirely on your host with a localhost backend typically means adjusting [frontend/vite.config.js](frontend/vite.config.js) proxy `target` to `http://127.0.0.1:8000` while you iterate.
 
-## Database Migrations
+---
 
-This project uses **Alembic** for database schema management. This allows you to modify database tables without losing data.
+## API surface
 
-### 🚀 Initial Setup (First Time Only)
+Prefer **Swagger UI** at `/docs` or the **`openapi.json`** snapshot for an accurate list of paths. Groups include auth, budget, salary, payslip uploads, emergency savings, RA, portfolio/TFSA contributions, ETFs and bonds (`/api/etf`, `/api/bond`), Sheets sync helpers, unified investments CRUD (`/api/investments`), manual accounts (`/api/manual-accounts`), Investec (`/api/investec`), analytics/portfolio-history endpoints (`/api/...`), tax and rebalancing calculators (`/api/calculate`), and optional admin endpoints.
 
-If you have an existing database with data, you **must** create an initial migration baseline:
+---
+
+## Database migrations
+
+Migrations live under `backend/alembic/versions/`. Typical loop when models change:
+
+1. Edit SQLAlchemy models (`backend/app/models.py`).
+2. `make migrate-create MSG="short_description"`.
+3. Review the generated script for safety.
+4. `make migrate` against a disposable dev database first.
+5. Commit the migration file; CI deploy runs `upgrade` remotely.
+
+### Stamp when legacy DB already matches ORM snapshot
+
+If the database tables already existed before Alembic was introduced on that environment:
 
 ```bash
-# 1. Start dev environment
 make dev-up
-
-# 2. Create initial migration (captures current schema)
-make migrate-create MSG="initial_schema"
-
-# 3. ⚠️ CRITICAL: Mark database as up-to-date (prevents data loss!)
-make migrate-stamp
-
-# 4. Verify it worked
-docker-compose -f docker-compose.dev.yml exec backend uv run alembic current
-
-# 5. Check migration file appeared locally
-ls backend/alembic/versions/
-
-# 6. Commit and push
-git add backend/alembic/versions/*.py
-git commit -m "Add initial Alembic migration"
-git push origin main
+make migrate-create MSG="initial_schema"   # or your baseline revision
+make migrate-stamp                       # Marks current revision without DDL—avoids accidental duplicate DDL
+make migrate-history                     # Sanity check
 ```
 
-**Why `migrate-stamp` is critical:** It tells Alembic your database already has these tables, preventing it from trying to recreate them and **losing all your data** on the next deployment.
+**Never stamp production** casually; only when you are certain the schema already matches that revision.
 
-### 📝 Creating New Migrations
+---
 
-When you modify models in `backend/app/models.py`:
+## CI/CD deployment
 
-```bash
-# 1. Edit your models
-vim backend/app/models.py
+[`deploy.yml`](.github/workflows/deploy.yml) runs on **push to `main`** or **manual workflow dispatch** from the Actions tab for the GitHub repo (choose branch when triggering).
 
-# 2. Create migration (file appears in backend/alembic/versions/)
-make migrate-create MSG="add_notes_column"
+Remote flow (simplified):
 
-# 3. Review the generated file
-cat backend/alembic/versions/*_add_notes_column.py
+1. SSH to your VPS → sync repo under `/srv/apps/…`.
+2. Write `.env` from secrets.
+3. `docker compose build` / `docker compose up -d --force-recreate`.
+4. `docker compose exec backend … ./run_migrations.sh`.
 
-# 4. Test it locally
-make migrate
+Representative secrets: `VPS_HOST`, `VPS_PORT`, `VPS_USER`, `VPS_SSH_KEY`; `GH_USERNAME`, `GH_PAT`; Postgres (`POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT`, `POSTGRES_HOST`); `BACKEND_PORT`, `FRONTEND_PORT`; `AUTHORIZED_USERS`, `ENCRYPTION_KEY`; `GCP_SERVICE_ACCOUNT_CREDENTIALS`, `GOOGLE_SPREADSHEET_ID`; `GCS_PAYSLIPS_BUCKET_NAME`.
 
-# 5. Commit and push (CI/CD will apply it to production)
-git add backend/alembic/versions/*.py
-git commit -m "Add notes column migration"
-git push
-```
+---
 
-### 🔧 Migration Commands (via Makefile)
+## TFSA contribution numbers (FY-aware)
 
-```bash
-make migrate                        # Run all pending migrations
-make migrate-create MSG="desc"      # Create new migration
-make migrate-stamp                  # Mark DB as current (no changes)
-make migrate-history                # Show all migrations
-make migrate-rollback               # Undo last migration
-```
+Annual TFSA caps are sourced from backend tax tables per SA financial year (for example logic in [`backend/app/tax_engine.py`](backend/app/tax_engine.py)—values differ across FY such as FY 2026 vs FY 2025). The Lifetime total shown in UI is currently modeled (see `frontend` TFSA/portfolio tooling) separately from statutory annual caps—treat totals as budgeting aids and verify amounts against official SARS limits for your scenario.
 
-### 🔍 Manual Migration Commands
-
-If you prefer not to use the Makefile:
-
-```bash
-# Run migrations
-docker-compose -f docker-compose.dev.yml exec backend uv run alembic upgrade head
-
-# Create migration
-docker-compose -f docker-compose.dev.yml exec backend uv run alembic revision --autogenerate -m "description"
-
-# Stamp database
-docker-compose -f docker-compose.dev.yml exec backend uv run alembic stamp head
-
-# Check current version
-docker-compose -f docker-compose.dev.yml exec backend uv run alembic current
-
-# View history
-docker-compose -f docker-compose.dev.yml exec backend uv run alembic history
-
-# Rollback
-docker-compose -f docker-compose.dev.yml exec backend uv run alembic downgrade -1
-```
-
-### 📚 Additional Resources
-
-For detailed migration workflows and troubleshooting, see [DOCKER_SETUP.md](DOCKER_SETUP.md).
-
-## CI/CD
-
-The project includes automated deployment via GitHub Actions:
-- Automatic deployment on push to `main` branch
-- **Manual deployment with branch selection** via GitHub Actions UI
-- Database migrations run automatically during deployment
-- Clean, organized deployment logs with collapsible sections
-- Zero-downtime deployments with health checks
-
-Deployment workflow:
-1. Pull latest code on VPS (from specified branch)
-2. Build Docker images
-3. Start containers with proper environment variables
-4. **Run migrations automatically** ✨
-5. Verify deployment health
-6. Cleanup old containers and images
-
-**Manual Deployment:**
-Navigate to Actions → Deploy to VPS → Run workflow → Select branch to deploy
-
-### Required GitHub Actions Secrets
-
-The following secrets must be configured in your GitHub repository settings for deployment:
-
-**Database & Infrastructure:**
-- `VPS_HOST`, `VPS_PORT`, `VPS_USER`, `VPS_SSH_KEY` - VPS connection details
-- `GH_USERNAME`, `GH_PAT` - GitHub credentials for code sync
-- `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT`, `DATABASE_URL` - Database configuration
-
-**Application Secrets:**
-- `AUTHORIZED_USERS` - Comma-separated list of authorized usernames for registration/login
-- `BACKEND_PORT`, `FRONTEND_PORT` - Application ports
-- `GCP_SERVICE_ACCOUNT_CREDENTIALS` - Google Cloud service account JSON
-- `GCS_PAYSLIPS_BUCKET_NAME` - Payslip PDF storage (if used)
-- `GOOGLE_SPREADSHEET_ID` - Google Sheets integration (per-user tabs)
+---
 
 ## Troubleshooting
 
-### Google Sheets Issues
-
-**Problem**: Prices not updating
-- **Solution**: Check that service account email has Editor access to the sheet
-- Verify `GCP_SERVICE_ACCOUNT_CREDENTIALS` is valid JSON
-- Check logs: `make dev-logs` or `docker-compose logs backend`
-- Manually trigger sync via the UI refresh button
-
-**Problem**: ETFs not appearing in sheet
-- **Solution**: Check that spreadsheet ID is correct
-- User-specific tabs are created automatically (e.g., "user_123")
-- Ensure spreadsheet is shared with service account email
-- Check logs for tab creation errors
-
-### Database Migration Issues
-
-**Problem**: Migration fails on startup
-- **Solution**: Check if migration files exist in `backend/alembic/versions/`
-- Verify database connection: `make dev-shell` → `uv run alembic current`
-- If needed, stamp database: `make migrate-stamp`
-
-**Problem**: "Target database is not up to date" error
-- **Solution**: Run pending migrations: `make migrate`
-- Check migration history: `make migrate-history`
-
-### Registration Issues
-
-**Problem**: Cannot register new account
-- **Solution**: Ensure username is included in `AUTHORIZED_USERS` environment variable
-- Check backend logs for validation errors
-- Verify username is entered correctly and matches one of the authorized users (case-sensitive)
-
-### General Issues
-
-**Problem**: Container won't start
-- **Solution**: Check logs: `make dev-logs`
-- Verify all required environment variables are set
-- Try rebuilding: `make dev-build`
-- Clean start: `make clean && make dev-up`
-
-**Problem**: Hot reload not working
-- **Solution**: Ensure using `docker-compose.dev.yml` (not production compose file)
-- Check volume mounts are correct in compose file
-- Restart containers: `make dev-down && make dev-up`
-
-For more detailed troubleshooting, see [DOCKER_SETUP.md](DOCKER_SETUP.md).
+| Symptom | Things to verify |
+|---------|-------------------|
+| **Prices / FX stale** | Service account Editor on sheet; Base64 credential valid; `GOOGLE_SPREADSHEET_ID`; backend logs (`make dev-logs`). |
+| **Registration refused** | Email exactly present in `AUTHORIZED_USERS`; backend logs if needed. |
+| **Migrations fail** | Connectivity; `POSTGRES_*` matches running Postgres; Alembic current vs filesystem (`make migrate-history`). |
+| **Investec unavailable** | `ENCRYPTION_KEY` set before saving credentials; OAuth/API fields in Settings. |
