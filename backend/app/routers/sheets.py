@@ -1,5 +1,5 @@
 import logging
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from datetime import timedelta
 from .. import models, auth
 
@@ -8,6 +8,7 @@ from ..sheets_service import get_sheets_service
 from ..scheduler import sync_all_prices, get_last_sync_time, set_last_sync_time
 from ..utils import get_sast_now
 from pydantic import BaseModel
+from ..portfolio_service import resolve_user_portfolio
 
 class AddETFToSheetRequest(BaseModel):
     jse_ticker: str
@@ -17,10 +18,17 @@ router = APIRouter(prefix="/etf", tags=["sheets-integration"])
 
 @router.post("/sync-prices")
 async def sync_etf_prices(
+    portfolio_id: int | None = Query(default=None),
     current_user: models.User = Depends(auth.get_current_user)
 ):
     """Manually trigger a price sync from Google Sheets."""
-    sheets_service = get_sheets_service(current_user.id)
+    from .. import database
+    db = database.SessionLocal()
+    try:
+        portfolio = resolve_user_portfolio(db, current_user.id, portfolio_id=portfolio_id)
+    finally:
+        db.close()
+    sheets_service = get_sheets_service(current_user.id, portfolio.id)
 
     if not sheets_service.is_available():
         raise HTTPException(
@@ -40,7 +48,8 @@ async def sync_etf_prices(
     db = database.SessionLocal()
     try:
         holdings = db.query(models.ETFHolding).filter(
-            models.ETFHolding.user_id == current_user.id
+            models.ETFHolding.user_id == current_user.id,
+            models.ETFHolding.portfolio_id == portfolio.id,
         ).all()
 
         updated_count = 0
@@ -74,10 +83,17 @@ async def sync_etf_prices(
 @router.post("/add-to-sheet")
 async def add_etf_to_sheet(
     request: AddETFToSheetRequest,
+    portfolio_id: int | None = Query(default=None),
     current_user: models.User = Depends(auth.get_current_user)
 ):
     """Add a new ETF to the Google Sheet (creates row with GOOGLEFINANCE formula)."""
-    sheets_service = get_sheets_service(current_user.id)
+    from .. import database
+    db = database.SessionLocal()
+    try:
+        portfolio = resolve_user_portfolio(db, current_user.id, portfolio_id=portfolio_id)
+    finally:
+        db.close()
+    sheets_service = get_sheets_service(current_user.id, portfolio.id)
 
     if not sheets_service.is_available():
         raise HTTPException(
@@ -113,10 +129,17 @@ async def add_etf_to_sheet(
 
 @router.get("/sheet-prices")
 async def get_sheet_prices(
+    portfolio_id: int | None = Query(default=None),
     current_user: models.User = Depends(auth.get_current_user)
 ):
     """Get all ETF prices directly from Google Sheets (for debugging/reference)."""
-    sheets_service = get_sheets_service(current_user.id)
+    from .. import database
+    db = database.SessionLocal()
+    try:
+        portfolio = resolve_user_portfolio(db, current_user.id, portfolio_id=portfolio_id)
+    finally:
+        db.close()
+    sheets_service = get_sheets_service(current_user.id, portfolio.id)
 
     if not sheets_service.is_available():
         raise HTTPException(

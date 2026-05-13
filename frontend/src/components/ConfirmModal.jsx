@@ -9,7 +9,8 @@ export default function ConfirmModal({
     details = [],
     confirmText = "Confirm",
     cancelText = "Cancel",
-    variant = "danger" // "danger" | "warning" | "info"
+    variant = "danger", // "danger" | "warning" | "info"
+    closeOnConfirm = true,
 }) {
     if (!isOpen) return null
 
@@ -92,7 +93,7 @@ export default function ConfirmModal({
                         <button
                             onClick={() => {
                                 onConfirm()
-                                onClose()
+                                if (closeOnConfirm) onClose()
                             }}
                             className={`flex-1 px-4 py-2.5 text-white rounded-lg transition-colors font-medium focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-800 ${style.button}`}
                         >

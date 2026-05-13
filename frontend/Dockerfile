@@ -3,11 +3,10 @@ FROM node:18-alpine AS build
 
 WORKDIR /app
 
-COPY package.json .
-# We don't have package-lock.json yet because we couldn't run npm install locally
-# So we just install dependencies
-RUN npm install
+COPY package.json package-lock.json* ./
+RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
+# Respect frontend/.dockerignore so host node_modules does not overwrite the install above.
 COPY . .
 RUN npm run build
 

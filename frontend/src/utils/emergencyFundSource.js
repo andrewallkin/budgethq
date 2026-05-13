@@ -12,9 +12,11 @@ export function canUseBankSync({ hasInvestecCredentials, emergencyAccount }) {
 }
 
 export function applyBankSyncedFund(currentData, emergencyAccount) {
+    const raw = emergencyAccount?.available_balance ?? 0
+    const rounded = Math.round(Number(raw) * 100) / 100
     return {
         ...currentData,
-        current_fund: emergencyAccount?.available_balance ?? 0
+        current_fund: rounded,
     }
 }
 
@@ -35,7 +37,8 @@ export function computeEffectiveEmergencyFund({
         .reduce((sum, a) => sum + (a.balance || 0), 0)
 
     if (fundSource === 'bank_sync' && bankSyncBalance != null) {
-        return (bankSyncBalance ?? 0) + manualEmergencyTotal
+        const bank = Math.round(Number(bankSyncBalance) * 100) / 100
+        return bank + manualEmergencyTotal
     }
 
     return (fundSourceManualValue ?? 0) + manualEmergencyTotal

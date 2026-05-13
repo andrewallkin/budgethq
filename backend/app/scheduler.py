@@ -63,11 +63,13 @@ async def sync_all_prices():
     db: Session = SessionLocal()
 
     try:
-        # Get all users who have ETF holdings
-        users_with_holdings = db.query(models.ETFHolding.user_id).distinct().all()
-        user_ids = [u[0] for u in users_with_holdings]
+        # Get all user/portfolio pairs that have ETF holdings.
+        portfolio_rows = db.query(
+            models.ETFHolding.user_id,
+            models.ETFHolding.portfolio_id,
+        ).distinct().all()
 
-        if not user_ids:
+        if not portfolio_rows:
             duration_ms = int((time.monotonic() - start) * 1000)
             logger.info(
                 "Job completed: %s",
@@ -78,10 +80,9 @@ async def sync_all_prices():
 
         total_updated = 0
 
-        for user_id in user_ids:
+        for user_id, portfolio_id in portfolio_rows:
             try:
-                # Get user's specific sheets service
-                sheets_service = get_sheets_service(user_id)
+                sheets_service = get_sheets_service(user_id, portfolio_id)
 
                 if not sheets_service.is_available():
                     logger.warning(
@@ -99,9 +100,10 @@ async def sync_all_prices():
 
                 prices_map = {p['jse_ticker']: p['current_price'] for p in user_prices}
 
-                # Update only this user's holdings
+                # Update only this portfolio's holdings.
                 user_holdings = db.query(models.ETFHolding).filter(
-                    models.ETFHolding.user_id == user_id
+                    models.ETFHolding.user_id == user_id,
+                    models.ETFHolding.portfolio_id == portfolio_id,
                 ).all()
 
                 user_updated = 0
@@ -115,7 +117,7 @@ async def sync_all_prices():
 
                 logger.debug(
                     "Holdings updated",
-                    extra={"user_id": user_id, "holdings_updated": user_updated},
+                    extra={"user_id": user_id, "portfolio_id": portfolio_id, "holdings_updated": user_updated},
                 )
                 total_updated += user_updated
 
@@ -124,7 +126,7 @@ async def sync_all_prices():
                     "Price sync for user failed: %s: %s",
                     type(e).__name__,
                     e,
-                    extra={"user_id": user_id, "job": job_name},
+                    extra={"user_id": user_id, "portfolio_id": portfolio_id, "job": job_name},
                 )
                 continue
 
@@ -137,7 +139,7 @@ async def sync_all_prices():
                 "job": job_name,
                 "duration_ms": duration_ms,
                 "holdings_updated": total_updated,
-                "users_processed": len(user_ids),
+                "portfolio_syncs_processed": len(portfolio_rows),
             },
         )
 
@@ -176,7 +178,7 @@ async def record_hourly_snapshot():
                 "job": job_name,
                 "duration_ms": duration_ms,
                 "prices_recorded": stats.get("prices_recorded", 0),
-                "users_processed": stats.get("users_processed", 0),
+                "portfolios_processed": stats.get("portfolios_processed", 0),
                 "holdings_recorded": stats.get("holdings_recorded", 0),
             },
         )

@@ -2,17 +2,22 @@ import { useState, useEffect } from 'react'
 import { X, Save, AlertCircle } from 'lucide-react'
 import axios from 'axios'
 
-export default function EditHoldingModal({ isOpen, onClose, holding, onSuccess }) {
+export default function EditHoldingModal({
+    isOpen,
+    onClose,
+    holding,
+    onSuccess,
+    portfolioId = null,
+}) {
     const [targetPercentage, setTargetPercentage] = useState('')
     const [submitting, setSubmitting] = useState(false)
     const [error, setError] = useState('')
 
-    const isBond = holding?.type === 'BOND'
-
     // Reset form when modal opens or holding changes
     useEffect(() => {
         if (isOpen && holding) {
-            setTargetPercentage(holding.target_percentage.toString())
+            const tp = Number(holding.target_percentage)
+            setTargetPercentage(Number.isFinite(tp) ? String(tp) : '0')
             setError('')
         }
     }, [isOpen, holding])
@@ -32,15 +37,11 @@ export default function EditHoldingModal({ isOpen, onClose, holding, onSuccess }
         setError('')
 
         try {
-            if (isBond) {
-                await axios.put(`/api/bond/holdings/${holding.id}`, {
-                    target_percentage: targetPct
-                })
-            } else {
-                await axios.put(`/api/etf/holdings/${holding.id}`, {
-                    target_percentage: targetPct
-                })
-            }
+            await axios.put(
+                `/api/etf/holdings/${holding.id}`,
+                { target_percentage: targetPct },
+                portfolioId ? { params: { portfolio_id: portfolioId } } : undefined
+            )
 
             onSuccess?.()
             onClose()
@@ -62,7 +63,7 @@ export default function EditHoldingModal({ isOpen, onClose, holding, onSuccess }
                         <h2 className="text-xl font-bold text-white">
                             Edit Target Percentage
                         </h2>
-                        <p className="text-white/80 text-sm mt-1">{isBond ? holding.bond_name : holding.etf_name}</p>
+                        <p className="text-white/80 text-sm mt-1">{holding.etf_name}</p>
                     </div>
                     <button
                         onClick={onClose}
@@ -79,7 +80,7 @@ export default function EditHoldingModal({ isOpen, onClose, holding, onSuccess }
                         <div className="flex justify-between text-sm mb-1">
                             <span className="text-gray-500 dark:text-gray-400">Type</span>
                             <span className="font-medium text-gray-900 dark:text-white">
-                                {isBond ? 'Government Bond' : 'ETF'}
+                                {(holding.instrument_type || 'etf') === 'stock' ? 'Stock' : 'ETF'}
                             </span>
                         </div>
                         <div className="flex justify-between text-sm mb-1">

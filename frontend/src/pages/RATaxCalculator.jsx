@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { Link } from 'react-router-dom'
 import axios from 'axios'
-import { Calculator, ChevronRight, Info } from 'lucide-react'
+import { Calculator, ChevronRight, Info, TrendingUp } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import BlurredValue from '../components/BlurredValue'
 import { useAuth } from '../context/AuthContext'
@@ -264,6 +265,13 @@ export default function RATaxCalculator() {
 
     return (
         <div className="space-y-6 sm:space-y-8">
+            <Link
+                to="/investments/ra"
+                className="inline-flex items-center gap-2 text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline w-fit"
+            >
+                <TrendingUp className="w-4 h-4 shrink-0" />
+                Back to RA performance
+            </Link>
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
                 <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">🏦 Retirement Annuity Tax Calculator</h1>
                 <div className="flex items-center gap-4">

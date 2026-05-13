@@ -33,7 +33,7 @@ const FLOW_STEPS = [
         icon: Building2,
         title: 'Investec Integration',
         description: 'Bank transactions are auto-categorized as they come in',
-        link: '/investec/transactions',
+        link: '/investec',
         investecOnly: true
     },
     {

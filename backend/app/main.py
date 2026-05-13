@@ -30,6 +30,7 @@ from .routers.payslip import router as payslip_router
 from .routers.salary import router as salary_router
 from .routers.investec import router as investec_router
 from .routers.manual_accounts import router as manual_accounts_router
+from .routers.investments import router as investments_router
 
 from . import database  # noqa: E402
 from .scheduler import start_scheduler, stop_scheduler, sync_all_prices  # noqa: E402
@@ -107,4 +108,5 @@ app.include_router(payslip_router, prefix="/api/payslip", tags=["payslip"])
 app.include_router(salary_router, prefix="/api")
 app.include_router(investec_router)
 app.include_router(manual_accounts_router, prefix="/api")
+app.include_router(investments_router, prefix="/api")
 

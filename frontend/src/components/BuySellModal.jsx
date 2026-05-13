@@ -1,27 +1,42 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { X, TrendingUp, TrendingDown, AlertCircle } from 'lucide-react'
 import axios from 'axios'
 import BlurredValue from './BlurredValue'
 import { formatCurrency, formatNumber } from '../utils/numberFormatting'
 
-export default function BuySellModal({ isOpen, onClose, holding, onSuccess }) {
+export default function BuySellModal({
+    isOpen,
+    onClose,
+    holding,
+    onSuccess,
+    portfolioId = null,
+    etfOnlyMode = true,
+    portfolioCurrencyCode = 'ZAR',
+}) {
     const [transactionType, setTransactionType] = useState('BUY')
     const [shares, setShares] = useState('')
-    const [amount, setAmount] = useState('') // For bonds
-    const [pricePerShare, setPricePerShare] = useState('') // For ETF BUY transactions - editable price
+    const [pricePerShare, setPricePerShare] = useState('')
     const [transactionDate, setTransactionDate] = useState(new Date().toISOString().split('T')[0])
     const [submitting, setSubmitting] = useState(false)
     const [error, setError] = useState('')
 
-    const isBond = holding?.type === 'BOND'
+    const cc = portfolioCurrencyCode || 'ZAR'
+    const currencyOpts = useMemo(
+        () => ({
+            currency: cc,
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        }),
+        [cc]
+    )
+
+    const money = useCallback((value, overrides = {}) => formatCurrency(value, { ...currencyOpts, ...overrides }), [currencyOpts])
 
     // Reset form when modal opens or holding changes
     useEffect(() => {
         if (isOpen && holding) {
             setTransactionType('BUY')
             setShares('')
-            setAmount('')
-            // Initialize price per share to Google Sheets price for ETF BUY
             setPricePerShare(holding.current_price ? holding.current_price.toString() : '')
             setTransactionDate(new Date().toISOString().split('T')[0])
             setError('')
@@ -35,102 +50,66 @@ export default function BuySellModal({ isOpen, onClose, holding, onSuccess }) {
         setError('')
 
         try {
-            if (isBond) {
-                // Bond transaction logic
-                const amountNum = parseFloat(amount)
+            const sharesNum = parseFloat(shares)
 
-                if (isNaN(amountNum) || amountNum <= 0) {
-                    setError('Please enter a valid amount')
-                    setSubmitting(false)
-                    return
-                }
+            if (isNaN(sharesNum) || sharesNum <= 0) {
+                setError('Please enter a valid number of shares')
+                setSubmitting(false)
+                return
+            }
 
-                if (transactionType === 'SELL' && amountNum > holding.current_value) {
-                    setError(
-                        `You only have ${formatCurrency(holding.current_value, {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                        })} available to sell`
-                    )
-                    setSubmitting(false)
-                    return
-                }
-
-                await axios.post('/api/bond/transactions', {
-                    holding_id: holding.id,
-                    transaction_type: transactionType,
-                    amount: amountNum,
-                    transaction_date: transactionDate
-                })
-            } else {
-                // ETF transaction logic
-                const sharesNum = parseFloat(shares)
-
-                if (isNaN(sharesNum) || sharesNum <= 0) {
-                    setError('Please enter a valid number of shares')
-                    setSubmitting(false)
-                    return
-                }
-
-                // Determine effective price per share
-                let effectivePrice = null
-                
-                if (transactionType === 'BUY') {
-                    // For BUY: use editable price if provided, otherwise fall back to Google Sheets price
-                    if (pricePerShare.trim() !== '') {
-                        const customPrice = parseFloat(pricePerShare)
-                        if (isNaN(customPrice) || customPrice <= 0) {
-                            setError('Price per share must be a positive number')
-                            setSubmitting(false)
-                            return
-                        }
-                        effectivePrice = customPrice
-                    } else {
-                        // Fall back to Google Sheets price
-                        if (!holding.current_price || holding.current_price <= 0) {
-                            setError('No price available. Please enter a price or sync prices first.')
-                            setSubmitting(false)
-                            return
-                        }
-                        effectivePrice = holding.current_price
-                    }
-                } else {
-                    // For SELL: always use Google Sheets price (read-only behavior)
-                    if (!holding.current_price || holding.current_price <= 0) {
-                        setError('No price available. Please sync prices first.')
+            let effectivePrice = null
+            if (transactionType === 'BUY') {
+                if (pricePerShare.trim() !== '') {
+                    const customPrice = parseFloat(pricePerShare)
+                    if (isNaN(customPrice) || customPrice <= 0) {
+                        setError('Price per share must be a positive number')
                         setSubmitting(false)
                         return
                     }
-                    effectivePrice = holding.current_price
-                }
-
-                if (transactionType === 'SELL' && sharesNum > holding.shares) {
-                    setError(
-                        `You only have ${formatNumber(holding.shares, {
-                            minimumFractionDigits: 0,
-                            maximumFractionDigits: 4,
-                        })} shares available to sell`
-                    )
+                    effectivePrice = customPrice
+                } else if (!holding.current_price || holding.current_price <= 0) {
+                    setError('No price available. Please enter a price or sync prices first.')
                     setSubmitting(false)
                     return
+                } else {
+                    effectivePrice = holding.current_price
                 }
-
-                const payload = {
-                    holding_id: holding.id,
-                    transaction_type: transactionType,
-                    shares: sharesNum,
-                    price_per_share: effectivePrice,
-                    transaction_date: transactionDate
-                }
-
-                // For BUY transactions, calculate total cost basis automatically
-                // Cost basis is always Price Per Share × Shares
-                if (transactionType === 'BUY') {
-                    payload.total_cost_basis = sharesNum * effectivePrice
-                }
-
-                await axios.post('/api/etf/transactions', payload)
+            } else if (!holding.current_price || holding.current_price <= 0) {
+                setError('No price available. Please sync prices first.')
+                setSubmitting(false)
+                return
+            } else {
+                effectivePrice = holding.current_price
             }
+
+            if (transactionType === 'SELL' && sharesNum > holding.shares) {
+                setError(
+                    `You only have ${formatNumber(holding.shares, {
+                        minimumFractionDigits: 0,
+                        maximumFractionDigits: 4,
+                    })} shares available to sell`
+                )
+                setSubmitting(false)
+                return
+            }
+
+            const payload = {
+                holding_id: holding.id,
+                transaction_type: transactionType,
+                shares: sharesNum,
+                price_per_share: effectivePrice,
+                transaction_date: transactionDate
+            }
+            if (transactionType === 'BUY') {
+                payload.total_cost_basis = sharesNum * effectivePrice
+            }
+
+            await axios.post(
+                '/api/etf/transactions',
+                payload,
+                portfolioId ? { params: { portfolio_id: portfolioId } } : undefined
+            )
 
             onSuccess?.()
             onClose()
@@ -143,26 +122,14 @@ export default function BuySellModal({ isOpen, onClose, holding, onSuccess }) {
 
     if (!isOpen || !holding) return null
 
-    // Calculate values based on type
-    // For ETF BUY, use editable price if available, otherwise Google Sheets price
-    // For ETF SELL, always use Google Sheets price
-    const effectivePriceForDisplay = !isBond && transactionType === 'BUY' && pricePerShare.trim() !== ''
+    const effectivePriceForDisplay = transactionType === 'BUY' && pricePerShare.trim() !== ''
         ? parseFloat(pricePerShare) || holding?.current_price || 0
-        : !isBond
-        ? (holding?.current_price || 0)
-        : 0
-    
-    const totalValue = isBond 
-        ? (parseFloat(amount) || 0)
-        : (parseFloat(shares) || 0) * effectivePriceForDisplay
-    
-    const newShareCount = !isBond && transactionType === 'BUY'
+        : (holding?.current_price || 0)
+
+    const totalValue = (parseFloat(shares) || 0) * effectivePriceForDisplay
+    const newShareCount = transactionType === 'BUY'
         ? holding.shares + (parseFloat(shares) || 0)
-        : !isBond && holding.shares - (parseFloat(shares) || 0)
-    
-    const newBondValue = isBond && transactionType === 'BUY'
-        ? holding.current_value + (parseFloat(amount) || 0)
-        : isBond && holding.current_value - (parseFloat(amount) || 0)
+        : holding.shares - (parseFloat(shares) || 0)
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
@@ -182,7 +149,7 @@ export default function BuySellModal({ isOpen, onClose, holding, onSuccess }) {
                             )}
                             <div>
                                 <h2 className="text-xl font-bold text-white">
-                                    {transactionType === 'BUY' ? 'Buy' : 'Sell'} {isBond ? 'Bond' : 'ETF'}
+                                    {transactionType === 'BUY' ? 'Buy' : 'Sell'} {etfOnlyMode ? 'ETF' : 'holding'}
                                 </h2>
                                 <p className="text-white/80 text-sm">{holding.etf_name}</p>
                             </div>
@@ -224,143 +191,95 @@ export default function BuySellModal({ isOpen, onClose, holding, onSuccess }) {
 
                     {/* Current Holdings Info */}
                     <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                        {!isBond && (
-                            <div className="flex justify-between text-sm">
-                                <span className="text-gray-500 dark:text-gray-400">Ticker</span>
-                                <span className="font-mono font-medium text-gray-900 dark:text-white">
-                                    {holding.jse_ticker}
-                                </span>
-                            </div>
-                        )}
-                        <div className={`flex justify-between text-sm ${!isBond ? 'mt-1' : ''}`}>
+                        <div className="flex justify-between text-sm">
+                            <span className="text-gray-500 dark:text-gray-400">Ticker</span>
+                            <span className="font-mono font-medium text-gray-900 dark:text-white">
+                                {holding.jse_ticker}
+                            </span>
+                        </div>
+                        <div className="flex justify-between text-sm mt-1">
                             <span className="text-gray-500 dark:text-gray-400">
-                                {isBond ? 'Current Value' : 'Current Holdings'}
+                                Current Holdings
                             </span>
                             <BlurredValue><span className="font-medium text-gray-900 dark:text-white">
-                                {isBond
-                                    ? formatCurrency(holding.current_value, {
-                                        minimumFractionDigits: 2,
-                                        maximumFractionDigits: 2,
-                                    })
-                                    : `${formatNumber(holding.shares, {
-                                        minimumFractionDigits: 0,
-                                        maximumFractionDigits: 4,
-                                    })} shares`}
+                                {`${formatNumber(holding.shares, {
+                                    minimumFractionDigits: 0,
+                                    maximumFractionDigits: 4,
+                                })} shares`}
                             </span></BlurredValue>
                         </div>
-                        {!isBond && holding.current_price && (
+                        {holding.current_price && (
                             <div className="flex justify-between text-sm mt-1">
                                 <span className="text-gray-500 dark:text-gray-400">Latest Price</span>
                                 <BlurredValue><span className="font-medium text-gray-900 dark:text-white">
-                                    {formatCurrency(holding.current_price, {
-                                        minimumFractionDigits: 2,
-                                        maximumFractionDigits: 2,
-                                    })}
+                                    {money(holding.current_price)}
                                 </span></BlurredValue>
                             </div>
                         )}
                     </div>
 
-                    {isBond ? (
-                        /* Amount for Bonds */
+                    {/* Number of Shares */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Number of Shares
+                        </label>
+                        <input
+                            type="number"
+                            step="0.0001"
+                            value={shares}
+                            onChange={(e) => setShares(e.target.value)}
+                            placeholder="0.0000"
+                            className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                        />
+                        {transactionType === 'SELL' && holding.shares > 0 && (
+                            <button
+                                onClick={() => setShares(holding.shares.toString())}
+                                className="mt-1 text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                            >
+                                Sell all ({holding.shares.toFixed(4)} shares)
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Price Per Share - Editable for BUY, Read-only for SELL */}
+                    {transactionType === 'BUY' ? (
                         <div>
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                Amount
+                                Price Per Share {!etfOnlyMode && <span className="font-normal text-gray-500">({cc})</span>}
                             </label>
-                            <div className="flex items-center">
-                                <span className="mr-2 text-gray-500 dark:text-gray-400">R</span>
-                                <input
-                                    type="number"
-                                    step="0.01"
-                                    value={amount}
-                                    onChange={(e) => setAmount(e.target.value)}
-                                    placeholder="0.00"
-                                    className="flex-1 px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                                />
-                            </div>
-                            {transactionType === 'SELL' && holding.current_value > 0 && (
-                                <button
-                                    onClick={() => setAmount(holding.current_value.toString())}
-                                    className="mt-1 text-xs text-blue-600 dark:text-blue-400 hover:underline"
-                                >
-                                    Sell all (
-                                        <BlurredValue>{formatCurrency(holding.current_value, {
-                                            minimumFractionDigits: 2,
-                                            maximumFractionDigits: 2,
-                                        })}</BlurredValue>
-                                    )
-                                </button>
-                            )}
-                        </div>
-                    ) : (
-                        <>
-                            {/* Number of Shares */}
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                    Number of Shares
-                                </label>
+                            <div className="flex items-center gap-2">
                                 <input
                                     type="number"
                                     step="0.0001"
-                                    value={shares}
-                                    onChange={(e) => setShares(e.target.value)}
-                                    placeholder="0.0000"
-                                    className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                    min="0"
+                                    value={pricePerShare}
+                                    onChange={(e) => setPricePerShare(e.target.value)}
+                                    placeholder={holding.current_price ? holding.current_price.toFixed(2) : 'Leave blank to use Google Sheets price'}
+                                    className="flex-1 px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                                 />
-                                {transactionType === 'SELL' && holding.shares > 0 && (
-                                    <button
-                                        onClick={() => setShares(holding.shares.toString())}
-                                        className="mt-1 text-xs text-blue-600 dark:text-blue-400 hover:underline"
-                                    >
-                                        Sell all ({holding.shares.toFixed(4)} shares)
-                                    </button>
-                                )}
                             </div>
-
-                            {/* Price Per Share - Editable for BUY, Read-only for SELL */}
-                            {transactionType === 'BUY' ? (
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                        Price Per Share
-                                    </label>
-                                    <div className="flex items-center">
-                                        <span className="mr-2 text-gray-500 dark:text-gray-400">R</span>
-                                        <input
-                                            type="number"
-                                            step="0.0001"
-                                            min="0"
-                                            value={pricePerShare}
-                                            onChange={(e) => setPricePerShare(e.target.value)}
-                                            placeholder={holding.current_price ? holding.current_price.toFixed(2) : 'Leave blank to use Google Sheets price'}
-                                            className="flex-1 px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                                        />
-                                    </div>
-                                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                                        Editable. Leave blank to use current Google Sheets price.
-                                    </p>
-                                </div>
-                            ) : (
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                        Price Per Share
-                                        <span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400">
-                                            (from Google Sheets)
-                                        </span>
-                                    </label>
-                                    <div className="flex items-center px-4 py-2.5 bg-gray-100 dark:bg-gray-700/70 border border-gray-200 dark:border-gray-600 rounded-lg">
-                                        <span className="text-gray-500 dark:text-gray-400">R</span>
-                                        <span className="ml-2 font-medium text-gray-900 dark:text-white">
-                                            {holding.current_price != null
-                                                ? formatNumber(holding.current_price, {
-                                                    minimumFractionDigits: 2,
-                                                    maximumFractionDigits: 2,
-                                                })
-                                                : '—'}
-                                        </span>
-                                    </div>
-                                </div>
-                            )}
-                        </>
+                            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                Editable. Leave blank to use current Google Sheets price.
+                            </p>
+                        </div>
+                    ) : (
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                Price Per Share
+                                <span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400">
+                                    (from Google Sheets)
+                                </span>
+                            </label>
+                            <div className="flex items-center px-4 py-2.5 bg-gray-100 dark:bg-gray-700/70 border border-gray-200 dark:border-gray-600 rounded-lg">
+                                <span className="font-medium text-gray-900 dark:text-white">
+                                    <BlurredValue>
+                                        {holding.current_price != null
+                                            ? money(holding.current_price)
+                                            : '—'}
+                                    </BlurredValue>
+                                </span>
+                            </div>
+                        </div>
                     )}
 
                     {/* Transaction Date */}
@@ -377,7 +296,7 @@ export default function BuySellModal({ isOpen, onClose, holding, onSuccess }) {
                     </div>
 
                     {/* Transaction Summary */}
-                    {((isBond && amount) || (!isBond && shares && (transactionType === 'SELL' ? holding?.current_price : (pricePerShare.trim() || holding?.current_price)))) && (
+                    {shares && (transactionType === 'SELL' ? holding?.current_price : (pricePerShare.trim() || holding?.current_price)) && (
                         <div className={`p-4 rounded-lg ${
                             transactionType === 'BUY'
                                 ? 'bg-green-50 dark:bg-green-900/20'
@@ -385,7 +304,7 @@ export default function BuySellModal({ isOpen, onClose, holding, onSuccess }) {
                         }`}>
                             <div className="flex justify-between text-sm mb-2">
                                 <span className="text-gray-600 dark:text-gray-400">
-                                    {isBond ? 'Transaction Amount' : 'Total Value'}
+                                    Total Value
                                 </span>
                                 <span
                                     className={`font-bold ${
@@ -394,26 +313,18 @@ export default function BuySellModal({ isOpen, onClose, holding, onSuccess }) {
                                             : 'text-red-700 dark:text-red-400'
                                     }`}
                                 >
-                                    <BlurredValue>{formatCurrency(totalValue, {
-                                        minimumFractionDigits: 2,
-                                        maximumFractionDigits: 2,
-                                    })}</BlurredValue>
+                                    <BlurredValue>{money(totalValue)}</BlurredValue>
                                 </span>
                             </div>
                             <div className="flex justify-between text-sm">
                                 <span className="text-gray-600 dark:text-gray-400">
-                                    {isBond ? 'New Bond Value' : 'New Share Count'}
+                                    New Share Count
                                 </span>
                                 <BlurredValue><span className="font-medium text-gray-900 dark:text-white">
-                                    {isBond
-                                        ? formatCurrency(newBondValue, {
-                                            minimumFractionDigits: 2,
-                                            maximumFractionDigits: 2,
-                                        })
-                                        : `${formatNumber(newShareCount, {
-                                            minimumFractionDigits: 0,
-                                            maximumFractionDigits: 4,
-                                        })} shares`}
+                                    {`${formatNumber(newShareCount, {
+                                        minimumFractionDigits: 0,
+                                        maximumFractionDigits: 4,
+                                    })} shares`}
                                 </span></BlurredValue>
                             </div>
                         </div>
@@ -438,7 +349,7 @@ export default function BuySellModal({ isOpen, onClose, holding, onSuccess }) {
                     </button>
                     <button
                         onClick={handleSubmit}
-                        disabled={submitting || (isBond ? !amount : (!shares || (transactionType === 'SELL' ? !holding?.current_price : (!pricePerShare.trim() && !holding?.current_price))))}
+                        disabled={submitting || (!shares || (transactionType === 'SELL' ? !holding?.current_price : (!pricePerShare.trim() && !holding?.current_price)))}
                         className={`px-6 py-2 text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${
                             transactionType === 'BUY'
                                 ? 'bg-green-600 hover:bg-green-700'

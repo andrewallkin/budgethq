@@ -2,14 +2,26 @@ import { useState } from 'react'
 import { X, Plus, AlertCircle, Info } from 'lucide-react'
 import axios from 'axios'
 
-export default function AddETFModal({ isOpen, onClose, onSuccess }) {
+const TICKER_RE_NON_JSE = /^[A-Z0-9:.\-^]+$/
+
+export default function AddETFModal({
+    isOpen,
+    onClose,
+    onSuccess,
+    portfolioId = null,
+    requireJsePrefix = true,
+    etfOnlyMode = true,
+    portfolioCurrencyCode = 'ZAR',
+    allocationOptional = false,
+}) {
     const [formData, setFormData] = useState({
         jse_ticker: '',
         etf_name: '',
         region: '',
         shares: '',
         target_percentage: '',
-        cost_basis: ''
+        cost_basis: '',
+        instrument_type: 'etf',
     })
     const [addToSheet, setAddToSheet] = useState(true)
     const [submitting, setSubmitting] = useState(false)
@@ -22,7 +34,8 @@ export default function AddETFModal({ isOpen, onClose, onSuccess }) {
             region: '',
             shares: '',
             target_percentage: '',
-            cost_basis: ''
+            cost_basis: '',
+            instrument_type: 'etf',
         })
         setAddToSheet(true)
         setError('')
@@ -39,16 +52,24 @@ export default function AddETFModal({ isOpen, onClose, onSuccess }) {
     }
 
     const validateForm = () => {
-        if (!formData.jse_ticker.trim()) {
-            setError('JSE Ticker is required')
+        const tickerTrim = formData.jse_ticker.trim()
+        if (!tickerTrim) {
+            setError(requireJsePrefix ? 'JSE Ticker is required' : 'Ticker is required')
             return false
         }
-        if (!formData.jse_ticker.startsWith('JSE:')) {
-            setError('Ticker must start with "JSE:" (e.g., JSE:STX40)')
+        if (requireJsePrefix) {
+            if (!formData.jse_ticker.startsWith('JSE:')) {
+                setError('Ticker must start with "JSE:" (e.g., JSE:STX40)')
+                return false
+            }
+        } else if (!TICKER_RE_NON_JSE.test(tickerTrim.toUpperCase()) || tickerTrim.length > 64) {
+            setError('Ticker may only contain letters, numbers, colon, dot, hyphen, or caret')
             return false
         }
+
+        const nameEmptyMsg = etfOnlyMode ? 'ETF Name is required' : 'Instrument name is required'
         if (!formData.etf_name.trim()) {
-            setError('ETF Name is required')
+            setError(nameEmptyMsg)
             return false
         }
         if (!formData.region.trim()) {
@@ -62,7 +83,9 @@ export default function AddETFModal({ isOpen, onClose, onSuccess }) {
             return false
         }
 
-        const targetPct = parseFloat(formData.target_percentage)
+        const targetPctRaw = formData.target_percentage.trim()
+        const targetPct =
+            allocationOptional && targetPctRaw === '' ? 0 : parseFloat(formData.target_percentage)
         if (isNaN(targetPct) || targetPct < 0 || targetPct > 100) {
             setError('Target percentage must be between 0 and 100')
             return false
@@ -86,13 +109,14 @@ export default function AddETFModal({ isOpen, onClose, onSuccess }) {
         setError('')
 
         try {
+            const requestConfig = portfolioId ? { params: { portfolio_id: portfolioId } } : undefined
             // If user wants to add to Google Sheet first
             if (addToSheet) {
                 try {
                     await axios.post('/api/etf/add-to-sheet', {
                         jse_ticker: formData.jse_ticker.trim(),
                         etf_name: formData.etf_name.trim()
-                    })
+                    }, requestConfig)
                 } catch (sheetErr) {
                     // If it already exists in the sheet, that's fine - continue
                     if (!sheetErr.response?.data?.detail?.includes('already exists')) {
@@ -107,25 +131,36 @@ export default function AddETFModal({ isOpen, onClose, onSuccess }) {
                 etf_name: formData.etf_name.trim(),
                 region: formData.region.trim(),
                 shares: parseFloat(formData.shares),
-                target_percentage: parseFloat(formData.target_percentage)
+                target_percentage: allocationOptional && formData.target_percentage.trim() === ''
+                    ? 0
+                    : parseFloat(formData.target_percentage),
+                instrument_type: etfOnlyMode ? 'etf' : formData.instrument_type,
             }
 
             if (formData.cost_basis.trim() !== '') {
                 payload.cost_basis = parseFloat(formData.cost_basis)
             }
 
-            await axios.post('/api/etf/holdings', payload)
+            await axios.post('/api/etf/holdings', payload, requestConfig)
 
             onSuccess?.()
             handleClose()
         } catch (err) {
-            setError(err.response?.data?.detail || 'Failed to add ETF holding')
+            setError(err.response?.data?.detail || `Failed to add ${etfOnlyMode ? 'ETF' : 'holding'}`)
         } finally {
             setSubmitting(false)
         }
     }
 
     if (!isOpen) return null
+
+    const tickerLabel = requireJsePrefix ? 'JSE Ticker' : 'Ticker symbol'
+    const nameLabel = etfOnlyMode ? 'ETF Name' : 'Instrument name'
+
+    const title = etfOnlyMode ? 'Add New ETF' : 'Add holding'
+    const subtitle = etfOnlyMode
+        ? 'Add a new ETF to your portfolio'
+        : 'Add a stock, ETF, or other listed instrument'
 
     const regions = ['South Africa', 'USA', 'Europe', 'Global', 'Emerging Markets', 'Asia', 'Other']
 
@@ -136,10 +171,10 @@ export default function AddETFModal({ isOpen, onClose, onSuccess }) {
                 <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
                     <div>
                         <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                            Add New ETF
+                            {title}
                         </h2>
                         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                            Add a new ETF to your portfolio
+                            {subtitle}
                         </p>
                     </div>
                     <button
@@ -155,24 +190,26 @@ export default function AddETFModal({ isOpen, onClose, onSuccess }) {
                     {/* JSE Ticker */}
                     <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                            JSE Ticker <span className="text-red-500">*</span>
+                            {tickerLabel} <span className="text-red-500">*</span>
                         </label>
                         <input
                             type="text"
                             value={formData.jse_ticker}
                             onChange={(e) => handleChange('jse_ticker', e.target.value.toUpperCase())}
-                            placeholder="JSE:STX40"
+                            placeholder={requireJsePrefix ? 'JSE:STX40' : 'NASDAQ:AAPL, MSFT, …'}
                             className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white font-mono"
                         />
                         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                            Format: JSE:TICKER (e.g., JSE:STX40, JSE:STXNDQ)
+                            {requireJsePrefix
+                                ? 'Format: JSE:TICKER (e.g., JSE:STX40, JSE:STXNDQ)'
+                                : 'Use a Google Finance ticker (e.g. JSE:NPN, NASDAQ:AAPL, NYSE:BRK.B)'}
                         </p>
                     </div>
 
-                    {/* ETF Name */}
+                    {/* Instrument / ETF Name */}
                     <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                            ETF Name <span className="text-red-500">*</span>
+                            {nameLabel} <span className="text-red-500">*</span>
                         </label>
                         <input
                             type="text"
@@ -200,8 +237,24 @@ export default function AddETFModal({ isOpen, onClose, onSuccess }) {
                         </select>
                     </div>
 
-                    {/* Shares and Target % in 2 columns */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {!etfOnlyMode && (
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                Instrument type
+                            </label>
+                            <select
+                                value={formData.instrument_type}
+                                onChange={(e) => handleChange('instrument_type', e.target.value)}
+                                className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                            >
+                                <option value="etf">ETF</option>
+                                <option value="stock">Stock</option>
+                            </select>
+                        </div>
+                    )}
+
+                    {/* Shares (and optionally target %) */}
+                    <div className={`grid grid-cols-1 gap-4 ${allocationOptional ? '' : 'sm:grid-cols-2'}`}>
                         <div>
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                 Number of Shares <span className="text-red-500">*</span>
@@ -218,6 +271,7 @@ export default function AddETFModal({ isOpen, onClose, onSuccess }) {
                                 Can be 0 if planning to buy
                             </p>
                         </div>
+                        {!allocationOptional && (
                         <div>
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                 Target % <span className="text-red-500">*</span>
@@ -239,15 +293,21 @@ export default function AddETFModal({ isOpen, onClose, onSuccess }) {
                                 Can be 0 if planning to sell
                             </p>
                         </div>
+                        )}
                     </div>
 
                     {/* Optional Cost Basis */}
                     <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                             Cost Basis (optional)
+                            {!etfOnlyMode && (
+                                <span className="text-gray-500 dark:text-gray-400 font-normal"> — {portfolioCurrencyCode}</span>
+                            )}
                         </label>
                         <div className="flex items-center">
-                            <span className="mr-2 text-gray-500 dark:text-gray-400">R</span>
+                            {etfOnlyMode && (
+                                <span className="mr-2 text-gray-500 dark:text-gray-400">R</span>
+                            )}
                             <input
                                 type="number"
                                 step="0.01"
@@ -286,7 +346,8 @@ export default function AddETFModal({ isOpen, onClose, onSuccess }) {
                     <div className="flex items-start gap-2 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg text-sm">
                         <Info className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
                         <p className="text-gray-600 dark:text-gray-400">
-                            The current price will be fetched automatically from Google Sheets once the ETF is added.
+                            The current price will be fetched automatically from Google Sheets once{' '}
+                            {etfOnlyMode ? 'the ETF is added' : 'the holding is added'}.
                         </p>
                     </div>
 
@@ -320,7 +381,7 @@ export default function AddETFModal({ isOpen, onClose, onSuccess }) {
                         ) : (
                             <>
                                 <Plus className="w-4 h-4" />
-                                Add ETF
+                                Add {etfOnlyMode ? 'ETF' : 'holding'}
                             </>
                         )}
                     </button>

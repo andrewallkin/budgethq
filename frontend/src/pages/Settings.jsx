@@ -5,27 +5,36 @@ import axios from 'axios'
 import { CheckCircle, XCircle, RefreshCw, AlertTriangle, LayoutDashboard, HelpCircle } from 'lucide-react'
 import { formatDateSafe } from '../utils/numberFormatting'
 import ConfirmModal from '../components/ConfirmModal'
+import { useAutoClearingMessage } from '../hooks/useAutoClearingMessage'
 
 export default function Settings() {
-    const { user, showInvestecNav, updateInvestecNavPreference, blurSensitiveValues, setBlurSensitiveValues } = useAuth()
+    const {
+        user,
+        showInvestecNav,
+        updateInvestecNavPreference,
+        showRaUnderInvestments,
+        updateRaUnderInvestmentsPreference,
+        blurSensitiveValues,
+        setBlurSensitiveValues,
+    } = useAuth()
     const [currentPassword, setCurrentPassword] = useState('')
     const [newPassword, setNewPassword] = useState('')
     const [confirmPassword, setConfirmPassword] = useState('')
     const [error, setError] = useState('')
-    const [success, setSuccess] = useState('')
+    const [success, setSuccess] = useAutoClearingMessage(8000)
     const [loading, setLoading] = useState(false)
 
     // Username change state
     const [username, setUsername] = useState('')
     const [usernameError, setUsernameError] = useState('')
-    const [usernameSuccess, setUsernameSuccess] = useState('')
+    const [usernameSuccess, setUsernameSuccess] = useAutoClearingMessage(8000)
     const [usernameLoading, setUsernameLoading] = useState(false)
 
     // OpenAI API Key state
     const [openaiApiKey, setOpenaiApiKey] = useState('')
     const [hasApiKey, setHasApiKey] = useState(false)
     const [apiKeyError, setApiKeyError] = useState('')
-    const [apiKeySuccess, setApiKeySuccess] = useState('')
+    const [apiKeySuccess, setApiKeySuccess] = useAutoClearingMessage(8000)
     const [apiKeyLoading, setApiKeyLoading] = useState(false)
 
     // Investec settings state
@@ -38,19 +47,19 @@ export default function Settings() {
     const [investecSaving, setInvestecSaving] = useState(false)
     const [syncing, setSyncing] = useState(false)
     const [investecError, setInvestecError] = useState('')
-    const [investecSuccess, setInvestecSuccess] = useState('')
+    const [investecSuccess, setInvestecSuccess] = useAutoClearingMessage(8000)
     const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false)
     const [showDeleteApiKeyConfirm, setShowDeleteApiKeyConfirm] = useState(false)
     const [showChangePasswordConfirm, setShowChangePasswordConfirm] = useState(false)
     const [syncingHistorical, setSyncingHistorical] = useState(null)
-    const [syncSuccess, setSyncSuccess] = useState('')
+    const [syncSuccess, setSyncSuccess] = useAutoClearingMessage(8000)
 
     // Budget period settings
     const [budgetPeriodStartDay, setBudgetPeriodStartDay] = useState(1)
     const [budgetPeriodLoading, setBudgetPeriodLoading] = useState(false)
     const [budgetPeriodSaving, setBudgetPeriodSaving] = useState(false)
     const [budgetPeriodError, setBudgetPeriodError] = useState('')
-    const [budgetPeriodSuccess, setBudgetPeriodSuccess] = useState('')
+    const [budgetPeriodSuccess, setBudgetPeriodSuccess] = useAutoClearingMessage(8000)
 
     // Initialize username from user
     useEffect(() => {
@@ -112,7 +121,6 @@ export default function Settings() {
                 budget_period_start_day: Math.max(1, Math.min(31, budgetPeriodStartDay)) || 1
             })
             setBudgetPeriodSuccess('Budget period saved')
-            setTimeout(() => setBudgetPeriodSuccess(''), 3000)
         } catch (err) {
             setBudgetPeriodError(err.response?.data?.detail || 'Failed to save budget period')
         } finally {
@@ -185,7 +193,6 @@ export default function Settings() {
                 `Synced ${response.data.new_transactions} transactions from the last ${months} month(s) ` +
                 `(${response.data.categorized} categorized by rules)`
             )
-            setTimeout(() => setSyncSuccess(''), 5000)
         } catch (err) {
             setInvestecError(err.response?.data?.detail || 'Failed to sync historical transactions')
         } finally {
@@ -455,6 +462,32 @@ export default function Settings() {
                             )}
                         </div>
                     </form>
+                </div>
+
+                {/* RA under Investments */}
+                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h2 className="text-base font-semibold text-gray-900 dark:text-white">RA tools under Investments</h2>
+                            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                                Shows RA Performance and the RA tax calculator on the Investments page and home
+                            </p>
+                        </div>
+                        <button
+                            role="switch"
+                            aria-checked={showRaUnderInvestments}
+                            onClick={() => updateRaUnderInvestmentsPreference(!showRaUnderInvestments)}
+                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                                showRaUnderInvestments ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-600'
+                            }`}
+                        >
+                            <span
+                                className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                    showRaUnderInvestments ? 'translate-x-5' : 'translate-x-0'
+                                }`}
+                            />
+                        </button>
+                    </div>
                 </div>
 
                 {/* Investec Integration */}

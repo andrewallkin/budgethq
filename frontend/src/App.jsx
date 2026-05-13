@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Routes, Route, Link, useLocation, Navigate } from 'react-router-dom'
-import { LayoutDashboard, PieChart, Home, Moon, Sun, LogOut, Settings as SettingsIcon, ChevronLeft, ChevronRight, ChevronDown, Calculator, Shield, TrendingUp, Menu, CreditCard, Receipt, Tag, HelpCircle, Building2 } from 'lucide-react'
+import { LayoutDashboard, PieChart as PieChartIcon, Home, Moon, Sun, LogOut, Settings as SettingsIcon, ChevronLeft, ChevronRight, Calculator, Shield, TrendingUp, Menu, HelpCircle, Building2 } from 'lucide-react'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import BudgetDashboard from './pages/BudgetDashboard'
-import TFSAPortfolio from './pages/TFSAPortfolio'
 import RATaxCalculator from './pages/RATaxCalculator'
 import RAPerformance from './pages/RAPerformance'
 import EmergencySavings from './pages/EmergencySavings'
@@ -16,12 +15,26 @@ import BankTransactions from './pages/BankTransactions'
 import CategorizationRules from './pages/CategorizationRules'
 import BudgetAnalysis from './pages/BudgetAnalysis'
 import CategoryGuide from './pages/CategoryGuide'
+import InvestmentsLanding from './pages/InvestmentsLanding'
+import InvestmentPortfolioPage from './pages/InvestmentPortfolioPage'
+import InvestecLanding from './pages/InvestecLanding'
+import HomeOverview from './pages/HomeOverview'
 
 function ProtectedRoute({ children }) {
     const { user } = useAuth()
 
     if (!user) {
         return <Navigate to="/login" replace />
+    }
+
+    return children
+}
+
+function RaSectionRoute({ children }) {
+    const { showRaUnderInvestments } = useAuth()
+
+    if (!showRaUnderInvestments) {
+        return <Navigate to="/investments" replace />
     }
 
     return children
@@ -39,12 +52,6 @@ function AppContent() {
         return saved ? JSON.parse(saved) : false
     })
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
-    const [investecExpanded, setInvestecExpanded] = useState(() => {
-        const saved = localStorage.getItem('investecNavExpanded')
-        if (saved !== null) return JSON.parse(saved)
-        return location.pathname.startsWith('/investec')
-    })
-
     // Close mobile menu when route changes
     useEffect(() => {
         setIsMobileMenuOpen(false)
@@ -63,35 +70,13 @@ function AppContent() {
         localStorage.setItem('sidebarCollapsed', JSON.stringify(isSidebarCollapsed))
     }, [isSidebarCollapsed])
 
-    useEffect(() => {
-        localStorage.setItem('investecNavExpanded', JSON.stringify(investecExpanded))
-    }, [investecExpanded])
-
-    // Auto-expand Investec group when navigating to an Investec page
-    useEffect(() => {
-        if (location.pathname.startsWith('/investec') && !investecExpanded) {
-            setInvestecExpanded(true)
-        }
-    }, [location.pathname, investecExpanded])
-
     const navItems = [
         { path: '/', label: 'Home', icon: Home },
         { path: '/salary', label: 'Payslip & Tax', icon: Calculator },
         { path: '/budget', label: 'Budget Dashboard', icon: LayoutDashboard },
-        { path: '/portfolio', label: 'TFSA Portfolio', icon: PieChart },
+        { path: '/investments', label: 'Investments', icon: PieChartIcon },
         { path: '/emergency-savings', label: 'Emergency Savings', icon: Shield },
-        { path: '/ra', label: 'RA Performance', icon: TrendingUp },
-        { path: '/ra-calculator', label: 'RA Tax Calculator', icon: Calculator },
-        {
-            label: 'Investec Banking',
-            icon: Building2,
-            children: [
-                { path: '/investec/accounts', label: 'Bank Accounts', icon: CreditCard },
-                { path: '/investec/transactions', label: 'Transactions', icon: Receipt },
-                { path: '/investec/budget-analysis', label: 'Budget Analysis', icon: TrendingUp },
-                { path: '/investec/rules', label: 'Categorization Rules', icon: Tag },
-            ],
-        },
+        ...(showInvestecNav ? [{ path: '/investec', label: 'Investec Banking', icon: Building2 }] : []),
         { path: '/category-guide', label: 'Budget Category Guide', icon: HelpCircle },
         { path: '/settings', label: 'Settings', icon: SettingsIcon },
     ]
@@ -133,73 +118,12 @@ function AppContent() {
             </div>
             <nav className={`flex-1 ${collapsed && !isMobile ? 'px-2' : 'px-4'} space-y-2`}>
                 {navItems.map((item) => {
-                    if (item.children) {
-                        if (!showInvestecNav) return null
-                        const GroupIcon = item.icon
-                        const isInvestecActive = location.pathname.startsWith('/investec')
-                        const showExpanded = investecExpanded && (!collapsed || isMobile)
-
-                        if (collapsed && !isMobile) {
-                            return (
-                                <Link
-                                    key={item.label}
-                                    to="/investec/accounts"
-                                    className={`flex items-center justify-center px-2 py-3 rounded-lg transition-colors ${isInvestecActive
-                                        ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
-                                        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                                        }`}
-                                    title={item.label}
-                                >
-                                    <GroupIcon className="w-5 h-5" />
-                                </Link>
-                            )
-                        }
-
-                        return (
-                            <div key={item.label}>
-                                <button
-                                    type="button"
-                                    onClick={() => setInvestecExpanded(!investecExpanded)}
-                                    className={`flex items-center w-full px-4 py-3 rounded-lg transition-colors ${isInvestecActive
-                                        ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
-                                        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                                        }`}
-                                >
-                                    <GroupIcon className="w-5 h-5 mr-3" />
-                                    <span className="font-medium flex-1 text-left">{item.label}</span>
-                                    {showExpanded ? (
-                                        <ChevronDown className="w-4 h-4 shrink-0" />
-                                    ) : (
-                                        <ChevronRight className="w-4 h-4 shrink-0" />
-                                    )}
-                                </button>
-                                {showExpanded && (
-                                    <div className="mt-1 ml-2 pl-4 border-l border-gray-200 dark:border-gray-600 space-y-1">
-                                        {item.children.map((child) => {
-                                            const ChildIcon = child.icon
-                                            const isChildActive = location.pathname === child.path
-                                            return (
-                                                <Link
-                                                    key={child.path}
-                                                    to={child.path}
-                                                    className={`flex items-center px-3 py-2 rounded-lg transition-colors text-sm ${isChildActive
-                                                        ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
-                                                        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                                                        }`}
-                                                >
-                                                    <ChildIcon className="w-4 h-4 mr-2" />
-                                                    <span className="font-medium">{child.label}</span>
-                                                </Link>
-                                            )
-                                        })}
-                                    </div>
-                                )}
-                            </div>
-                        )
-                    }
-
                     const Icon = item.icon
-                    const isActive = location.pathname === item.path
+                    const isActive = item.path === '/investments'
+                        ? location.pathname.startsWith('/investments') || location.pathname === '/portfolio'
+                        : item.path === '/investec'
+                        ? location.pathname.startsWith('/investec')
+                        : location.pathname === item.path
                     return (
                         <Link
                             key={item.path}
@@ -296,13 +220,18 @@ function AppContent() {
             <div className="flex-1 overflow-y-auto pt-14 lg:pt-0">
                 <div className="p-4 sm:p-6 lg:p-8">
                     <Routes>
-                        <Route path="/" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
+                        <Route path="/" element={<ProtectedRoute><HomeOverview /></ProtectedRoute>} />
                         <Route path="/budget" element={<ProtectedRoute><BudgetDashboard /></ProtectedRoute>} />
                         <Route path="/salary" element={<ProtectedRoute><SalaryPage /></ProtectedRoute>} />
-                        <Route path="/portfolio" element={<ProtectedRoute><TFSAPortfolio /></ProtectedRoute>} />
+                        <Route path="/investments/ra/calculator" element={<ProtectedRoute><RaSectionRoute><RATaxCalculator /></RaSectionRoute></ProtectedRoute>} />
+                        <Route path="/investments/ra" element={<ProtectedRoute><RaSectionRoute><RAPerformance /></RaSectionRoute></ProtectedRoute>} />
+                        <Route path="/investments" element={<ProtectedRoute><InvestmentsLanding /></ProtectedRoute>} />
+                        <Route path="/investments/:portfolioSlug" element={<ProtectedRoute><InvestmentPortfolioPage /></ProtectedRoute>} />
+                        <Route path="/portfolio" element={<Navigate to="/investments/tfsa" replace />} />
                         <Route path="/emergency-savings" element={<ProtectedRoute><EmergencySavings /></ProtectedRoute>} />
-                        <Route path="/ra" element={<ProtectedRoute><RAPerformance /></ProtectedRoute>} />
-                        <Route path="/ra-calculator" element={<ProtectedRoute><RATaxCalculator /></ProtectedRoute>} />
+                        <Route path="/ra" element={<ProtectedRoute><Navigate to="/investments/ra" replace /></ProtectedRoute>} />
+                        <Route path="/ra-calculator" element={<ProtectedRoute><Navigate to="/investments/ra/calculator" replace /></ProtectedRoute>} />
+                        <Route path="/investec" element={<ProtectedRoute><InvestecLanding /></ProtectedRoute>} />
                         <Route path="/investec/accounts" element={<ProtectedRoute><AccountsDashboard /></ProtectedRoute>} />
                         <Route path="/investec/transactions" element={<ProtectedRoute><BankTransactions /></ProtectedRoute>} />
                         <Route path="/investec/rules" element={<ProtectedRoute><CategorizationRules /></ProtectedRoute>} />
@@ -316,7 +245,10 @@ function AppContent() {
     )
 }
 
+// eslint-disable-next-line no-unused-vars
 function HomePage() {
+    const { showRaUnderInvestments } = useAuth()
+
     return (
         <div className="space-y-6 sm:space-y-8 max-w-6xl mx-auto">
             <div>
@@ -437,27 +369,27 @@ function HomePage() {
                     </div>
                 </div>
 
-                {/* TFSA Portfolio Card */}
+                {/* Investments Card */}
                 <div className="flex flex-col h-full bg-gradient-to-br from-emerald-50 to-emerald-100 dark:from-emerald-900/20 dark:to-emerald-800/20 rounded-2xl shadow-lg border border-emerald-200 dark:border-emerald-800 overflow-hidden hover:shadow-xl transition-all">
                     <div className="p-4 sm:p-6 lg:p-8 flex-1 flex flex-col">
                         <div className="flex items-center mb-6">
                             <div className="p-4 bg-emerald-600 rounded-xl">
-                                <PieChart className="w-8 h-8 text-white" />
+                                <PieChartIcon className="w-8 h-8 text-white" />
                             </div>
-                            <h2 className="text-2xl font-bold text-gray-900 dark:text-white ml-4">TFSA Portfolio</h2>
+                            <h2 className="text-2xl font-bold text-gray-900 dark:text-white ml-4">Investments</h2>
                         </div>
 
                         <p className="text-gray-700 dark:text-gray-300 mb-6 text-base leading-relaxed">
-                            Complete TFSA portfolio management with ETFs and government bonds. Live price tracking,
-                            transaction history, intelligent rebalancing, and powerful tools to optimize your tax-free investments.
+                            Manage all investment portfolios from one place. Keep your TFSA structure intact and add
+                            new portfolios like USD Account with identical ETF workflows.
                         </p>
 
                         <div className="space-y-3 mb-8">
                             <div className="flex items-start">
                                 <span className="text-emerald-600 dark:text-emerald-400 mr-3 mt-1">✓</span>
                                 <div>
-                                    <p className="font-semibold text-gray-900 dark:text-white">ETFs & Government Bonds</p>
-                                    <p className="text-sm text-gray-600 dark:text-gray-400">Track both ETFs with live prices and manually-managed government bonds</p>
+                                    <p className="font-semibold text-gray-900 dark:text-white">Multi-Portfolio ETFs</p>
+                                    <p className="text-sm text-gray-600 dark:text-gray-400">Track ETFs with live prices and portfolio-level organization</p>
                                 </div>
                             </div>
                             <div className="flex items-start">
@@ -484,10 +416,10 @@ function HomePage() {
                         </div>
 
                         <Link
-                            to="/portfolio"
+                            to="/investments"
                             className="mt-auto block w-full text-center px-6 py-3 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-700 transition-colors"
                         >
-                            Open TFSA Portfolio →
+                            Open Investments →
                         </Link>
                     </div>
                 </div>
@@ -547,107 +479,111 @@ function HomePage() {
                     </div>
                 </div>
 
-                {/* RA Performance Card */}
-                <div className="flex flex-col h-full bg-gradient-to-br from-indigo-50 to-indigo-100 dark:from-indigo-900/20 dark:to-indigo-800/20 rounded-2xl shadow-lg border border-indigo-200 dark:border-indigo-800 overflow-hidden hover:shadow-xl transition-all">
-                    <div className="p-4 sm:p-6 lg:p-8 flex-1 flex flex-col">
-                        <div className="flex items-center mb-6">
-                            <div className="p-4 bg-indigo-600 rounded-xl">
-                                <TrendingUp className="w-8 h-8 text-white" />
-                            </div>
-                            <h2 className="text-2xl font-bold text-gray-900 dark:text-white ml-4">RA Performance</h2>
-                        </div>
+                {showRaUnderInvestments && (
+                    <>
+                        {/* RA Performance Card */}
+                        <div className="flex flex-col h-full bg-gradient-to-br from-indigo-50 to-indigo-100 dark:from-indigo-900/20 dark:to-indigo-800/20 rounded-2xl shadow-lg border border-indigo-200 dark:border-indigo-800 overflow-hidden hover:shadow-xl transition-all">
+                            <div className="p-4 sm:p-6 lg:p-8 flex-1 flex flex-col">
+                                <div className="flex items-center mb-6">
+                                    <div className="p-4 bg-indigo-600 rounded-xl">
+                                        <TrendingUp className="w-8 h-8 text-white" />
+                                    </div>
+                                    <h2 className="text-2xl font-bold text-gray-900 dark:text-white ml-4">RA Performance</h2>
+                                </div>
 
-                        <p className="text-gray-700 dark:text-gray-300 mb-6 text-base leading-relaxed">
-                            Track your retirement annuity value and contributions month by month, with clear performance and growth insights.
-                        </p>
+                                <p className="text-gray-700 dark:text-gray-300 mb-6 text-base leading-relaxed">
+                                    Track your retirement annuity value and contributions month by month, with clear performance and growth insights.
+                                </p>
 
-                        <div className="space-y-3 mb-8">
-                            <div className="flex items-start">
-                                <span className="text-indigo-600 dark:text-indigo-400 mr-3 mt-1">✓</span>
-                                <div>
-                                    <p className="font-semibold text-gray-900 dark:text-white">Monthly Value Snapshots</p>
-                                    <p className="text-sm text-gray-600 dark:text-gray-400">Capture your RA value once per month to see its trajectory over time</p>
+                                <div className="space-y-3 mb-8">
+                                    <div className="flex items-start">
+                                        <span className="text-indigo-600 dark:text-indigo-400 mr-3 mt-1">✓</span>
+                                        <div>
+                                            <p className="font-semibold text-gray-900 dark:text-white">Monthly Value Snapshots</p>
+                                            <p className="text-sm text-gray-600 dark:text-gray-400">Capture your RA value once per month to see its trajectory over time</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-start">
+                                        <span className="text-indigo-600 dark:text-indigo-400 mr-3 mt-1">✓</span>
+                                        <div>
+                                            <p className="font-semibold text-gray-900 dark:text-white">Contribution Tracking</p>
+                                            <p className="text-sm text-gray-600 dark:text-gray-400">See total and financial-year contributions alongside portfolio growth</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-start">
+                                        <span className="text-indigo-600 dark:text-indigo-400 mr-3 mt-1">✓</span>
+                                        <div>
+                                            <p className="font-semibold text-gray-900 dark:text-white">Performance Chart</p>
+                                            <p className="text-sm text-gray-600 dark:text-gray-400">Visualize value and cumulative contributions on a single time-series chart</p>
+                                        </div>
+                                    </div>
                                 </div>
-                            </div>
-                            <div className="flex items-start">
-                                <span className="text-indigo-600 dark:text-indigo-400 mr-3 mt-1">✓</span>
-                                <div>
-                                    <p className="font-semibold text-gray-900 dark:text-white">Contribution Tracking</p>
-                                    <p className="text-sm text-gray-600 dark:text-gray-400">See total and financial-year contributions alongside portfolio growth</p>
-                                </div>
-                            </div>
-                            <div className="flex items-start">
-                                <span className="text-indigo-600 dark:text-indigo-400 mr-3 mt-1">✓</span>
-                                <div>
-                                    <p className="font-semibold text-gray-900 dark:text-white">Performance Chart</p>
-                                    <p className="text-sm text-gray-600 dark:text-gray-400">Visualize value and cumulative contributions on a single time-series chart</p>
-                                </div>
-                            </div>
-                        </div>
 
-                        <Link
-                            to="/ra"
-                            className="mt-auto block w-full text-center px-6 py-3 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition-colors"
-                        >
-                            Open RA Performance →
-                        </Link>
-                    </div>
-                </div>
-
-                {/* RA Tax Calculator Card */}
-                <div className="flex flex-col h-full bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20 rounded-2xl shadow-lg border border-purple-200 dark:border-purple-800 overflow-hidden hover:shadow-xl transition-all">
-                    <div className="p-4 sm:p-6 lg:p-8 flex-1 flex flex-col">
-                        <div className="flex items-center mb-6">
-                            <div className="p-4 bg-purple-600 rounded-xl">
-                                <Calculator className="w-8 h-8 text-white" />
-                            </div>
-                            <h2 className="text-2xl font-bold text-gray-900 dark:text-white ml-4">RA Tax Calculator</h2>
-                        </div>
-
-                        <p className="text-gray-700 dark:text-gray-300 mb-6 text-base leading-relaxed">
-                            Optimize your retirement contributions to maximize tax benefits. See real-time
-                            impact on your SARS tax refund and project long-term portfolio growth.
-                        </p>
-
-                        <div className="space-y-3 mb-8">
-                            <div className="flex items-start">
-                                <span className="text-purple-600 dark:text-purple-400 mr-3 mt-1">✓</span>
-                                <div>
-                                    <p className="font-semibold text-gray-900 dark:text-white">Tax Refund Maximizer</p>
-                                    <p className="text-sm text-gray-600 dark:text-gray-400">Real-time SARS-compliant calculation of potential tax savings</p>
-                                </div>
-                            </div>
-                            <div className="flex items-start">
-                                <span className="text-purple-600 dark:text-purple-400 mr-3 mt-1">✓</span>
-                                <div>
-                                    <p className="font-semibold text-gray-900 dark:text-white">Scenario Comparison</p>
-                                    <p className="text-sm text-gray-600 dark:text-gray-400">Compare no contribution vs current vs max tax-deductible contribution</p>
-                                </div>
-                            </div>
-                            <div className="flex items-start">
-                                <span className="text-purple-600 dark:text-purple-400 mr-3 mt-1">✓</span>
-                                <div>
-                                    <p className="font-semibold text-gray-900 dark:text-white">Long-term Projections</p>
-                                    <p className="text-sm text-gray-600 dark:text-gray-400">Interactive growth charts projecting your RA value up to year 2060</p>
-                                </div>
-                            </div>
-                            <div className="flex items-start">
-                                <span className="text-purple-600 dark:text-purple-400 mr-3 mt-1">✓</span>
-                                <div>
-                                    <p className="font-semibold text-gray-900 dark:text-white">Smart Deduction Tracking</p>
-                                    <p className="text-sm text-gray-600 dark:text-gray-400">Stay within the 27.5% annual limit for optimal tax efficiency</p>
-                                </div>
+                                <Link
+                                    to="/investments/ra"
+                                    className="mt-auto block w-full text-center px-6 py-3 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition-colors"
+                                >
+                                    Open RA Performance →
+                                </Link>
                             </div>
                         </div>
 
-                        <Link
-                            to="/ra-calculator"
-                            className="mt-auto block w-full text-center px-6 py-3 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 transition-colors"
-                        >
-                            Open RA Tax Calculator →
-                        </Link>
-                    </div>
-                </div>
+                        {/* RA Tax Calculator Card */}
+                        <div className="flex flex-col h-full bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20 rounded-2xl shadow-lg border border-purple-200 dark:border-purple-800 overflow-hidden hover:shadow-xl transition-all">
+                            <div className="p-4 sm:p-6 lg:p-8 flex-1 flex flex-col">
+                                <div className="flex items-center mb-6">
+                                    <div className="p-4 bg-purple-600 rounded-xl">
+                                        <Calculator className="w-8 h-8 text-white" />
+                                    </div>
+                                    <h2 className="text-2xl font-bold text-gray-900 dark:text-white ml-4">RA Tax Calculator</h2>
+                                </div>
+
+                                <p className="text-gray-700 dark:text-gray-300 mb-6 text-base leading-relaxed">
+                                    Optimize your retirement contributions to maximize tax benefits. See real-time
+                                    impact on your SARS tax refund and project long-term portfolio growth.
+                                </p>
+
+                                <div className="space-y-3 mb-8">
+                                    <div className="flex items-start">
+                                        <span className="text-purple-600 dark:text-purple-400 mr-3 mt-1">✓</span>
+                                        <div>
+                                            <p className="font-semibold text-gray-900 dark:text-white">Tax Refund Maximizer</p>
+                                            <p className="text-sm text-gray-600 dark:text-gray-400">Real-time SARS-compliant calculation of potential tax savings</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-start">
+                                        <span className="text-purple-600 dark:text-purple-400 mr-3 mt-1">✓</span>
+                                        <div>
+                                            <p className="font-semibold text-gray-900 dark:text-white">Scenario Comparison</p>
+                                            <p className="text-sm text-gray-600 dark:text-gray-400">Compare no contribution vs current vs max tax-deductible contribution</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-start">
+                                        <span className="text-purple-600 dark:text-purple-400 mr-3 mt-1">✓</span>
+                                        <div>
+                                            <p className="font-semibold text-gray-900 dark:text-white">Long-term Projections</p>
+                                            <p className="text-sm text-gray-600 dark:text-gray-400">Interactive growth charts projecting your RA value up to year 2060</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-start">
+                                        <span className="text-purple-600 dark:text-purple-400 mr-3 mt-1">✓</span>
+                                        <div>
+                                            <p className="font-semibold text-gray-900 dark:text-white">Smart Deduction Tracking</p>
+                                            <p className="text-sm text-gray-600 dark:text-gray-400">Stay within the 27.5% annual limit for optimal tax efficiency</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <Link
+                                    to="/investments/ra/calculator"
+                                    className="mt-auto block w-full text-center px-6 py-3 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 transition-colors"
+                                >
+                                    Open RA Tax Calculator →
+                                </Link>
+                            </div>
+                        </div>
+                    </>
+                )}
 
                 {/* Investec Banking Card */}
                 <div className="flex flex-col h-full bg-gradient-to-br from-teal-50 to-slate-100 dark:from-teal-900/20 dark:to-slate-800/20 rounded-2xl shadow-lg border border-teal-200 dark:border-teal-800 overflow-hidden hover:shadow-xl transition-all">
@@ -699,7 +635,7 @@ function HomePage() {
                         </div>
 
                         <Link
-                            to="/investec/accounts"
+                            to="/investec"
                             className="mt-auto block w-full text-center px-6 py-3 bg-teal-600 text-white font-semibold rounded-lg hover:bg-teal-700 transition-colors"
                         >
                             Open Investec Banking →

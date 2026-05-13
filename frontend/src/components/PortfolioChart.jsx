@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import axios from 'axios'
 import {
     AreaChart,
@@ -13,7 +13,7 @@ import {
 import { TrendingUp, TrendingDown, Calendar, RefreshCw, Layers } from 'lucide-react'
 import BlurredValue from './BlurredValue'
 import { useAuth } from '../context/AuthContext'
-import { formatCurrency as formatCurrencyUtil } from '../utils/numberFormatting'
+import { formatCurrency as formatCurrencyUtil, formatDateSafe } from '../utils/numberFormatting'
 
 const TIME_RANGES = [
     { key: '1m', label: '1M' },
@@ -23,7 +23,11 @@ const TIME_RANGES = [
     { key: 'all', label: 'All' }
 ]
 
-export default function PortfolioChart() {
+export default function PortfolioChart({
+    portfolioId = null,
+    currencyCode = 'ZAR',
+    isTfsa = true,
+}) {
     const { blurSensitiveValues } = useAuth()
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState(null)
@@ -32,16 +36,27 @@ export default function PortfolioChart() {
     const [summary, setSummary] = useState(null)
     const [showContributions, setShowContributions] = useState(false)
 
-    useEffect(() => {
-        fetchHistory()
-    }, [selectedRange])
+    const chartFmtOpts = useMemo(
+        () => ({
+            currency: currencyCode,
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        }),
+        [currencyCode]
+    )
 
-    const fetchHistory = async () => {
+    useEffect(() => {
+        if (!isTfsa) setShowContributions(false)
+    }, [isTfsa])
+
+    const fetchHistory = useCallback(async () => {
         setLoading(true)
         setError(null)
 
         try {
-            const res = await axios.get(`/api/portfolio/history?range=${selectedRange}`)
+            const params = { range: selectedRange }
+            if (portfolioId != null) params.portfolio_id = portfolioId
+            const res = await axios.get('/api/portfolio/history', { params })
             setChartData(res.data.data || [])
             setSummary(res.data.summary || null)
         } catch (err) {
@@ -50,21 +65,25 @@ export default function PortfolioChart() {
         } finally {
             setLoading(false)
         }
-    }
+    }, [selectedRange, portfolioId])
+
+    useEffect(() => {
+        fetchHistory()
+    }, [fetchHistory])
 
     const formatCurrency = (value) => {
-        if (value === null || value === undefined) return 'R 0.00'
-        // Always show 2 decimals for summary values
-        return formatCurrencyUtil(value, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+        if (value === null || value === undefined) {
+            return formatCurrencyUtil(0, chartFmtOpts)
+        }
+        return formatCurrencyUtil(value, chartFmtOpts)
     }
 
     const formatDate = (dateStr) => {
         if (!dateStr) return ''
-        const date = new Date(dateStr)
         if (selectedRange === 'all' || selectedRange === '1y') {
-            return date.toLocaleDateString('en-ZA', { month: 'short', year: '2-digit' })
+            return formatDateSafe(dateStr, { month: 'short', year: '2-digit' })
         }
-        return date.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })
+        return formatDateSafe(dateStr, { day: 'numeric', month: 'short' })
     }
 
     // Handle negative gains by adjusting the data
@@ -103,11 +122,11 @@ export default function PortfolioChart() {
 
         // Handle edge case: all values are the same
         if (minValue === maxValue) {
-            const padding = Math.max(minValue * 0.1, 1000)
+            const padding = Math.max(Math.abs(minValue) * 0.1, 1)
             const domainMin = minValue - padding
             const domainMax = maxValue + padding
             // Generate a few ticks around the single value
-            const increment = Math.max(padding / 2, 1000)
+            const increment = Math.max(padding / 2, Math.max(Math.abs(minValue) * 0.05, 0.01))
             const ticks = []
             for (let tick = domainMin; tick <= domainMax; tick += increment) {
                 ticks.push(tick)
@@ -208,6 +227,38 @@ export default function PortfolioChart() {
         return calculateYAxisDomain(processedData, showContributions)
     }, [processedData, showContributions])
 
+    const formatAxisMoney = useMemo(() => {
+        const ticks = yAxisConfig.ticks
+        let step = null
+        if (Array.isArray(ticks) && ticks.length >= 2) {
+            step = Math.abs(ticks[1] - ticks[0])
+        }
+        return (value) => {
+            const useCompact = step != null && step >= 5000
+            if (!useCompact) {
+                let frac = 0
+                if (step != null && step > 0) {
+                    if (step < 1) frac = 2
+                    else if (step < 100) frac = 2
+                    else frac = 0
+                } else {
+                    frac = 2
+                }
+                return formatCurrencyUtil(value, {
+                    currency: currencyCode,
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: frac,
+                })
+            }
+            return formatCurrencyUtil(value, {
+                currency: currencyCode,
+                notation: 'compact',
+                maximumFractionDigits: 1,
+                minimumFractionDigits: 0,
+            })
+        }
+    }, [yAxisConfig.ticks, currencyCode])
+
     const xTicks = useMemo(() => {
         return computeXTicks(processedData, selectedRange)
     }, [processedData, selectedRange])
@@ -256,8 +307,6 @@ export default function PortfolioChart() {
         }
     }
 
-    const hasNegativeGains = chartData.some(d => d.gain < 0)
-
     if (chartData.length === 0 && !loading) {
         return (
             <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-600 transition-colors">
@@ -270,7 +319,9 @@ export default function PortfolioChart() {
                 <div className="text-center py-12 text-gray-500 dark:text-gray-400">
                     <Calendar className="w-12 h-12 mx-auto mb-3 opacity-50" />
                     <p>No historical data available yet.</p>
-                    <p className="text-sm mt-1">Data will appear after the first hourly snapshot.</p>
+                    <p className="text-sm mt-1">
+                        Data builds from hourly snapshots once you hold positions in this portfolio.
+                    </p>
                 </div>
             </div>
         )
@@ -296,7 +347,7 @@ export default function PortfolioChart() {
                         <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
                     </button>
 
-                    {/* View toggle */}
+                    {isTfsa && (
                     <button
                         onClick={() => setShowContributions(!showContributions)}
                         className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${showContributions
@@ -308,6 +359,7 @@ export default function PortfolioChart() {
                         <Layers className="w-4 h-4" />
                         <span>{showContributions ? 'Both' : 'Value Only'}</span>
                     </button>
+                    )}
 
                     {/* Time range selector */}
                     <div className="flex flex-wrap bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
@@ -386,7 +438,7 @@ export default function PortfolioChart() {
                     <ResponsiveContainer width="100%" height="100%">
                         <AreaChart
                             data={processedData}
-                            margin={{ top: 10, right: 5, left: 0, bottom: 0 }}
+                            margin={{ top: 10, right: 8, left: 20, bottom: 4 }}
                         >
                             <defs>
                                 <linearGradient id="colorContributions" x1="0" y1="0" x2="0" y2="1">
@@ -415,20 +467,13 @@ export default function PortfolioChart() {
                             <YAxis
                                 domain={yAxisConfig.domain}
                                 ticks={yAxisConfig.ticks}
-                                tickFormatter={(value) => {
-                                    if (value >= 1000000) {
-                                        return `R${(value / 1000000).toFixed(1)}M`
-                                    } else if (value >= 1000) {
-                                        return `R${(value / 1000).toFixed(0)}k`
-                                    } else {
-                                        return `R${value.toFixed(0)}`
-                                    }
-                                }}
+                                tickFormatter={formatAxisMoney}
                                 stroke="#9CA3AF"
                                 fontSize={12}
                                 tickLine={false}
                                 axisLine={false}
-                                width={60}
+                                width={84}
+                                tickMargin={8}
                             />
                             <Tooltip content={<CustomTooltip />} />
                             {showContributions ? (
@@ -484,7 +529,7 @@ export default function PortfolioChart() {
             )}
 
             {/* Legend explanation */}
-            {showContributions && (
+            {showContributions && isTfsa && (
                 <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
                     <div className="flex flex-wrap gap-4 text-sm text-gray-600 dark:text-gray-400">
                         <div className="flex items-center gap-2">

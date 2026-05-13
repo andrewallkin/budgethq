@@ -19,6 +19,7 @@ export default function SalaryPage() {
     const [uploadModalOpen, setUploadModalOpen] = useState(false)
     const [manualModalOpen, setManualModalOpen] = useState(false)
     const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+    const [deletePayslipError, setDeletePayslipError] = useState('')
     const [hasOpenAIKey, setHasOpenAIKey] = useState(false)
     const [fyData, setFyData] = useState(null)
     
@@ -218,6 +219,7 @@ export default function SalaryPage() {
             
             // Close modal and reset state
             setDeleteModalOpen(false)
+            setDeletePayslipError('')
             
             // After deletion, try to load latest payslip again
             await loadLatestPayslip()
@@ -226,7 +228,7 @@ export default function SalaryPage() {
             fetchFinancialYearData()
         } catch (err) {
             console.error("Failed to delete payslip", err)
-            alert("Failed to delete payslip. Please try again.")
+            setDeletePayslipError(err.response?.data?.detail || 'Failed to delete payslip. Please try again.')
         } finally {
             setSaving(false)
         }
@@ -440,7 +442,10 @@ export default function SalaryPage() {
                     </div>
                     <div className="flex items-center gap-2">
                         <button
-                            onClick={() => setDeleteModalOpen(true)}
+                            onClick={() => {
+                                setDeletePayslipError('')
+                                setDeleteModalOpen(true)
+                            }}
                             className="flex items-center justify-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors font-medium"
                             title="Delete this payslip"
                         >
@@ -454,11 +459,15 @@ export default function SalaryPage() {
             {/* Delete Confirmation Modal */}
             <ConfirmDeleteModal
                 isOpen={deleteModalOpen}
-                onClose={() => setDeleteModalOpen(false)}
+                onClose={() => {
+                    setDeleteModalOpen(false)
+                    setDeletePayslipError('')
+                }}
                 onConfirm={handleDeletePayslip}
                 title="Are you sure you want to delete this payslip?"
                 message="This will permanently remove all payslip data for this month."
                 monthYear={`${monthNames[selectedMonth - 1]} ${selectedYear}`}
+                actionError={deletePayslipError}
             />
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">

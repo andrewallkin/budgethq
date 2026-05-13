@@ -4,12 +4,14 @@ import { Plus, Trash2, AlertTriangle, ChevronDown, ChevronRight, HelpCircle, Pla
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, CATEGORIES, CATEGORY_LABELS } from '../utils/transactionCategories'
 import BlurredValue from '../components/BlurredValue'
 import { formatCurrency, formatDateSafe } from '../utils/numberFormatting'
+import HubBackLink from '../components/HubBackLink'
+import { useAutoClearingMessage } from '../hooks/useAutoClearingMessage'
 
 export default function CategorizationRules() {
     const [loading, setLoading] = useState(true)
     const [rules, setRules] = useState([])
     const [error, setError] = useState('')
-    const [success, setSuccess] = useState('')
+    const [success, setSuccess] = useAutoClearingMessage(8000)
 
     const [newRule, setNewRule] = useState({
         pattern: '',
@@ -271,6 +273,7 @@ export default function CategorizationRules() {
 
     return (
         <div className="space-y-6 sm:space-y-8">
+            <HubBackLink to="/investec" label="Investec Banking" />
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
                 <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
                     Categorization Rules

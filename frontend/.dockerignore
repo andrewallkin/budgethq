@@ -1,0 +1,8 @@
+# Installed in-image via `npm install`; copying host `node_modules` breaks Linux builds
+# and can mix Rollup/Vite versions (e.g. “modulepreload-polyfill must be external”).
+node_modules
+
+# Build output / caches
+dist
+.vite
+*.local

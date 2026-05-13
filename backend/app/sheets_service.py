@@ -11,9 +11,10 @@ from typing import List, Dict, Optional
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-from sqlalchemy.orm import Session
 from .database import get_db
 from . import models
+from .portfolio_service import ensure_default_tfsa_portfolio
+from .fx_service import ensure_fx_rates_tab
 
 
 # Scopes for read/write access to Google Sheets
@@ -26,23 +27,56 @@ logger = logging.getLogger(__name__)
 class GoogleSheetsService:
     """Service class for Google Sheets ETF operations."""
 
-    def __init__(self, user_id: int):
+    def __init__(self, user_id: int, portfolio_id: Optional[int] = None):
         self.service = None
         self.spreadsheet_id = os.getenv('GOOGLE_SPREADSHEET_ID')
         self.user_id = user_id
+        self.portfolio_id = portfolio_id
         self._sheet_name = None  # Lazy-loaded
+        self._gf_divide_100: Optional[bool] = None  # Lazy-loaded; JSE/TFSA cents fix
         self._initialize_service()
 
     @property
     def sheet_name(self) -> str:
         """Get the sheet name, lazy-loading from database if needed."""
         if self._sheet_name is None:
-            self._sheet_name = self.get_sheet_name_for_user(self.user_id)
+            self._sheet_name = self.get_sheet_name_for_portfolio(self.user_id, self.portfolio_id)
         return self._sheet_name
 
+    def _include_googlefinance_cent_divider(self) -> bool:
+        """
+        Default TFSA (ZAR / JSE) GOOGLEFINANCE prices are often in cents — divide by 100.
+        Non-TFSA portfolios (e.g. USD listings) use the quoted price as-is.
+        """
+        if self._gf_divide_100 is not None:
+            return self._gf_divide_100
+
+        db = next(get_db())
+        try:
+            portfolio = None
+            if self.portfolio_id is not None:
+                portfolio = (
+                    db.query(models.InvestmentPortfolio)
+                    .filter(
+                        models.InvestmentPortfolio.id == self.portfolio_id,
+                        models.InvestmentPortfolio.user_id == self.user_id,
+                    )
+                    .first()
+                )
+            if portfolio is None:
+                portfolio = ensure_default_tfsa_portfolio(db, self.user_id)
+            self._gf_divide_100 = bool(portfolio.is_default_tfsa)
+            return self._gf_divide_100
+        finally:
+            db.close()
+
+    def _googlefinance_price_formula(self, row: int) -> str:
+        suffix = "/100" if self._include_googlefinance_cent_divider() else ""
+        return f'=GOOGLEFINANCE(A{row}, "price"){suffix}'
+
     @staticmethod
-    def get_sheet_name_for_user(user_id: int) -> str:
-        """Get the sheet name for a user from database, creating if necessary."""
+    def get_sheet_name_for_portfolio(user_id: int, portfolio_id: Optional[int] = None) -> str:
+        """Get/create sheet tab mapping for a user's portfolio."""
         if user_id is None:
             raise ValueError("user_id cannot be None - all operations must be user-specific")
 
@@ -50,18 +84,29 @@ class GoogleSheetsService:
         db = next(get_db())
 
         try:
-            # Check if user sheet record exists
+            portfolio = None
+            if portfolio_id is not None:
+                portfolio = db.query(models.InvestmentPortfolio).filter(
+                    models.InvestmentPortfolio.id == portfolio_id,
+                    models.InvestmentPortfolio.user_id == user_id,
+                ).first()
+            if portfolio is None:
+                portfolio = ensure_default_tfsa_portfolio(db, user_id)
+
+            # Check if portfolio sheet record exists
             user_sheet = db.query(models.UserSheet).filter(
-                models.UserSheet.user_id == user_id
+                models.UserSheet.user_id == user_id,
+                models.UserSheet.portfolio_id == portfolio.id,
             ).first()
 
             if user_sheet:
                 return user_sheet.sheet_name
 
-            # Create new user sheet record with user ID based name
-            sheet_name = f"user_{user_id}"
+            # Create new portfolio sheet record.
+            sheet_name = models.UserSheet.generate_sheet_name(user_id, portfolio.slug)
             user_sheet = models.UserSheet(
                 user_id=user_id,
+                portfolio_id=portfolio.id,
                 sheet_name=sheet_name
             )
             db.add(user_sheet)
@@ -69,19 +114,18 @@ class GoogleSheetsService:
 
             logger.info(
                 "User sheet record created",
-                extra={"user_id": user_id, "sheet_name": sheet_name},
+                extra={"user_id": user_id, "portfolio_id": portfolio.id, "sheet_name": sheet_name},
             )
             return sheet_name
 
         except Exception as e:
             logger.exception(
-                "User sheet get/create failed: %s: %s",
+                "Portfolio sheet get/create failed: %s: %s",
                 type(e).__name__,
                 e,
-                extra={"user_id": user_id},
+                extra={"user_id": user_id, "portfolio_id": portfolio_id},
             )
-            # Fallback to user ID based name (not stored in DB)
-            fallback_name = f"user_{user_id}"
+            fallback_name = models.UserSheet.generate_sheet_name(user_id, "tfsa")
             logger.warning(
                 "Using fallback sheet name",
                 extra={"user_id": user_id, "fallback_name": fallback_name},
@@ -116,7 +160,8 @@ class GoogleSheetsService:
             # Build the Sheets API service
             self.service = build('sheets', 'v4', credentials=credentials)
             logger.info("Google Sheets service initialized")
-            
+            ensure_fx_rates_tab(self.service, self.spreadsheet_id)
+
         except Exception as e:
             logger.exception(
                 "Google Sheets initialization failed: %s: %s",
@@ -256,7 +301,7 @@ class GoogleSheetsService:
         Sheet format (3 columns):
             A: Ticker (e.g., JSE:STX40)
             B: ETF Name (e.g., Satrix Top 40)
-            C: Price (formula: =GOOGLEFINANCE(A2,"price")/100)
+            C: Price (GOOGLEFINANCE; default TFSA divides by 100 for JSE cents)
 
         Returns:
             List of dicts with keys: jse_ticker, etf_name, current_price
@@ -349,9 +394,8 @@ class GoogleSheetsService:
             values = result.get('values', [])
             next_row = len(values) + 1
 
-            # Create the price formula for the new row
-            # =GOOGLEFINANCE(A{row}, "price")/100
-            price_formula = f'=GOOGLEFINANCE(A{next_row}, "price")/100'
+            # Create the price formula for the new row (/100 only for default TFSA sheet)
+            price_formula = self._googlefinance_price_formula(next_row)
 
             # Prepare the new row data (3 columns: ticker, name, price formula)
             new_row = [[jse_ticker, etf_name, price_formula]]
@@ -505,10 +549,10 @@ class GoogleSheetsService:
 
 
 # Global instances cache for use across the application
-_sheets_services: Dict[Optional[int], GoogleSheetsService] = {}
+_sheets_services: Dict[tuple[int, int], GoogleSheetsService] = {}
 
 
-def get_sheets_service(user_id: int) -> GoogleSheetsService:
+def get_sheets_service(user_id: int, portfolio_id: Optional[int] = None) -> GoogleSheetsService:
     """
     Get or create a Google Sheets service instance for a specific user.
 
@@ -519,7 +563,8 @@ def get_sheets_service(user_id: int) -> GoogleSheetsService:
         GoogleSheetsService instance for the specified user
     """
     global _sheets_services
-    if user_id not in _sheets_services:
-        _sheets_services[user_id] = GoogleSheetsService(user_id=user_id)
-    return _sheets_services[user_id]
+    cache_key = (user_id, portfolio_id or 0)
+    if cache_key not in _sheets_services:
+        _sheets_services[cache_key] = GoogleSheetsService(user_id=user_id, portfolio_id=portfolio_id)
+    return _sheets_services[cache_key]
 

@@ -7,6 +7,7 @@ import { formatCurrency } from '../utils/numberFormatting'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 import { INCOME_CATEGORIES, CATEGORY_COLORS, CATEGORY_LABELS } from '../utils/transactionCategories'
 import ChartLegend from '../components/ChartLegend'
+import HubBackLink from '../components/HubBackLink'
 
 function formatPeriodRange(fromDate, toDate) {
     const from = new Date(fromDate)
@@ -193,6 +194,7 @@ export default function BudgetAnalysis() {
 
     return (
         <div className="space-y-6 sm:space-y-8">
+            <HubBackLink to="/investec" label="Investec Banking" />
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
                 <div>
                     <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
