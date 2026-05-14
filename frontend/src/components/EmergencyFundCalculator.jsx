@@ -81,8 +81,12 @@ export default function EmergencyFundCalculator({
         }
     }, [targetType, monthlyExpenses, targetMonths, targetValue])
 
-    const shortfall = useMemo(() => {
+    const remainingToSave = useMemo(() => {
         return Math.max(0, targetAmount - currentFund)
+    }, [targetAmount, currentFund])
+
+    const excessAboveTarget = useMemo(() => {
+        return Math.max(0, currentFund - targetAmount)
     }, [targetAmount, currentFund])
 
     const progress = useMemo(() => {
@@ -412,14 +416,19 @@ export default function EmergencyFundCalculator({
                     </div>
                     <div>
                         <div className="text-sm text-gray-600 dark:text-gray-400">
-                            {shortfall > 0 ? 'Remaining to Save' : 'Excess'}
+                            {remainingToSave > 0 ? 'Remaining to Save' : 'Excess'}
                         </div>
                         <div
                             className={`text-lg font-semibold ${
-                                shortfall > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'
+                                remainingToSave > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'
                             }`}
                         >
-                            <BlurredValue>{formatCurrency(Math.abs(shortfall), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</BlurredValue>
+                            <BlurredValue>
+                                {formatCurrency(
+                                    remainingToSave > 0 ? remainingToSave : excessAboveTarget,
+                                    { minimumFractionDigits: 2, maximumFractionDigits: 2 }
+                                )}
+                            </BlurredValue>
                         </div>
                     </div>
                 </div>
