@@ -162,10 +162,19 @@ export default function BudgetAnalysis() {
     const actualSpending = calculateActualSpending()
     const budgetedAmounts = mapBudgetToCategories()
 
-    // Calculate totals and variance (exclude income, transfers, and uncategorized from budgeted)
+    // Calculate totals (exclude income, transfers, and uncategorized from headline budget rollup)
     const totalBudgeted = Object.values(budgetedAmounts).reduce((sum, val) => sum + val, 0) - budgetedAmounts.income - budgetedAmounts.transfers - budgetedAmounts.uncategorized
     const totalSpent = Object.values(actualSpending).reduce((sum, val) => sum + val, 0) - actualSpending.income - actualSpending.transfers
-    const variance = totalBudgeted - totalSpent
+
+    /** Credits classified refund: extra envelope for headline summary only (not category rows/charts). */
+    const refundCreditTotal = transactions.reduce((sum, txn) => {
+        if (txn.category === 'refund' && txn.transaction_type === 'CREDIT') {
+            return sum + Math.abs(txn.amount)
+        }
+        return sum
+    }, 0)
+    const totalBudgetedDisplay = totalBudgeted + refundCreditTotal
+    const varianceDisplay = totalBudgetedDisplay - totalSpent
 
     // Prepare chart data (exclude income and transfers, but INCLUDE uncategorized)
     const comparisonData = Object.keys(budgetedAmounts)
@@ -235,8 +244,13 @@ export default function BudgetAnalysis() {
                 <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
                     <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Total Budgeted</p>
                     <BlurredValue><p className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
-                        {formatCurrency(totalBudgeted)}
+                        {formatCurrency(totalBudgetedDisplay)}
                     </p></BlurredValue>
+                    {refundCreditTotal > 0 && (
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                            Includes <BlurredValue>{formatCurrency(refundCreditTotal)}</BlurredValue> from refunds this period
+                        </p>
+                    )}
                 </div>
 
                 <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
@@ -249,10 +263,10 @@ export default function BudgetAnalysis() {
                 <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
                     <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Remaining</p>
                     <p className={`text-2xl sm:text-3xl font-bold flex items-center gap-2 ${
-                        variance >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                        varianceDisplay >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
                     }`}>
-                        {variance >= 0 ? <TrendingUp className="w-6 h-6" /> : <TrendingDown className="w-6 h-6" />}
-                        <BlurredValue>{formatCurrency(Math.abs(variance))}</BlurredValue>
+                        {varianceDisplay >= 0 ? <TrendingUp className="w-6 h-6" /> : <TrendingDown className="w-6 h-6" />}
+                        <BlurredValue>{formatCurrency(Math.abs(varianceDisplay))}</BlurredValue>
                     </p>
                 </div>
             </div>
