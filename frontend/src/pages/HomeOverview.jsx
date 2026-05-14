@@ -35,6 +35,10 @@ const CARD_ACCENTS = {
     },
 }
 
+/** Matches dense budget tile height on md+ so all four overview tiles align to one size */
+const OVERVIEW_TILE_LINK_CLASS =
+    'group relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-5 sm:p-6 shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all md:min-h-[284px]'
+
 const emptyOverview = {
     budget: {
         netIncome: 0,
@@ -318,11 +322,8 @@ export default function HomeOverview() {
                 </div>
             )}
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5 items-start">
-                <Link
-                    to="/budget"
-                    className="group relative overflow-hidden rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-5 sm:p-6 shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all"
-                >
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
+                <Link to="/budget" className={OVERVIEW_TILE_LINK_CLASS}>
                     <div className={`absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r ${CARD_ACCENTS.blue.bar}`} />
                     <div className="flex items-start justify-between gap-4">
                         <div className={`p-3 rounded-xl ${CARD_ACCENTS.blue.icon}`}>
@@ -356,7 +357,7 @@ export default function HomeOverview() {
                             </div>
                         </div>
                     </div>
-                    <div className="mt-3">
+                    <div className="mt-3 flex min-h-0 flex-1 flex-col">
                         <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Budget</p>
                         <BlurredValue>
                             <p className="mt-1.5 text-3xl font-bold tracking-tight text-gray-900 dark:text-white">
@@ -386,11 +387,7 @@ export default function HomeOverview() {
                         : formatCompactCurrency(Math.abs(card.value), card.currency || 'ZAR')
 
                     return (
-                        <Link
-                            key={card.title}
-                            to={card.to}
-                            className="group relative overflow-hidden rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-5 sm:p-6 shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all"
-                        >
+                        <Link key={card.title} to={card.to} className={OVERVIEW_TILE_LINK_CLASS}>
                             <div className={`absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r ${CARD_ACCENTS[card.accent].bar}`} />
                             <div className="flex items-start justify-between gap-4">
                                 <div className={`p-3 rounded-xl ${CARD_ACCENTS[card.accent].icon}`}>
@@ -398,7 +395,7 @@ export default function HomeOverview() {
                                 </div>
                                 <ArrowUpRight className="w-5 h-5 text-gray-400 group-hover:text-gray-700 dark:group-hover:text-gray-200 transition-colors" />
                             </div>
-                            <div className="mt-6">
+                            <div className="mt-6 flex min-h-0 flex-1 flex-col">
                                 <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{card.title}</p>
                                 <BlurredValue>
                                     <p className="mt-2 text-3xl font-bold tracking-tight text-gray-900 dark:text-white">

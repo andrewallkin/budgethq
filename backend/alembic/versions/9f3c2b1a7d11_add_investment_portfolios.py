@@ -117,15 +117,17 @@ def upgrade() -> None:
             portfolio_id = existing[0]
         else:
             result = bind.execute(
-                investment_portfolios.insert().values(
+                investment_portfolios.insert()
+                .values(
                     user_id=user_id,
                     name="TFSA",
                     slug=_slugify("TFSA"),
                     is_default_tfsa=True,
                     is_active=True,
                 )
+                .returning(investment_portfolios.c.id)
             )
-            portfolio_id = result.inserted_primary_key[0]
+            portfolio_id = result.scalar_one()
 
         bind.execute(
             etf_holdings.update()
