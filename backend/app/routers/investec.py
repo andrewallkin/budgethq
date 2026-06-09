@@ -8,7 +8,7 @@ Handles all Investec integration endpoints:
 - Categorization rules
 """
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from pydantic import BaseModel, Field
@@ -21,6 +21,13 @@ from ..investec_service import InvestecService
 from ..transaction_categorizer import TransactionCategorizer
 from ..investec_sync import _sync_user_accounts, _sync_account_transactions
 from ..logging_utils import redact_description
+from ..transaction_pdf import ExportTransactionRow, build_transactions_pdf
+from ..transaction_query import (
+    account_display_name,
+    build_transactions_query,
+    get_user_accounts_for_export,
+    parse_date_param,
+)
 
 import logging
 
@@ -416,49 +423,89 @@ async def list_transactions(
     - limit: Max results (default 50)
     - offset: Pagination offset
     """
-    query = db.query(models.BankTransaction).filter(
-        models.BankTransaction.user_id == current_user.id
+    query = build_transactions_query(
+        db,
+        current_user.id,
+        account_id=account_id,
+        category=category,
+        from_date=from_date,
+        to_date=to_date,
+        search=search,
+        transaction_type=transaction_type,
     )
 
-    if account_id:
-        query = query.filter(models.BankTransaction.account_id == account_id)
-
-    if category:
-        # Support "uncategorized" as a special filter for transactions with category IS NULL
-        if "uncategorized" in category:
-            cat_values = [c for c in category if c != "uncategorized"]
-            if cat_values:
-                from sqlalchemy import or_
-                query = query.filter(
-                    or_(
-                        models.BankTransaction.category.in_(cat_values),
-                        models.BankTransaction.category.is_(None)
-                    )
-                )
-            else:
-                query = query.filter(models.BankTransaction.category.is_(None))
-        else:
-            query = query.filter(models.BankTransaction.category.in_(category))
-
-    if from_date:
-        query = query.filter(models.BankTransaction.transaction_date >= from_date)
-
-    if to_date:
-        query = query.filter(models.BankTransaction.transaction_date <= to_date)
-
-    if search:
-        query = query.filter(
-            models.BankTransaction.description.ilike(f"%{search}%")
-        )
-
-    if transaction_type:
-        query = query.filter(models.BankTransaction.transaction_type == transaction_type)
-
-    transactions = query.order_by(
-        models.BankTransaction.transaction_date.desc()
-    ).limit(limit).offset(offset).all()
+    transactions = query.limit(limit).offset(offset).all()
 
     return transactions
+
+
+@router.get("/transactions/export/pdf")
+async def export_transactions_pdf(
+    from_date: str = Query(..., description="Start date (YYYY-MM-DD)"),
+    to_date: str = Query(..., description="End date (YYYY-MM-DD)"),
+    account_ids: List[int] = Query(..., description="Account IDs to include (repeat param for multiple)"),
+    include_transfers: bool = Query(False, description="Include transfers category in export"),
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Export filtered bank transactions as a PDF (database only, no Investec API calls)."""
+    if not account_ids:
+        raise HTTPException(status_code=400, detail="At least one account must be selected")
+
+    try:
+        from_dt = parse_date_param(from_date, "from_date")
+        to_dt = parse_date_param(to_date, "to_date")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if from_dt > to_dt:
+        raise HTTPException(status_code=400, detail="from_date must be on or before to_date")
+
+    accounts = get_user_accounts_for_export(db, current_user.id, account_ids)
+    if not accounts:
+        raise HTTPException(status_code=404, detail="One or more selected accounts were not found")
+
+    account_name_by_id = {account.id: account_display_name(account) for account in accounts}
+    selected_account_ids = [account.id for account in accounts]
+
+    transactions = (
+        build_transactions_query(
+            db,
+            current_user.id,
+            account_ids=selected_account_ids,
+            from_date=from_date,
+            to_date=to_date,
+            include_transfers=include_transfers,
+        )
+        .all()
+    )
+
+    rows = [
+        ExportTransactionRow(
+            transaction_date=txn.transaction_date,
+            description=txn.description,
+            amount=txn.amount,
+            transaction_type=txn.transaction_type,
+            category=txn.category,
+            account_name=account_name_by_id.get(txn.account_id),
+        )
+        for txn in transactions
+    ]
+
+    pdf_bytes = build_transactions_pdf(
+        from_date=from_date,
+        to_date=to_date,
+        account_names=[account_display_name(account) for account in accounts],
+        include_transfers=include_transfers,
+        transactions=rows,
+    )
+
+    filename = f"transactions_{from_date}_to_{to_date}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.post("/transactions/sync")

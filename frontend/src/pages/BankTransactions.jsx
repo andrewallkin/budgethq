@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
-import { Search, Filter, AlertTriangle, Sparkles, Zap, RefreshCw, Trash2 } from 'lucide-react'
+import { Search, Filter, AlertTriangle, Sparkles, Zap, RefreshCw, Trash2, Download } from 'lucide-react'
 import { formatCurrency, formatDateSafe } from '../utils/numberFormatting'
 import BlurredValue from '../components/BlurredValue'
 import TransactionDetailsModal from '../components/TransactionDetailsModal'
+import TransactionExportModal from '../components/TransactionExportModal'
 import HubBackLink from '../components/HubBackLink'
 
 const INCOME_CATEGORIES = ['salary', 'side_income', 'investment_income', 'refund', 'other_income']
@@ -41,6 +42,7 @@ export default function BankTransactions() {
     const [deletingId, setDeletingId] = useState(null)
     const [showDetailsModal, setShowDetailsModal] = useState(false)
     const [selectedTransaction, setSelectedTransaction] = useState(null)
+    const [showExportModal, setShowExportModal] = useState(false)
 
     // Filters
     const [filters, setFilters] = useState({
@@ -261,6 +263,13 @@ export default function BankTransactions() {
                     >
                         <Sparkles className="w-4 h-4" />
                         Categorize All with AI
+                    </button>
+                    <button
+                        onClick={() => setShowExportModal(true)}
+                        className="px-4 py-2.5 min-h-[44px] bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2"
+                    >
+                        <Download className="w-4 h-4" />
+                        Download PDF
                     </button>
                     <button
                         onClick={() => setShowFilters(!showFilters)}
@@ -631,6 +640,14 @@ export default function BankTransactions() {
                     </div>
                 </div>
             )}
+
+            <TransactionExportModal
+                isOpen={showExportModal}
+                onClose={() => setShowExportModal(false)}
+                accounts={accounts}
+                initialFromDate={filters.from_date}
+                initialToDate={filters.to_date}
+            />
 
             {/* Bulk Results Modal */}
             {bulkResults && (
