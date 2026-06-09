@@ -18,8 +18,8 @@ from reportlab.platypus import (
     TableStyle,
 )
 
+from .transaction_budget_summary import BudgetComparisonSummary
 from .transaction_categories import category_label
-from .transaction_query import account_display_name
 from .utils import get_sast_now
 
 
@@ -47,6 +47,95 @@ def _format_date(value: datetime) -> str:
     return value.strftime("%d %b %Y")
 
 
+def _table_style_base() -> list:
+    return [
+        ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+        ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#E5E7EB")),
+        ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#E5E7EB")),
+        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+    ]
+
+
+def _build_budget_comparison_section(
+    budget_summary: BudgetComparisonSummary,
+    section_style: ParagraphStyle,
+) -> list:
+    section_title = ParagraphStyle(
+        "BudgetSectionTitle",
+        parent=section_style,
+        fontSize=11,
+        fontName="Helvetica-Bold",
+        textColor=colors.HexColor("#111827"),
+        spaceAfter=6,
+    )
+
+    headers = ["Category", "Budgeted", "Actual", "Remaining"]
+    table_data = [headers]
+    for row in budget_summary.rows:
+        remaining_prefix = "+" if row.remaining >= 0 else ""
+        table_data.append(
+            [
+                row.label,
+                _format_currency(row.budgeted),
+                _format_currency(row.actual),
+                f"{remaining_prefix}{_format_currency(row.remaining)}",
+            ]
+        )
+
+    remaining_prefix = "+" if budget_summary.remaining >= 0 else ""
+    table_data.append(
+        [
+            "Total",
+            _format_currency(budget_summary.total_budgeted),
+            _format_currency(budget_summary.total_spent),
+            f"{remaining_prefix}{_format_currency(budget_summary.remaining)}",
+        ]
+    )
+
+    remaining_total_color = (
+        colors.HexColor("#16A34A")
+        if budget_summary.remaining >= 0
+        else colors.HexColor("#DC2626")
+    )
+    budget_table = Table(table_data, colWidths=[52 * mm, 32 * mm, 32 * mm, 34 * mm], repeatRows=1)
+    budget_table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1F2937")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, 0), 8),
+                ("FONTSIZE", (0, 1), (-1, -1), 8),
+                ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+                ("ALIGN", (0, 0), (0, -1), "LEFT"),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -2), [colors.white, colors.HexColor("#F9FAFB")]),
+                ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#F3F4F6")),
+                ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
+                ("TEXTCOLOR", (3, 1), (3, -2), colors.HexColor("#374151")),
+                ("TEXTCOLOR", (3, -1), (3, -1), remaining_total_color),
+                *_table_style_base(),
+            ]
+        )
+    )
+
+    elements = [
+        Paragraph("Budget vs Actual", section_title),
+        budget_table,
+    ]
+    if budget_summary.refund_credit_total > 0:
+        elements.append(
+            Paragraph(
+                f"Includes {_format_currency(budget_summary.refund_credit_total)} from refunds in total budgeted.",
+                section_style,
+            )
+        )
+    elements.append(Spacer(1, 8 * mm))
+    return elements
+
+
 def _add_page_number(canvas, doc):
     canvas.saveState()
     canvas.setFont("Helvetica", 8)
@@ -62,6 +151,7 @@ def build_transactions_pdf(
     account_names: List[str],
     include_transfers: bool,
     transactions: List[ExportTransactionRow],
+    budget_summary: Optional[BudgetComparisonSummary] = None,
 ) -> bytes:
     """Generate a structured PDF report and return raw bytes."""
     buffer = BytesIO()
@@ -131,8 +221,11 @@ def build_transactions_pdf(
             f"<b>Generated:</b> {generated_at}",
             meta_style,
         ),
-        Spacer(1, 8 * mm),
+        Spacer(1, 6 * mm),
     ]
+
+    if budget_summary and budget_summary.rows:
+        story.extend(_build_budget_comparison_section(budget_summary, meta_style))
 
     total_credits = sum(t.amount for t in transactions if t.transaction_type == "CREDIT")
     total_debits = sum(abs(t.amount) for t in transactions if t.transaction_type == "DEBIT")
@@ -145,26 +238,40 @@ def build_transactions_pdf(
         ["Net Movement", _format_signed_amount(net, "CREDIT" if net >= 0 else "DEBIT")],
     ]
     summary_table = Table(summary_data, colWidths=[45 * mm, 55 * mm])
+    summary_title = ParagraphStyle(
+        "SummarySectionTitle",
+        parent=meta_style,
+        fontSize=11,
+        fontName="Helvetica-Bold",
+        textColor=colors.HexColor("#111827"),
+        spaceAfter=6,
+    )
+    story.append(Paragraph("Transaction Summary", summary_title))
     summary_table.setStyle(
         TableStyle(
             [
                 ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F3F4F6")),
-                ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
                 ("FONTSIZE", (0, 0), (-1, -1), 9),
                 ("TEXTCOLOR", (0, 0), (0, -1), colors.HexColor("#6B7280")),
                 ("TEXTCOLOR", (1, 0), (1, -1), colors.HexColor("#111827")),
                 ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
-                ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#E5E7EB")),
-                ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#E5E7EB")),
-                ("LEFTPADDING", (0, 0), (-1, -1), 8),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-                ("TOPPADDING", (0, 0), (-1, -1), 6),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                *_table_style_base(),
             ]
         )
     )
     story.append(summary_table)
     story.append(Spacer(1, 8 * mm))
+
+    if transactions:
+        txn_title = ParagraphStyle(
+            "TxnSectionTitle",
+            parent=meta_style,
+            fontSize=11,
+            fontName="Helvetica-Bold",
+            textColor=colors.HexColor("#111827"),
+            spaceAfter=6,
+        )
+        story.append(Paragraph("Transactions", txn_title))
 
     show_account_column = len(account_names) > 1
     if not transactions:

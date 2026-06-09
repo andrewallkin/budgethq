@@ -8,9 +8,17 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend"))
 
+from app.transaction_budget_summary import BudgetComparisonRow, BudgetComparisonSummary, compute_actual_spending
 from app.transaction_categories import category_label
 from app.transaction_pdf import ExportTransactionRow, build_transactions_pdf
 from app.transaction_query import build_transactions_query, parse_date_param
+
+
+class SimpleTxn:
+    def __init__(self, category, transaction_type, amount):
+        self.category = category
+        self.transaction_type = transaction_type
+        self.amount = amount
 
 
 class TestCategoryLabel:
@@ -124,3 +132,54 @@ class TestBuildTransactionsPdf:
             transactions=self._sample_transactions(include_account=True),
         )
         assert len(multi) >= len(single)
+
+    def test_pdf_with_budget_summary_is_larger(self):
+        base = build_transactions_pdf(
+            from_date="2025-01-01",
+            to_date="2025-01-31",
+            account_names=["Primary Account"],
+            include_transfers=False,
+            transactions=self._sample_transactions(),
+        )
+        with_budget = build_transactions_pdf(
+            from_date="2025-01-01",
+            to_date="2025-01-31",
+            account_names=["Primary Account"],
+            include_transfers=False,
+            transactions=self._sample_transactions(),
+            budget_summary=BudgetComparisonSummary(
+                rows=[
+                    BudgetComparisonRow(
+                        category_key="groceries_household",
+                        label="Groceries & Household",
+                        budgeted=3000.0,
+                        actual=250.50,
+                        remaining=2749.50,
+                    )
+                ],
+                total_budgeted=3000.0,
+                total_spent=250.50,
+                remaining=2749.50,
+                refund_credit_total=0.0,
+            ),
+        )
+        assert len(with_budget) > len(base)
+
+
+class TestComputeActualSpending:
+    def test_debits_grouped_by_category(self):
+        txns = [
+            SimpleTxn("groceries_household", "DEBIT", 100.0),
+            SimpleTxn("bills", "DEBIT", 50.0),
+            SimpleTxn(None, "DEBIT", 25.0),
+        ]
+        totals = compute_actual_spending(txns)
+        assert totals["groceries_household"] == 100.0
+        assert totals["bills"] == 50.0
+        assert totals["uncategorized"] == 25.0
+
+    def test_transfers_tracked_separately_from_expense_categories(self):
+        txns = [SimpleTxn("transfers", "DEBIT", 500.0)]
+        totals = compute_actual_spending(txns)
+        assert totals["transfers"] == 500.0
+        assert totals["groceries_household"] == 0.0

@@ -21,6 +21,7 @@ from ..investec_service import InvestecService
 from ..transaction_categorizer import TransactionCategorizer
 from ..investec_sync import _sync_user_accounts, _sync_account_transactions
 from ..logging_utils import redact_description
+from ..transaction_budget_summary import build_budget_comparison
 from ..transaction_pdf import ExportTransactionRow, build_transactions_pdf
 from ..transaction_query import (
     account_display_name,
@@ -492,12 +493,15 @@ async def export_transactions_pdf(
         for txn in transactions
     ]
 
+    budget_summary = build_budget_comparison(db, current_user.id, transactions)
+
     pdf_bytes = build_transactions_pdf(
         from_date=from_date,
         to_date=to_date,
         account_names=[account_display_name(account) for account in accounts],
         include_transfers=include_transfers,
         transactions=rows,
+        budget_summary=budget_summary,
     )
 
     filename = f"transactions_{from_date}_to_{to_date}.pdf"
