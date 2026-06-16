@@ -1,7 +1,7 @@
 import { useState, useEffect, Fragment } from 'react'
 import axios from 'axios'
 import { Plus, Trash2, AlertTriangle, ChevronDown, ChevronRight, HelpCircle, Play, Layers } from 'lucide-react'
-import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, NEUTRAL_CATEGORIES, CATEGORY_LABELS } from '../utils/transactionCategories'
+import { CATEGORIES, INCOME_CATEGORIES, EXPENSE_CATEGORIES, NEUTRAL_CATEGORIES, CATEGORY_LABELS } from '../utils/transactionCategories'
 import BlurredValue from '../components/BlurredValue'
 import { formatCurrency, formatDateSafe } from '../utils/numberFormatting'
 import HubBackLink from '../components/HubBackLink'
