@@ -54,3 +54,5 @@ etf_bulk_upload.csv
 *.md
 !README.md
 !CLAUDE.md
+
+.DS_Store

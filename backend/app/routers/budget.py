@@ -10,9 +10,13 @@ from ..budget_period import get_period_dates_for_end_month, get_current_period
 logger = logging.getLogger(__name__)
 
 BUDGET_TRANSACTION_CATEGORIES = [
-    "groceries_household", "bills", "subscriptions", "transport",
-    "lifestyle_misc", "savings", "loan_repayment", "transfers", "uncategorized"
+    "groceries", "household_home", "dining_takeaways", "shopping_clothing",
+    "travel_accommodation", "entertainment", "health_wellness", "bills",
+    "subscriptions", "transport", "savings", "loan_repayment",
+    "transfers", "uncategorized"
 ]
+
+BUDGET_CADENCES = ["monthly", "annual", "tracking"]
 
 # Pydantic Models for Budget
 class CategoryBase(BaseModel):
@@ -20,6 +24,7 @@ class CategoryBase(BaseModel):
     amount: float
     transaction_category: Optional[str] = "uncategorized"
     excluded: Optional[bool] = False
+    cadence: Optional[str] = "monthly"
 
 class BudgetData(BaseModel):
     salary: float
@@ -72,9 +77,9 @@ async def get_budget(current_user: models.User = Depends(auth.get_current_user),
 
     return {
         "salary": net_salary,
-        "needs": [{"name": c.name, "amount": c.amount, "transaction_category": c.transaction_category or "uncategorized", "excluded": c.excluded or False} for c in needs],
-        "wants": [{"name": c.name, "amount": c.amount, "transaction_category": c.transaction_category or "uncategorized", "excluded": c.excluded or False} for c in wants],
-        "savings": [{"name": c.name, "amount": c.amount, "transaction_category": c.transaction_category or "uncategorized", "excluded": c.excluded or False} for c in savings],
+        "needs": [{"name": c.name, "amount": c.amount, "transaction_category": c.transaction_category or "uncategorized", "excluded": c.excluded or False, "cadence": c.cadence or "monthly"} for c in needs],
+        "wants": [{"name": c.name, "amount": c.amount, "transaction_category": c.transaction_category or "uncategorized", "excluded": c.excluded or False, "cadence": c.cadence or "monthly"} for c in wants],
+        "savings": [{"name": c.name, "amount": c.amount, "transaction_category": c.transaction_category or "uncategorized", "excluded": c.excluded or False, "cadence": c.cadence or "monthly"} for c in savings],
         "budget_period_start_day": start_day
     }
 
@@ -107,19 +112,27 @@ async def save_budget(data: BudgetData, current_user: models.User = Depends(auth
             return "uncategorized"
         return cat
 
+    def _normalize_cadence(cadence: Optional[str]) -> str:
+        if not cadence or cadence not in BUDGET_CADENCES:
+            return "monthly"
+        return cadence
+
     # Add new categories
     for item in data.needs:
         tc = _normalize_category(item.transaction_category)
         excluded = item.excluded or False
-        db.add(models.BudgetCategory(budget_id=budget.id, type='needs', name=item.name, amount=item.amount, transaction_category=tc, excluded=excluded))
+        cadence = _normalize_cadence(item.cadence)
+        db.add(models.BudgetCategory(budget_id=budget.id, type='needs', name=item.name, amount=item.amount, transaction_category=tc, excluded=excluded, cadence=cadence))
     for item in data.wants:
         tc = _normalize_category(item.transaction_category)
         excluded = item.excluded or False
-        db.add(models.BudgetCategory(budget_id=budget.id, type='wants', name=item.name, amount=item.amount, transaction_category=tc, excluded=excluded))
+        cadence = _normalize_cadence(item.cadence)
+        db.add(models.BudgetCategory(budget_id=budget.id, type='wants', name=item.name, amount=item.amount, transaction_category=tc, excluded=excluded, cadence=cadence))
     for item in data.savings:
         tc = _normalize_category(item.transaction_category)
         excluded = item.excluded or False
-        db.add(models.BudgetCategory(budget_id=budget.id, type='savings', name=item.name, amount=item.amount, transaction_category=tc, excluded=excluded))
+        cadence = _normalize_cadence(item.cadence)
+        db.add(models.BudgetCategory(budget_id=budget.id, type='savings', name=item.name, amount=item.amount, transaction_category=tc, excluded=excluded, cadence=cadence))
 
     db.commit()
     logger.info("Budget saved", extra={"user_id": current_user.id})

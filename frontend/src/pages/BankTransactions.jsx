@@ -1,29 +1,13 @@
 import { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
-import { Search, Filter, AlertTriangle, Sparkles, Zap, RefreshCw, Trash2 } from 'lucide-react'
+import { Search, Filter, AlertTriangle, Sparkles, Zap, RefreshCw, Trash2, Download, Link2 } from 'lucide-react'
 import { formatCurrency, formatDateSafe } from '../utils/numberFormatting'
 import BlurredValue from '../components/BlurredValue'
 import TransactionDetailsModal from '../components/TransactionDetailsModal'
+import TransactionExportModal from '../components/TransactionExportModal'
 import HubBackLink from '../components/HubBackLink'
+import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, NEUTRAL_CATEGORIES, CATEGORY_LABELS } from '../utils/transactionCategories'
 
-const INCOME_CATEGORIES = ['salary', 'side_income', 'investment_income', 'refund', 'other_income']
-const EXPENSE_CATEGORIES = ['groceries_household', 'bills', 'subscriptions', 'transport', 'lifestyle_misc', 'savings', 'loan_repayment']
-
-const CATEGORY_LABELS = {
-    salary: 'Salary',
-    side_income: 'Side Income',
-    investment_income: 'Investment Income',
-    refund: 'Refund',
-    other_income: 'Other Income',
-    groceries_household: 'Groceries & Household',
-    bills: 'Bills',
-    subscriptions: 'Subscriptions',
-    transport: 'Transport',
-    lifestyle_misc: 'Lifestyle & Misc',
-    savings: 'Savings',
-    loan_repayment: 'Loan Repayment',
-    transfers: 'Transfers'
-}
 const TRANSACTION_TYPES = ['All', 'CREDIT', 'DEBIT']
 
 export default function BankTransactions() {
@@ -41,6 +25,7 @@ export default function BankTransactions() {
     const [deletingId, setDeletingId] = useState(null)
     const [showDetailsModal, setShowDetailsModal] = useState(false)
     const [selectedTransaction, setSelectedTransaction] = useState(null)
+    const [showExportModal, setShowExportModal] = useState(false)
 
     // Filters
     const [filters, setFilters] = useState({
@@ -121,6 +106,20 @@ export default function BankTransactions() {
         fetchTransactions(false, overrides)
     }
 
+    const refreshSelectedTransaction = async () => {
+        try {
+            const params = buildParams()
+            const response = await axios.get(`/api/investec/transactions?${params.toString()}`)
+            setTransactions(response.data)
+            if (selectedTransaction) {
+                const updated = response.data.find(t => t.id === selectedTransaction.id)
+                if (updated) setSelectedTransaction(updated)
+            }
+        } catch (err) {
+            setError(err.response?.data?.detail || 'Failed to refresh transaction')
+        }
+    }
+
     const handleApplyFilters = () => {
         setLoading(true)
         fetchTransactions()
@@ -140,12 +139,11 @@ export default function BankTransactions() {
 
             // Update local state with the response data to ensure consistency
             setTransactions(transactions.map(txn =>
-                txn.id === transactionId ? {
-                    ...txn,
-                    category: response.data.category,
-                    user_corrected: response.data.user_corrected
-                } : txn
+                txn.id === transactionId ? response.data : txn
             ))
+            if (selectedTransaction?.id === transactionId) {
+                setSelectedTransaction(response.data)
+            }
         } catch (err) {
             setError(err.response?.data?.detail || 'Failed to update category')
             // Refresh transactions to revert any optimistic UI updates
@@ -263,6 +261,13 @@ export default function BankTransactions() {
                         Categorize All with AI
                     </button>
                     <button
+                        onClick={() => setShowExportModal(true)}
+                        className="px-4 py-2.5 min-h-[44px] bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2"
+                    >
+                        <Download className="w-4 h-4" />
+                        Download PDF
+                    </button>
+                    <button
                         onClick={() => setShowFilters(!showFilters)}
                         className="px-4 py-2.5 min-h-[44px] bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors flex items-center justify-center gap-2"
                     >
@@ -369,7 +374,9 @@ export default function BankTransactions() {
                                         ))}
                                     </optgroup>
                                     <optgroup label="Neutral">
-                                        <option value="transfers">{CATEGORY_LABELS.transfers}</option>
+                                        {NEUTRAL_CATEGORIES.map(cat => (
+                                            <option key={cat} value={cat}>{CATEGORY_LABELS[cat]}</option>
+                                        ))}
                                     </optgroup>
                                 </select>
                             </div>
@@ -476,8 +483,13 @@ export default function BankTransactions() {
                                             )}
                                         </td>
                                         <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
-                                            <div className="whitespace-normal break-words min-w-[12rem]">
-                                                {txn.description}
+                                            <div className="flex items-start gap-1.5 min-w-[12rem]">
+                                                {txn.has_links && (
+                                                    <Link2 className="w-3.5 h-3.5 text-blue-500 flex-shrink-0 mt-0.5" title="Has linked transactions" />
+                                                )}
+                                                <div className="whitespace-normal break-words">
+                                                    {txn.description}
+                                                </div>
                                             </div>
                                         </td>
                                         <td className={`px-4 py-3 whitespace-nowrap text-sm text-right font-semibold ${
@@ -510,7 +522,11 @@ export default function BankTransactions() {
                                                     ))}
                                                 </optgroup>
                                                 <optgroup label="Neutral">
-                                                    <option value="transfers" style={{ color: '#6b7280' }}>Transfers</option>
+                                                    {NEUTRAL_CATEGORIES.map(cat => (
+                                                        <option key={cat} value={cat} style={{ color: '#6b7280' }}>
+                                                            {CATEGORY_LABELS[cat]}
+                                                        </option>
+                                                    ))}
                                                 </optgroup>
                                             </select>
                                         </td>
@@ -564,6 +580,7 @@ export default function BankTransactions() {
                     setTransactionToDelete(txn)
                 }}
                 deletingId={deletingId}
+                onTransactionUpdated={refreshSelectedTransaction}
             />
 
             {/* Bulk Categorize Confirmation Modal */}
@@ -631,6 +648,14 @@ export default function BankTransactions() {
                     </div>
                 </div>
             )}
+
+            <TransactionExportModal
+                isOpen={showExportModal}
+                onClose={() => setShowExportModal(false)}
+                accounts={accounts}
+                initialFromDate={filters.from_date}
+                initialToDate={filters.to_date}
+            />
 
             {/* Bulk Results Modal */}
             {bulkResults && (

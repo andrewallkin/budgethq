@@ -1,7 +1,7 @@
 import { useState, useEffect, Fragment } from 'react'
 import axios from 'axios'
 import { Plus, Trash2, AlertTriangle, ChevronDown, ChevronRight, HelpCircle, Play, Layers } from 'lucide-react'
-import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, CATEGORIES, CATEGORY_LABELS } from '../utils/transactionCategories'
+import { CATEGORIES, INCOME_CATEGORIES, EXPENSE_CATEGORIES, NEUTRAL_CATEGORIES, CATEGORY_LABELS } from '../utils/transactionCategories'
 import BlurredValue from '../components/BlurredValue'
 import { formatCurrency, formatDateSafe } from '../utils/numberFormatting'
 import HubBackLink from '../components/HubBackLink'
@@ -30,6 +30,7 @@ export default function CategorizationRules() {
     const [applyPreview, setApplyPreview] = useState(null) // { uncategorized_count, conflicts }
     const [showConflictModal, setShowConflictModal] = useState(false)
     const [acceptedConflictIds, setAcceptedConflictIds] = useState(new Set())
+    const [conflictOverrides, setConflictOverrides] = useState({}) // { [txnId]: category } user-edited target
 
     // Filter and group-by state
     const [categoryFilter, setCategoryFilter] = useState('')
@@ -119,17 +120,20 @@ export default function CategorizationRules() {
         }
     }
 
-    const handleApplyRules = async (acceptedIds = []) => {
+    const handleApplyRules = async (acceptedIds = [], overrides = {}) => {
         setApplying(true)
         setError('')
 
         try {
-            const payload = acceptedIds.length > 0 ? { accepted_conflict_ids: acceptedIds } : {}
+            const payload = {}
+            if (acceptedIds.length > 0) payload.accepted_conflict_ids = acceptedIds
+            if (Object.keys(overrides).length > 0) payload.category_overrides = overrides
             const response = await axios.post('/api/investec/rules/apply-to-existing', payload)
             setShowApplyModal(false)
             setShowConflictModal(false)
             setApplyPreview(null)
             setAcceptedConflictIds(new Set())
+            setConflictOverrides({})
             setApplyResults(response.data)
         } catch (err) {
             setError(err.response?.data?.detail || 'Failed to apply rules')
@@ -173,8 +177,30 @@ export default function CategorizationRules() {
         })
     }
 
+    // User edits the target category for a conflict; auto-accept that row
+    const handleConflictOverride = (id, category) => {
+        setConflictOverrides(prev => ({ ...prev, [id]: category }))
+        setAcceptedConflictIds(prev => {
+            const next = new Set(prev)
+            next.add(id)
+            return next
+        })
+    }
+
     const handleApplyFromConflictModal = () => {
-        handleApplyRules(Array.from(acceptedConflictIds))
+        const accepted = []
+        const overrides = {}
+        acceptedConflictIds.forEach(id => {
+            const conflict = applyPreview?.conflicts?.find(c => c.id === id)
+            const override = conflictOverrides[id]
+            // Override only matters when it differs from the rule's proposed category
+            if (override !== undefined && override !== conflict?.proposed_category) {
+                overrides[id] = override
+            } else {
+                accepted.push(id)
+            }
+        })
+        handleApplyRules(accepted, overrides)
     }
 
     const toggleGroupByCategory = () => {
@@ -341,7 +367,11 @@ export default function CategorizationRules() {
                                     ))}
                                 </optgroup>
                                 <optgroup label="Neutral">
-                                    <option value="transfers" style={{ color: '#6b7280' }}>Transfers</option>
+                                    {NEUTRAL_CATEGORIES.map(cat => (
+                                        <option key={cat} value={cat} style={{ color: '#6b7280' }}>
+                                            {CATEGORY_LABELS[cat]}
+                                        </option>
+                                    ))}
                                 </optgroup>
                             </select>
                         </div>
@@ -462,7 +492,9 @@ export default function CategorizationRules() {
                                 ))}
                             </optgroup>
                             <optgroup label="Neutral">
-                                <option value="transfers">Transfers</option>
+                                {NEUTRAL_CATEGORIES.map(cat => (
+                                    <option key={cat} value={cat}>{CATEGORY_LABELS[cat]}</option>
+                                ))}
                             </optgroup>
                         </select>
                     </label>
@@ -598,7 +630,11 @@ export default function CategorizationRules() {
                                         ))}
                                     </optgroup>
                                     <optgroup label="Neutral">
-                                        <option value="transfers" style={{ color: '#6b7280' }}>Transfers</option>
+                                        {NEUTRAL_CATEGORIES.map(cat => (
+                                            <option key={cat} value={cat} style={{ color: '#6b7280' }}>
+                                                {CATEGORY_LABELS[cat]}
+                                            </option>
+                                        ))}
                                     </optgroup>
                                 </select>
                             </div>
@@ -719,7 +755,8 @@ export default function CategorizationRules() {
                         </h3>
                         <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                             These transactions are already categorized but would receive a different category from a rule.
-                            Accept or reject each change. Uncategorized transactions ({applyPreview.uncategorized_count}) will be auto-applied.
+                            Accept the rule's suggestion, edit it to a category of your choice, or leave it unchecked to skip.
+                            Uncategorized transactions ({applyPreview.uncategorized_count}) will be auto-applied.
                         </p>
                         <div className="overflow-auto flex-1 min-h-0 border border-gray-200 dark:border-gray-600 rounded-lg">
                             <table className="w-full text-sm">
@@ -751,9 +788,32 @@ export default function CategorizationRules() {
                                                 </span>
                                             </td>
                                             <td className="px-4 py-2">
-                                                <span className="px-2 py-0.5 rounded text-xs bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300">
-                                                    {CATEGORY_LABELS[c.proposed_category] || c.proposed_category}
-                                                </span>
+                                                <select
+                                                    value={conflictOverrides[c.id] ?? c.proposed_category}
+                                                    onChange={(e) => handleConflictOverride(c.id, e.target.value)}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    className="px-2 py-1 rounded text-xs border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                                >
+                                                    <option value="">Uncategorized</option>
+                                                    <optgroup label="Income">
+                                                        {INCOME_CATEGORIES.map(cat => (
+                                                            <option key={cat} value={cat}>{CATEGORY_LABELS[cat]}</option>
+                                                        ))}
+                                                    </optgroup>
+                                                    <optgroup label="Expenses">
+                                                        {EXPENSE_CATEGORIES.map(cat => (
+                                                            <option key={cat} value={cat}>{CATEGORY_LABELS[cat]}</option>
+                                                        ))}
+                                                    </optgroup>
+                                                    <optgroup label="Neutral">
+                                                        {NEUTRAL_CATEGORIES.map(cat => (
+                                                            <option key={cat} value={cat}>{CATEGORY_LABELS[cat]}</option>
+                                                        ))}
+                                                    </optgroup>
+                                                </select>
+                                                {(conflictOverrides[c.id] !== undefined && conflictOverrides[c.id] !== c.proposed_category) && (
+                                                    <span className="block text-[10px] text-amber-600 dark:text-amber-400 mt-0.5">edited</span>
+                                                )}
                                             </td>
                                             <td className="px-4 py-2 text-center">
                                                 <label className="flex items-center justify-center gap-2 cursor-pointer">
@@ -787,6 +847,7 @@ export default function CategorizationRules() {
                                     setShowConflictModal(false)
                                     setApplyPreview(null)
                                     setAcceptedConflictIds(new Set())
+                                    setConflictOverrides({})
                                 }}
                                 disabled={applying}
                                 className="flex-1 px-4 py-2.5 min-h-[44px] border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
@@ -818,6 +879,11 @@ export default function CategorizationRules() {
                             {applyResults.conflicts_resolved > 0 && (
                                 <p className="text-indigo-600 dark:text-indigo-400">
                                     <strong>Conflicts resolved:</strong> {applyResults.conflicts_resolved}
+                                </p>
+                            )}
+                            {applyResults.overrides_applied > 0 && (
+                                <p className="text-amber-600 dark:text-amber-400">
+                                    <strong>Edited categories applied:</strong> {applyResults.overrides_applied}
                                 </p>
                             )}
                         </div>
