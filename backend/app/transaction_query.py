@@ -1,6 +1,6 @@
 """Shared query helpers for bank transaction listing and export."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional
 
 from sqlalchemy import or_
@@ -46,10 +46,17 @@ def build_transactions_query(
             query = query.filter(models.BankTransaction.category.in_(category))
 
     if from_date:
-        query = query.filter(models.BankTransaction.transaction_date >= from_date)
+        # Parse explicitly rather than relying on SQLAlchemy's implicit string
+        # coercion. midnight on from_date is the correct inclusive lower bound.
+        from_dt = datetime.strptime(from_date, "%Y-%m-%d")
+        query = query.filter(models.BankTransaction.transaction_date >= from_dt)
 
     if to_date:
-        query = query.filter(models.BankTransaction.transaction_date <= to_date)
+        # transaction_date is a DateTime; comparing <= "YYYY-MM-DD" coerces to midnight
+        # and would exclude transactions occurring later that day. Use an exclusive
+        # next-day bound so the entire to_date day is included.
+        to_dt_exclusive = datetime.strptime(to_date, "%Y-%m-%d") + timedelta(days=1)
+        query = query.filter(models.BankTransaction.transaction_date < to_dt_exclusive)
 
     if search:
         query = query.filter(models.BankTransaction.description.ilike(f"%{search}%"))

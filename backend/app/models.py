@@ -167,6 +167,7 @@ class BudgetCategory(Base):
     amount = Column(Float)
     transaction_category = Column(String, nullable=True, default='uncategorized')  # Links to BankTransaction.category
     excluded = Column(Boolean, default=False)  # If true, entry is visible but not counted in totals
+    cadence = Column(String, nullable=False, server_default='monthly')  # 'monthly', 'annual', or 'tracking'
 
     budget = relationship("Budget", back_populates="categories")
 
@@ -525,8 +526,8 @@ class BankTransaction(Base):
     card_number = Column(String, nullable=True)
     running_balance = Column(Float, nullable=True)
 
-    # AI Categorization (7 simplified categories)
-    category = Column(String, nullable=True)  # One of: salary, side_income, investment_income, refund, other_income, groceries_household, bills, subscriptions, transport, lifestyle_misc, savings, loan_repayment, transfers
+    # AI Categorization
+    category = Column(String, nullable=True)  # salary, side_income, investment_income, reimbursements, other_income, refund, groceries, ..., transfers
     ai_category_confidence = Column(Float, nullable=True)  # 0.0 to 1.0
     user_corrected = Column(Boolean, default=False)  # User manually changed category
 
@@ -537,6 +538,43 @@ class BankTransaction(Base):
     # Relationships
     owner = relationship("User", back_populates="bank_transactions")
     account = relationship("InvestecAccount", back_populates="transactions")
+    debit_links = relationship(
+        "TransactionLink",
+        foreign_keys="TransactionLink.debit_transaction_id",
+        back_populates="debit_transaction",
+        cascade="all, delete-orphan",
+    )
+    credit_link = relationship(
+        "TransactionLink",
+        foreign_keys="TransactionLink.credit_transaction_id",
+        back_populates="credit_transaction",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+
+
+class TransactionLink(Base):
+    """Links an offset credit (refund/reimbursement) to an original debit expense."""
+    __tablename__ = "transaction_links"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    debit_transaction_id = Column(Integer, ForeignKey("bank_transactions.id"), index=True)
+    credit_transaction_id = Column(Integer, ForeignKey("bank_transactions.id"), unique=True, index=True)
+    amount = Column(Float, nullable=False)
+    created_at = Column(DateTime, default=get_sast_now)
+
+    owner = relationship("User")
+    debit_transaction = relationship(
+        "BankTransaction",
+        foreign_keys=[debit_transaction_id],
+        back_populates="debit_links",
+    )
+    credit_transaction = relationship(
+        "BankTransaction",
+        foreign_keys=[credit_transaction_id],
+        back_populates="credit_link",
+    )
 
 
 class ManualBankAccount(Base):

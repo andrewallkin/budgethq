@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import {
     INCOME_CATEGORIES,
     EXPENSE_CATEGORIES,
+    NEUTRAL_CATEGORIES,
     CATEGORY_LABELS,
     CATEGORY_DESCRIPTIONS,
     CATEGORY_EXAMPLES,
@@ -162,6 +163,11 @@ export default function CategoryGuide() {
                                                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
                                                     e.g. {CATEGORY_EXAMPLES[cat]}
                                                 </p>
+                                                {cat === 'reimbursements' && showInvestecNav && (
+                                                    <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                                                        Reimbursements are not earnings. Link to the expense you fronted to reduce category spend.
+                                                    </p>
+                                                )}
                                             </div>
                                         </div>
                                     </li>
@@ -177,27 +183,36 @@ export default function CategoryGuide() {
                                 Neutral
                             </h2>
                             <ul className="space-y-4 sm:space-y-5">
-                                <li className="text-gray-700 dark:text-gray-300">
-                                    <div className="flex items-start gap-2">
-                                        <span
-                                            className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1.5"
-                                            style={{ backgroundColor: CATEGORY_COLORS.transfers }}
-                                        />
-                                        <div>
-                                            <span className="font-medium text-base sm:text-lg text-gray-900 dark:text-white">
-                                                {CATEGORY_LABELS.transfers}
-                                            </span>
-                                            <span className="text-gray-500 dark:text-gray-400"> — </span>
-                                            <span>{CATEGORY_DESCRIPTIONS.transfers}</span>
-                                            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-                                                e.g. {CATEGORY_EXAMPLES.transfers}
-                                            </p>
-                                            <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
-                                                Transfers between your own accounts don't affect budget totals{showInvestecNav ? ' in Budget Analysis' : ''}.
-                                            </p>
+                                {NEUTRAL_CATEGORIES.map(cat => (
+                                    <li key={cat} className="text-gray-700 dark:text-gray-300">
+                                        <div className="flex items-start gap-2">
+                                            <span
+                                                className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1.5"
+                                                style={{ backgroundColor: CATEGORY_COLORS[cat] ?? '#6b7280' }}
+                                            />
+                                            <div>
+                                                <span className="font-medium text-base sm:text-lg text-gray-900 dark:text-white">
+                                                    {CATEGORY_LABELS[cat]}
+                                                </span>
+                                                <span className="text-gray-500 dark:text-gray-400"> — </span>
+                                                <span>{CATEGORY_DESCRIPTIONS[cat]}</span>
+                                                <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                                                    e.g. {CATEGORY_EXAMPLES[cat]}
+                                                </p>
+                                                {cat === 'transfers' && (
+                                                    <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                                                        Transfers between your own accounts don't affect budget totals{showInvestecNav ? ' in Budget Analysis' : ''}.
+                                                    </p>
+                                                )}
+                                                {cat === 'refund' && showInvestecNav && (
+                                                    <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                                                        Refunds are not earnings. Link to the original debit to reduce category spend, or leave unlinked for budget envelope headroom.
+                                                    </p>
+                                                )}
+                                            </div>
                                         </div>
-                                    </div>
-                                </li>
+                                    </li>
+                                ))}
                                 <li className="text-gray-700 dark:text-gray-300">
                                     <div className="flex items-start gap-2">
                                         <span

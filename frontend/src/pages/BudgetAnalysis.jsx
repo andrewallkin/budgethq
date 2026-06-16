@@ -5,7 +5,7 @@ import BlurredValue from '../components/BlurredValue'
 import { useAuth } from '../context/AuthContext'
 import { formatCurrency } from '../utils/numberFormatting'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
-import { INCOME_CATEGORIES, CATEGORY_COLORS, CATEGORY_LABELS } from '../utils/transactionCategories'
+import { EARNINGS_CATEGORIES, EXPENSE_CATEGORIES, OFFSET_CATEGORIES, CATEGORY_COLORS, CATEGORY_LABELS } from '../utils/transactionCategories'
 import ChartLegend from '../components/ChartLegend'
 import HubBackLink from '../components/HubBackLink'
 
@@ -21,6 +21,8 @@ export default function BudgetAnalysis() {
     const [loading, setLoading] = useState(true)
     const [budget, setBudget] = useState(null)
     const [transactions, setTransactions] = useState([])
+    const [ytdTransactions, setYtdTransactions] = useState([]) // calendar-year-to-date for annual pools
+    const [ytdYear, setYtdYear] = useState(null)
     const [error, setError] = useState('')
     const [periodRange, setPeriodRange] = useState(null) // { from_date, to_date } for display
 
@@ -60,6 +62,13 @@ export default function BudgetAnalysis() {
 
             const txnResponse = await axios.get(`/api/investec/transactions?from_date=${fromDate}&to_date=${toDate}&limit=500`)
             setTransactions(txnResponse.data)
+
+            // Calendar-year-to-date transactions for annual budget pools (1 Jan -> period end)
+            const periodEndYear = new Date(toDate).getFullYear()
+            setYtdYear(periodEndYear)
+            const ytdFrom = `${periodEndYear}-01-01`
+            const ytdResponse = await axios.get(`/api/investec/transactions?from_date=${ytdFrom}&to_date=${toDate}&limit=2000`)
+            setYtdTransactions(ytdResponse.data)
         } catch (err) {
             setError(err.response?.data?.detail || 'Failed to load data')
         } finally {
@@ -79,29 +88,20 @@ export default function BudgetAnalysis() {
         }
     }
 
-    // Calculate actual spending per category
-    const calculateActualSpending = () => {
-        const spending = {
-            income: 0,           // Aggregate of all income sub-categories
-            groceries_household: 0,
-            bills: 0,
-            subscriptions: 0,
-            transport: 0,
-            lifestyle_misc: 0,
-            savings: 0,
-            loan_repayment: 0,
-            transfers: 0,        // Track transfers but don't count toward budget
-            uncategorized: 0     // Track uncategorized transactions
-        }
+    // Track all expense slugs plus the neutral/untracked buckets
+    const SPEND_KEYS = [...EXPENSE_CATEGORIES, 'transfers', 'uncategorized']
 
-        transactions.forEach(txn => {
+    // Aggregate actual debit spending per category from a set of transactions
+    const aggregateSpending = (txns) => {
+        const spending = { income: 0 }
+        SPEND_KEYS.forEach(k => { spending[k] = 0 })
+
+        txns.forEach(txn => {
             if (!txn.category) {
-                // Uncategorized DEBITs count as untracked spending
                 if (txn.transaction_type === 'DEBIT') {
                     spending.uncategorized += Math.abs(txn.amount)
                 }
-            } else if (INCOME_CATEGORIES.includes(txn.category)) {
-                // All income sub-categories aggregate into income bucket
+            } else if (EARNINGS_CATEGORIES.includes(txn.category)) {
                 if (txn.transaction_type === 'CREDIT') {
                     spending.income += txn.amount
                 }
@@ -112,40 +112,102 @@ export default function BudgetAnalysis() {
             }
         })
 
+        const categoryOffsets = {}
+        txns.forEach(txn => {
+            if (txn.transaction_type !== 'DEBIT' || !txn.linked_credits?.length || !txn.category) {
+                return
+            }
+            if (!EXPENSE_CATEGORIES.includes(txn.category)) {
+                return
+            }
+            const offset = txn.linked_credits.reduce((sum, link) => sum + link.link_amount, 0)
+            categoryOffsets[txn.category] = (categoryOffsets[txn.category] || 0) + offset
+        })
+
+        Object.entries(categoryOffsets).forEach(([category, offset]) => {
+            if (spending[category] !== undefined) {
+                spending[category] = Math.max(0, spending[category] - offset)
+            }
+        })
+
         return spending
     }
 
-    // Map budget categories to transaction categories (explicit transaction_category per budget entry)
-    const mapBudgetToCategories = () => {
-        if (!budget) return {}
+    const computeOffsetTotals = (txns) => {
+        const linkedCreditIds = new Set()
+        const loadedDebitIds = new Set(
+            txns.filter(t => t.transaction_type === 'DEBIT').map(t => t.id)
+        )
+        let linkedOffsetTotal = 0
 
-        const categoryBudgets = {
-            income: budget.salary ?? budget.net_pay ?? 0,
-            groceries_household: 0,
-            bills: 0,
-            subscriptions: 0,
-            transport: 0,
-            lifestyle_misc: 0,
-            savings: 0,
-            loan_repayment: 0,
-            transfers: 0,
-            uncategorized: 0
+        txns.forEach(txn => {
+            txn.linked_credits?.forEach(link => {
+                linkedCreditIds.add(link.transaction_id)
+                linkedOffsetTotal += link.link_amount
+            })
+            // Also count period credits whose linked debit falls outside the loaded
+            // window (otherwise the offset is missed). Avoid double counting credits
+            // whose debit is already loaded above.
+            if (txn.transaction_type === 'CREDIT' && txn.linked_debit
+                && !loadedDebitIds.has(txn.linked_debit.transaction_id)) {
+                linkedOffsetTotal += txn.linked_debit.link_amount
+            }
+        })
+
+        let unlinkedRefundTotal = 0
+        let unlinkedReimbursementTotal = 0
+        let reimbursementsTotal = 0
+
+        txns.forEach(txn => {
+            if (txn.transaction_type !== 'CREDIT' || !OFFSET_CATEGORIES.includes(txn.category)) {
+                return
+            }
+            const amount = Math.abs(txn.amount)
+            if (txn.category === 'reimbursements') {
+                reimbursementsTotal += amount
+            }
+            if (linkedCreditIds.has(txn.id) || txn.linked_debit) {
+                return
+            }
+            if (txn.category === 'refund') {
+                unlinkedRefundTotal += amount
+            } else if (txn.category === 'reimbursements') {
+                unlinkedReimbursementTotal += amount
+            }
+        })
+
+        return {
+            unlinkedRefundTotal,
+            unlinkedReimbursementTotal,
+            unlinkedOffsetTotal: unlinkedRefundTotal + unlinkedReimbursementTotal,
+            linkedOffsetTotal,
+            reimbursementsTotal,
         }
+    }
+
+    // Map budget line items to per-category amounts, split by cadence
+    const mapBudgetByCadence = () => {
+        const monthly = {}, annual = {}, tracking = {}
+        SPEND_KEYS.forEach(k => { monthly[k] = 0; annual[k] = 0; tracking[k] = 0 })
+
+        if (!budget) return { monthly, annual, tracking }
 
         const allItems = [...(budget.needs || []), ...(budget.wants || []), ...(budget.savings || [])].filter(item => !item.excluded)
         allItems.forEach(item => {
             const cat = item.transaction_category || 'uncategorized'
-            if (categoryBudgets.hasOwnProperty(cat)) {
-                categoryBudgets[cat] += item.amount || 0
+            const cadence = item.cadence || 'monthly'
+            const bucket = cadence === 'annual' ? annual : cadence === 'tracking' ? tracking : monthly
+            if (bucket.hasOwnProperty(cat)) {
+                bucket[cat] += item.amount || 0
             }
         })
 
-        return categoryBudgets
+        return { monthly, annual, tracking }
     }
 
     // Filter transactions for a given category (for expandable drill-down)
-    const getTransactionsForCategory = (categoryKey) => {
-        return transactions
+    const getTransactionsForCategory = (categoryKey, txns = transactions) => {
+        return txns
             .filter(txn => {
                 if (categoryKey === 'uncategorized') {
                     return !txn.category && txn.transaction_type === 'DEBIT'
@@ -159,39 +221,74 @@ export default function BudgetAnalysis() {
             })
     }
 
-    const actualSpending = calculateActualSpending()
-    const budgetedAmounts = mapBudgetToCategories()
+    const actualSpending = aggregateSpending(transactions)
+    const ytdSpending = aggregateSpending(ytdTransactions)
+    const { monthly: monthlyBudget, annual: annualBudget, tracking: trackingBudget } = mapBudgetByCadence()
 
-    // Calculate totals (exclude income, transfers, and uncategorized from headline budget rollup)
-    const totalBudgeted = Object.values(budgetedAmounts).reduce((sum, val) => sum + val, 0) - budgetedAmounts.income - budgetedAmounts.transfers - budgetedAmounts.uncategorized
-    const totalSpent = Object.values(actualSpending).reduce((sum, val) => sum + val, 0) - actualSpending.income - actualSpending.transfers
+    // A slug can be budgeted at more than one cadence (e.g. a monthly and an annual
+    // item both mapped to the same transaction_category). Each group is computed
+    // independently so no budgeted amount is silently dropped.
+    const annualSlugs = EXPENSE_CATEGORIES.filter(s => annualBudget[s] > 0)
+    // Tracking-only slugs: tracked, but with no monthly/annual target to compare against.
+    const trackingSlugs = EXPENSE_CATEGORIES.filter(
+        s => trackingBudget[s] > 0 && monthlyBudget[s] === 0 && annualBudget[s] === 0
+    )
 
-    /** Credits classified refund: extra envelope for headline summary only (not category rows/charts). */
-    const refundCreditTotal = transactions.reduce((sum, txn) => {
-        if (txn.category === 'refund' && txn.transaction_type === 'CREDIT') {
-            return sum + Math.abs(txn.amount)
-        }
-        return sum
-    }, 0)
-    const totalBudgetedDisplay = totalBudgeted + refundCreditTotal
+    // Monthly comparison covers monthly-budgeted slugs plus any unbudgeted spend
+    // (so nothing is hidden), but excludes slugs governed solely by an annual/tracking budget.
+    const monthlySlugs = [...EXPENSE_CATEGORIES, 'uncategorized'].filter(
+        s => monthlyBudget[s] > 0 || (!annualSlugs.includes(s) && !trackingSlugs.includes(s))
+    )
+
+    // Monthly budget vs actual totals (the headline cards reflect monthly budgeting only)
+    const totalBudgeted = monthlySlugs.reduce((sum, s) => sum + monthlyBudget[s], 0) - monthlyBudget.uncategorized
+    const totalSpent = monthlySlugs.reduce((sum, s) => sum + actualSpending[s], 0)
+
+    const {
+        unlinkedRefundTotal,
+        unlinkedReimbursementTotal,
+        unlinkedOffsetTotal,
+        linkedOffsetTotal,
+        reimbursementsTotal,
+    } = computeOffsetTotals(transactions)
+
+    const totalBudgetedDisplay = totalBudgeted + unlinkedOffsetTotal
     const varianceDisplay = totalBudgetedDisplay - totalSpent
 
-    // Prepare chart data (exclude income and transfers, but INCLUDE uncategorized)
-    const comparisonData = Object.keys(budgetedAmounts)
-        .filter(cat => cat !== 'income' && cat !== 'transfers')
-        .map(category => ({
-            category: CATEGORY_LABELS[category] || category,
-            key: category,
-            budgeted: budgetedAmounts[category],
-            actual: actualSpending[category],
-            variance: budgetedAmounts[category] - actualSpending[category]
-        }))
+    // Monthly comparison table / bar chart data
+    const comparisonData = monthlySlugs.map(category => ({
+        category: CATEGORY_LABELS[category] || category,
+        key: category,
+        budgeted: monthlyBudget[category],
+        actual: actualSpending[category],
+        variance: monthlyBudget[category] - actualSpending[category]
+    }))
 
-    const pieData = comparisonData.map(item => ({
-        name: item.category,
-        key: item.key,
-        value: item.actual
-    })).filter(item => item.value > 0)
+    // Annual pools: yearly budget vs calendar-year-to-date cumulative spend
+    const annualData = annualSlugs.map(category => ({
+        category: CATEGORY_LABELS[category] || category,
+        key: category,
+        budgeted: annualBudget[category],
+        ytdActual: ytdSpending[category],
+        remaining: annualBudget[category] - ytdSpending[category]
+    }))
+
+    // Tracking categories: no target, just period spend for awareness
+    const trackingData = trackingSlugs.map(category => ({
+        category: CATEGORY_LABELS[category] || category,
+        key: category,
+        actual: actualSpending[category],
+        ytdActual: ytdSpending[category]
+    }))
+
+    // Spending breakdown pie includes ALL period spend (monthly, annual, tracking, uncategorized)
+    const pieData = [...EXPENSE_CATEGORIES, 'uncategorized']
+        .map(category => ({
+            name: CATEGORY_LABELS[category] || category,
+            key: category,
+            value: actualSpending[category]
+        }))
+        .filter(item => item.value > 0)
 
     if (selectedMonth === null || loading) {
         return (
@@ -246,9 +343,14 @@ export default function BudgetAnalysis() {
                     <BlurredValue><p className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
                         {formatCurrency(totalBudgetedDisplay)}
                     </p></BlurredValue>
-                    {refundCreditTotal > 0 && (
+                    {unlinkedOffsetTotal > 0 && (
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                            Includes <BlurredValue>{formatCurrency(refundCreditTotal)}</BlurredValue> from refunds this period
+                            Includes <BlurredValue>{formatCurrency(unlinkedOffsetTotal)}</BlurredValue> from unlinked refunds/reimbursements in total budgeted
+                        </p>
+                    )}
+                    {reimbursementsTotal > 0 && (
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            Includes <BlurredValue>{formatCurrency(reimbursementsTotal)}</BlurredValue> reimbursements (not earnings)
                         </p>
                     )}
                 </div>
@@ -258,6 +360,11 @@ export default function BudgetAnalysis() {
                     <BlurredValue><p className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
                         {formatCurrency(totalSpent)}
                     </p></BlurredValue>
+                    {linkedOffsetTotal > 0 && (
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                            <BlurredValue>{formatCurrency(linkedOffsetTotal)}</BlurredValue> of spend offset by linked refunds/reimbursements
+                        </p>
+                    )}
                 </div>
 
                 <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
@@ -371,13 +478,103 @@ export default function BudgetAnalysis() {
                 </div>
             </div>
 
+            {/* Annual pools (calendar year-to-date) */}
+            {annualData.length > 0 && (
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+                    <div className="px-4 sm:px-6 py-4 border-b border-gray-100 dark:border-gray-700">
+                        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Annual budgets</h2>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            Cumulative spend for {ytdYear ?? 'this year'} (1 Jan onwards) against the yearly pool. Not included in the monthly totals above.
+                        </p>
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead className="bg-gray-50 dark:bg-gray-700/50">
+                                <tr>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wider">Category</th>
+                                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wider">Annual budget</th>
+                                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wider">Spent YTD</th>
+                                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wider">Pool remaining</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                                {annualData.map((row) => {
+                                    const pct = row.budgeted > 0 ? Math.min(100, (row.ytdActual / row.budgeted) * 100) : 0
+                                    return (
+                                        <tr key={row.key} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                                            <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">
+                                                {row.category}
+                                                <div className="mt-1.5 h-1.5 w-full max-w-[160px] rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
+                                                    <div
+                                                        className={`h-full rounded-full ${row.remaining >= 0 ? 'bg-green-500' : 'bg-red-500'}`}
+                                                        style={{ width: `${pct}%` }}
+                                                    />
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-3 text-sm text-right text-gray-700 dark:text-gray-300">
+                                                <BlurredValue>{formatCurrency(row.budgeted)}</BlurredValue>
+                                            </td>
+                                            <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-white font-semibold">
+                                                <BlurredValue>{formatCurrency(row.ytdActual)}</BlurredValue>
+                                            </td>
+                                            <td className={`px-4 py-3 text-sm text-right font-semibold ${row.remaining >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                                                {row.remaining >= 0 ? '+' : ''}<BlurredValue>{formatCurrency(row.remaining)}</BlurredValue>
+                                            </td>
+                                        </tr>
+                                    )
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+
+            {/* Tracking-only categories */}
+            {trackingData.length > 0 && (
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+                    <div className="px-4 sm:px-6 py-4 border-b border-gray-100 dark:border-gray-700">
+                        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Tracking only</h2>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            No budget target — shown for awareness. Not included in the monthly totals above.
+                        </p>
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead className="bg-gray-50 dark:bg-gray-700/50">
+                                <tr>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wider">Category</th>
+                                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wider">This period</th>
+                                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wider">Spent YTD</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                                {trackingData.map((row) => (
+                                    <tr key={row.key} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                                        <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">{row.category}</td>
+                                        <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-white font-semibold">
+                                            <BlurredValue>{formatCurrency(row.actual)}</BlurredValue>
+                                        </td>
+                                        <td className="px-4 py-3 text-sm text-right text-gray-700 dark:text-gray-300">
+                                            <BlurredValue>{formatCurrency(row.ytdActual)}</BlurredValue>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+
             {/* Charts */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Bar Chart */}
                 <div className={`bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 ${blurSensitiveValues ? 'blur-[5px] select-none' : ''}`}>
-                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
                         Budgeted vs Actual
                     </h2>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+                        Monthly-budgeted categories only.
+                    </p>
                     <ResponsiveContainer width="100%" height={400}>
                         <BarChart data={comparisonData} margin={{ left: 30, bottom: 80 }}>
                             <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
@@ -410,9 +607,12 @@ export default function BudgetAnalysis() {
 
                 {/* Pie Chart */}
                 <div className={`bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 ${blurSensitiveValues ? 'blur-[5px] select-none' : ''}`}>
-                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
                         Spending Breakdown
                     </h2>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+                        All spend this period, including annual and tracking categories.
+                    </p>
                     {pieData.length > 0 ? (
                         <div>
                             <ResponsiveContainer width="100%" height={300}>

@@ -11,6 +11,7 @@ from openai import OpenAI
 from sqlalchemy.orm import Session
 from . import models
 from .logging_utils import redact_description
+from .transaction_categories import is_valid_category
 import re
 import logging
 
@@ -20,7 +21,12 @@ logger = logging.getLogger(__name__)
 class TransactionCategorization(BaseModel):
     """Structured output for single transaction categorization"""
     category: str = Field(
-        description="One of: income, groceries, bills, transport, lifestyle, savings, transfers"
+        description=(
+            "One of: salary, side_income, investment_income, reimbursements, other_income, "
+            "groceries, household_home, dining_takeaways, shopping_clothing, "
+            "travel_accommodation, entertainment, health_wellness, bills, "
+            "subscriptions, transport, savings, loan_repayment, refund, transfers"
+        )
     )
     confidence: float = Field(
         description="Confidence score between 0.0 and 1.0",
@@ -41,17 +47,23 @@ class TransactionCategorizer:
         "salary": "Regular salary, wages, employer payments",
         "side_income": "Freelance income, consulting fees, side jobs, secondary income",
         "investment_income": "Dividends, interest received, rental income",
-        "refund": "Merchant refunds, cashbacks, money back from retailers or services",
-        "other_income": "Gifts received, miscellaneous money in, other credits",
+        "reimbursements": "Travel per diems, expense claims, friends paying you back for costs you fronted",
+        "other_income": "Gifts received, bonuses, miscellaneous windfall credits",
         # Expense categories (DEBIT transactions)
-        "groceries_household": "Food shopping, household essentials, pharmacy, cleaning supplies",
-        "bills": "Rent, utilities (electricity, water), insurance, medical aid — fixed essential costs only",
-        "subscriptions": "Phone contracts, streaming services (Netflix, DSTV, Spotify), AI tools, gym memberships, recurring digital services",
-        "transport": "Fuel, Uber, public transport, car payments, parking, tolls",
-        "lifestyle_misc": "Dining out, shopping, entertainment, travel, personal care, hobbies, miscellaneous purchases",
-        "savings": "Savings accounts, investments, TFSA, RA contributions, retirement",
-        "loan_repayment": "Bond repayments, personal loan instalments, vehicle finance, debt payments",
+        "groceries": "Food and drink purchased for home — supermarkets, butchers, delis, fresh produce stores",
+        "household_home": "Recurring home costs and once-off home spend — electricity, cleaning services, garden supplies, homeware",
+        "dining_takeaways": "Food or drink consumed out of home — restaurants, coffee shops, takeaways, Uber Eats, bar tabs",
+        "shopping_clothing": "Retail purchases for personal use — clothing, accessories, homeware décor, online shopping (Takealot, Temu)",
+        "travel_accommodation": "Trip-related costs — Airbnb, hotels, and any accommodation or travel bookings outside daily commuting",
+        "entertainment": "Events, activities, and leisure spend — concert tickets, Webtickets, sports events, social outings",
+        "health_wellness": "Physical health and body maintenance — physio, pharmacy, doctor visits, recovery treatments, personal care products",
+        "bills": "Fixed essential obligations — levies, rates, insurance premiums, medical aid, bank charges",
+        "subscriptions": "Recurring digital and membership services — streaming, phone contracts, gym memberships, software",
+        "transport": "Getting around — fuel, Uber rides, parking, tolls, vehicle-related costs",
+        "savings": "Money put to work for the future — TFSA, retirement annuity, unit trusts, investment contributions",
+        "loan_repayment": "Debt servicing — bond repayments, personal loans, vehicle finance instalments",
         # Neutral
+        "refund": "Merchant refunds, cashbacks, money back from retailers or services",
         "transfers": "Money movements between your own accounts, bank-to-bank transfers, inter-account transfers"
     }
 
@@ -96,6 +108,8 @@ class TransactionCategorizer:
 
         # Step 1: Check user-defined rules (sorted by priority)
         for rule in sorted(user_rules, key=lambda r: r.priority, reverse=True):
+            if not is_valid_category(rule.category):
+                continue
             if self._matches_rule(description, rule.pattern):
                 # Increment usage count
                 rule.usage_count += 1
@@ -194,7 +208,7 @@ class TransactionCategorizer:
 
         return f"""You are a financial transaction categorizer for South African banking transactions.
 
-Your task is to categorize transactions into ONE of these 13 categories:
+Your task is to categorize transactions into ONE of these categories:
 
 {categories_desc}
 
@@ -202,21 +216,24 @@ Guidelines for CREDIT transactions (money IN):
 - **salary**: Large regular deposits from an employer. Look for payroll descriptions, company names.
 - **side_income**: Payments from clients, freelance platforms, secondary employers.
 - **investment_income**: Interest credits from bank, dividend payments, rental deposits.
-- **refund**: Credit from a merchant or service you previously paid (merchant name appears on credit). Look for "REFUND", "REVERSAL", "CASHBACK".
-- **other_income**: Any other credit that doesn't fit the above — gifts, once-off payments, miscellaneous.
+- **reimbursements**: Money back for costs you fronted — employer per diems, expense claims, friends or colleagues repaying you. NOT merchant refunds.
+- **other_income**: Genuine windfalls — gifts, bonuses, once-off payments that are not reimbursements.
+- **refund** (neutral, not income): Merchant reversals only — look for "REFUND", "REVERSAL", "CASHBACK" from a retailer or service you previously paid.
 
 Guidelines for DEBIT transactions (money OUT):
-- **TRANSFERS**: Bank-to-bank transfers, inter-account movements (look for: TRANSFER, FNB, CAPITEC, ABSA, STANDARD BANK, NEDBANK, "FROM/TO ACCOUNT", account numbers)
-- **SUBSCRIPTIONS**: Netflix, DSTV, Spotify, Apple, Google, Microsoft, gym, phone contracts, any recurring monthly service
-- **BILLS**: Only fixed essential costs — rent, electricity, water, insurance, medical aid. Do NOT put subscriptions here.
+- **transfers**: Bank-to-bank transfers, inter-account movements (look for: TRANSFER, FNB, CAPITEC, ABSA, STANDARD BANK, NEDBANK, "FROM/TO ACCOUNT", account numbers)
+- **subscriptions**: Netflix, DSTV, Spotify, Apple, Google, Microsoft, gym, phone contracts, any recurring monthly service
+- **bills**: Only fixed essential obligations — levies, rates, insurance premiums, medical aid, bank charges. Do NOT put subscriptions here.
 - **loan_repayment**: Regular fixed payments to a bank or financial institution for a bond, home loan, personal loan, or vehicle finance. Distinct from bills.
-- Common SA merchants: Woolworths, Pick n Pay, Checkers, Shoprite (groceries_household)
-- Common SA fuel: Engen, Shell, BP, Sasol (transport)
-- Uber, Bolt are transport
-- Restaurant, bar, cafe transactions are lifestyle_misc
-- Clothing stores, beauty are lifestyle_misc
-- Investment contributions (TFSA, RA, unit trusts) are savings
-- Moving money between your own accounts is transfers, NOT savings
+- **groceries**: Food/drink bought for home — Woolworths, Pick n Pay, Checkers, Shoprite, butchers, delis.
+- **household_home**: Electricity, cleaning services, garden supplies, homeware and home maintenance.
+- **dining_takeaways**: Restaurants, coffee shops, bars, takeaways, Uber Eats, Mr D.
+- **shopping_clothing**: Clothing, accessories, décor, online retail like Takealot or Temu.
+- **travel_accommodation**: Airbnb, hotels, flights, and accommodation or travel bookings (not daily commuting).
+- **entertainment**: Concert tickets, Webtickets, Computicket, sports events, social outings.
+- **health_wellness**: Physio, pharmacy (Clicks, Dis-Chem), doctor visits, recovery treatments, personal care.
+- **transport**: Fuel (Engen, Shell, BP, Sasol), Uber/Bolt rides, parking, tolls, vehicle costs.
+- **savings**: Investment contributions (TFSA, RA, unit trusts). Moving money between your own accounts is transfers, NOT savings.
 
 Provide your categorization with confidence score (0.0 to 1.0) and brief reasoning."""
 
@@ -270,7 +287,9 @@ Type: {txn_type}"""
         if txn_type == "CREDIT":
             category = "other_income"
         else:
-            category = "lifestyle_misc"  # Generic catch-all for spending
+            # Leave debits uncategorized so they surface for manual review.
+            # Uncategorized is represented as None (NULL), not the string "uncategorized".
+            category = None
 
         return {
             'category': category,

@@ -1,4 +1,4 @@
-"""Unit tests for transaction PDF export."""
+"""Unit tests for transaction PDF export and budget summary with links."""
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -10,15 +10,29 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend"))
 
 from app.transaction_budget_summary import BudgetComparisonRow, BudgetComparisonSummary, compute_actual_spending
 from app.transaction_categories import category_label
+from app.transaction_links import compute_offset_totals
 from app.transaction_pdf import ExportTransactionRow, build_transactions_pdf
 from app.transaction_query import build_transactions_query, parse_date_param
 
 
 class SimpleTxn:
-    def __init__(self, category, transaction_type, amount):
+    def __init__(self, category, transaction_type, amount, txn_id=None):
+        self.id = txn_id
         self.category = category
         self.transaction_type = transaction_type
         self.amount = amount
+
+
+class SimpleLink:
+    def __init__(self, debit_id, credit_id, amount, debit_category="travel_accommodation"):
+        self.debit_transaction_id = debit_id
+        self.credit_transaction_id = credit_id
+        self.amount = amount
+        self._debit_category = debit_category
+
+    @property
+    def debit_transaction(self):
+        return SimpleTxn(self._debit_category, "DEBIT", 12000.0, self.debit_transaction_id)
 
 
 class TestCategoryLabel:
@@ -26,10 +40,13 @@ class TestCategoryLabel:
         assert category_label(None) == "Uncategorized"
 
     def test_known_category_returns_label(self):
-        assert category_label("groceries_household") == "Groceries & Household"
+        assert category_label("groceries") == "Groceries"
 
     def test_transfers_label(self):
         assert category_label("transfers") == "Transfers"
+
+    def test_reimbursements_label(self):
+        assert category_label("reimbursements") == "Reimbursements"
 
 
 class TestParseDateParam:
@@ -82,7 +99,7 @@ class TestBuildTransactionsPdf:
                 description="WOOLWORTHS",
                 amount=250.50,
                 transaction_type="DEBIT",
-                category="groceries_household",
+                category="groceries",
                 account_name="Primary Account" if include_account else None,
             ),
             ExportTransactionRow(
@@ -150,8 +167,8 @@ class TestBuildTransactionsPdf:
             budget_summary=BudgetComparisonSummary(
                 rows=[
                     BudgetComparisonRow(
-                        category_key="groceries_household",
-                        label="Groceries & Household",
+                        category_key="groceries",
+                        label="Groceries",
                         budgeted=3000.0,
                         actual=250.50,
                         remaining=2749.50,
@@ -160,26 +177,92 @@ class TestBuildTransactionsPdf:
                 total_budgeted=3000.0,
                 total_spent=250.50,
                 remaining=2749.50,
-                refund_credit_total=0.0,
+                unlinked_refund_total=0.0,
+                unlinked_reimbursement_total=0.0,
+                linked_offset_total=0.0,
+                reimbursements_total=0.0,
             ),
         )
         assert len(with_budget) > len(base)
+
+    def test_pdf_with_linked_and_unlinked_offsets(self):
+        pdf = build_transactions_pdf(
+            from_date="2025-01-01",
+            to_date="2025-01-31",
+            account_names=["Primary Account"],
+            include_transfers=False,
+            transactions=self._sample_transactions(),
+            budget_summary=BudgetComparisonSummary(
+                rows=[],
+                total_budgeted=5000.0,
+                total_spent=2000.0,
+                remaining=3000.0,
+                unlinked_refund_total=500.0,
+                unlinked_reimbursement_total=0.0,
+                linked_offset_total=10000.0,
+                reimbursements_total=10000.0,
+            ),
+        )
+        assert pdf.startswith(b"%PDF")
 
 
 class TestComputeActualSpending:
     def test_debits_grouped_by_category(self):
         txns = [
-            SimpleTxn("groceries_household", "DEBIT", 100.0),
-            SimpleTxn("bills", "DEBIT", 50.0),
-            SimpleTxn(None, "DEBIT", 25.0),
+            SimpleTxn("groceries", "DEBIT", 100.0, 1),
+            SimpleTxn("bills", "DEBIT", 50.0, 2),
+            SimpleTxn(None, "DEBIT", 25.0, 3),
         ]
         totals = compute_actual_spending(txns)
-        assert totals["groceries_household"] == 100.0
+        assert totals["groceries"] == 100.0
         assert totals["bills"] == 50.0
         assert totals["uncategorized"] == 25.0
 
     def test_transfers_tracked_separately_from_expense_categories(self):
-        txns = [SimpleTxn("transfers", "DEBIT", 500.0)]
+        txns = [SimpleTxn("transfers", "DEBIT", 500.0, 1)]
         totals = compute_actual_spending(txns)
         assert totals["transfers"] == 500.0
-        assert totals["groceries_household"] == 0.0
+        assert totals["groceries"] == 0.0
+
+    def test_reimbursements_do_not_count_as_earnings(self):
+        txns = [
+            SimpleTxn("reimbursements", "CREDIT", 2000.0, 1),
+            SimpleTxn("salary", "CREDIT", 30000.0, 2),
+        ]
+        totals = compute_actual_spending(txns)
+        assert totals["income"] == 30000.0
+
+    def test_linked_offsets_reduce_category_spend(self):
+        txns = [
+            SimpleTxn("travel_accommodation", "DEBIT", 12000.0, 1),
+            SimpleTxn("reimbursements", "CREDIT", 2000.0, 2),
+            SimpleTxn("reimbursements", "CREDIT", 2000.0, 3),
+        ]
+        links = [
+            SimpleLink(1, 2, 2000.0),
+            SimpleLink(1, 3, 2000.0),
+        ]
+        totals = compute_actual_spending(txns, links)
+        assert totals["travel_accommodation"] == 8000.0
+
+
+class TestComputeOffsetTotals:
+    def test_unlinked_refund_boosts_envelope(self):
+        txns = [
+            SimpleTxn("refund", "CREDIT", 500.0, 1),
+            SimpleTxn("shopping_clothing", "DEBIT", 2000.0, 2),
+        ]
+        unlinked_refund, unlinked_reimb, linked, reimbursements = compute_offset_totals(txns, [])
+        assert unlinked_refund == 500.0
+        assert linked == 0.0
+
+    def test_linked_credits_excluded_from_envelope_boost(self):
+        txns = [
+            SimpleTxn("travel_accommodation", "DEBIT", 12000.0, 1),
+            SimpleTxn("reimbursements", "CREDIT", 2000.0, 2),
+        ]
+        links = [SimpleLink(1, 2, 2000.0)]
+        unlinked_refund, unlinked_reimb, linked, reimbursements = compute_offset_totals(txns, links)
+        assert unlinked_reimb == 0.0
+        assert linked == 2000.0
+        assert reimbursements == 2000.0

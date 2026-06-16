@@ -125,10 +125,24 @@ def _build_budget_comparison_section(
         Paragraph("Budget vs Actual", section_title),
         budget_table,
     ]
-    if budget_summary.refund_credit_total > 0:
+    if budget_summary.unlinked_offset_total > 0:
         elements.append(
             Paragraph(
-                f"Includes {_format_currency(budget_summary.refund_credit_total)} from refunds in total budgeted.",
+                f"Includes {_format_currency(budget_summary.unlinked_offset_total)} from unlinked refunds/reimbursements in total budgeted.",
+                section_style,
+            )
+        )
+    if budget_summary.linked_offset_total > 0:
+        elements.append(
+            Paragraph(
+                f"{_format_currency(budget_summary.linked_offset_total)} of spend offset by linked refunds/reimbursements.",
+                section_style,
+            )
+        )
+    if budget_summary.reimbursements_total > 0:
+        elements.append(
+            Paragraph(
+                f"Includes {_format_currency(budget_summary.reimbursements_total)} reimbursements (not earnings).",
                 section_style,
             )
         )

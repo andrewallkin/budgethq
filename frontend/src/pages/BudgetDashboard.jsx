@@ -21,7 +21,7 @@ import ChartLegend from '../components/ChartLegend'
 import { useAuth } from '../context/AuthContext'
 import { formatCurrency, formatNumber } from '../utils/numberFormatting'
 import BlurredValue from '../components/BlurredValue'
-import { BUDGET_TRANSACTION_CATEGORIES, CATEGORY_LABELS } from '../utils/transactionCategories'
+import { BUDGET_TRANSACTION_CATEGORIES, CATEGORY_LABELS, BUDGET_CADENCES, CADENCE_LABELS } from '../utils/transactionCategories'
 
 const COLORS = {
     Needs: '#B91C1C', // red-700
@@ -115,9 +115,9 @@ export default function BudgetDashboard() {
             if (budgetRes.data && Object.keys(budgetRes.data).length > 0) {
                 // Only set salary if it exists and is not null
                 setSalary(budgetRes.data.salary ?? 0)
-                setNeeds((budgetRes.data.needs || []).map(item => ({ ...item, transaction_category: item.transaction_category || 'uncategorized', excluded: item.excluded ?? false })))
-                setWants((budgetRes.data.wants || []).map(item => ({ ...item, transaction_category: item.transaction_category || 'uncategorized', excluded: item.excluded ?? false })))
-                setSavings((budgetRes.data.savings || []).map(item => ({ ...item, transaction_category: item.transaction_category || 'uncategorized', excluded: item.excluded ?? false })))
+                setNeeds((budgetRes.data.needs || []).map(item => ({ ...item, transaction_category: item.transaction_category || 'uncategorized', excluded: item.excluded ?? false, cadence: item.cadence || 'monthly' })))
+                setWants((budgetRes.data.wants || []).map(item => ({ ...item, transaction_category: item.transaction_category || 'uncategorized', excluded: item.excluded ?? false, cadence: item.cadence || 'monthly' })))
+                setSavings((budgetRes.data.savings || []).map(item => ({ ...item, transaction_category: item.transaction_category || 'uncategorized', excluded: item.excluded ?? false, cadence: item.cadence || 'monthly' })))
 
                 hasLoadedData.current = true
             } else {
@@ -168,9 +168,9 @@ export default function BudgetDashboard() {
         }
     }
 
-    const addCategory = (type, name, amount = 0, transactionCategory = 'uncategorized') => {
+    const addCategory = (type, name, amount = 0, transactionCategory = 'uncategorized', cadence = 'monthly') => {
         setHasUserEdited(true)
-        const newItem = { name, amount, transaction_category: transactionCategory, excluded: false }
+        const newItem = { name, amount, transaction_category: transactionCategory, excluded: false, cadence }
         if (type === 'needs') setNeeds([...needs, newItem])
         else if (type === 'wants') setWants([...wants, newItem])
         else setSavings([...savings, newItem])
@@ -198,9 +198,17 @@ export default function BudgetDashboard() {
     }
 
     // Calculations (excluded entries still count on dashboard; they are only excluded from Budget Analysis)
-    const totalNeeds = needs.reduce((sum, item) => sum + item.amount, 0)
-    const totalWants = wants.reduce((sum, item) => sum + item.amount, 0)
-    const totalSavings = savings.reduce((sum, item) => sum + item.amount, 0)
+    // Monthly summary/percent-of-income only counts monthly-cadence items. Annual and
+    // tracking line items are surfaced separately so they don't distort the monthly view.
+    const isMonthly = (item) => (item.cadence || 'monthly') === 'monthly'
+    const totalNeeds = needs.filter(isMonthly).reduce((sum, item) => sum + item.amount, 0)
+    const totalWants = wants.filter(isMonthly).reduce((sum, item) => sum + item.amount, 0)
+    const totalSavings = savings.filter(isMonthly).reduce((sum, item) => sum + item.amount, 0)
+
+    const allItems = [...needs, ...wants, ...savings]
+    const annualItems = allItems.filter(item => (item.cadence || 'monthly') === 'annual')
+    const trackingItems = allItems.filter(item => (item.cadence || 'monthly') === 'tracking')
+    const totalAnnual = annualItems.reduce((sum, item) => sum + item.amount, 0)
 
     const netIncome = salary // salary is now already the net income
     const totalSpent = totalNeeds + totalWants + totalSavings
@@ -356,6 +364,46 @@ export default function BudgetDashboard() {
                         </div>
                     </div>
 
+                    {/* Annual & Tracking Card */}
+                    {(annualItems.length > 0 || trackingItems.length > 0) && (
+                        <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
+                            <h2 className="text-lg font-semibold mb-1 text-gray-900 dark:text-white">Annual & Tracking</h2>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+                                Excluded from the monthly summary. Annual budgets track a yearly pool; tracking items have no target.
+                            </p>
+                            {annualItems.length > 0 && (
+                                <div className="space-y-2 mb-4">
+                                    <div className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">Annual budgets</div>
+                                    {annualItems.map((item, i) => (
+                                        <div key={`annual-${i}`} className="flex justify-between items-center text-sm">
+                                            <span className="text-gray-600 dark:text-gray-300 truncate mr-2">{item.name || '—'}</span>
+                                            <BlurredValue><span className="font-medium text-gray-900 dark:text-white whitespace-nowrap">
+                                                {formatCurrency(item.amount, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}/yr
+                                            </span></BlurredValue>
+                                        </div>
+                                    ))}
+                                    <div className="flex justify-between items-center text-sm pt-2 border-t border-gray-100 dark:border-gray-700">
+                                        <span className="text-gray-600 dark:text-gray-400">Total annual</span>
+                                        <BlurredValue><span className="font-semibold text-gray-900 dark:text-white">
+                                            {formatCurrency(totalAnnual, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}/yr
+                                        </span></BlurredValue>
+                                    </div>
+                                </div>
+                            )}
+                            {trackingItems.length > 0 && (
+                                <div className="space-y-2">
+                                    <div className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">Tracking only</div>
+                                    {trackingItems.map((item, i) => (
+                                        <div key={`tracking-${i}`} className="flex justify-between items-center text-sm">
+                                            <span className="text-gray-600 dark:text-gray-300 truncate mr-2">{item.name || '—'}</span>
+                                            <span className="text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap">No target</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                     {/* Overall Budget Breakdown Chart */}
                     {salary > 0 && (
                         <div className={`bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors scroll-mt-32 lg:scroll-mt-0 ${blurSensitiveValues ? 'blur-[5px] select-none' : ''}`}>
@@ -425,7 +473,7 @@ export default function BudgetDashboard() {
                                 type={activeTab}
                                 items={activeTab === 'needs' ? needs : activeTab === 'wants' ? wants : savings}
                                 netIncome={netIncome}
-                                onAdd={(name, amount, transactionCategory) => addCategory(activeTab, name, amount, transactionCategory)}
+                                onAdd={(name, amount, transactionCategory, cadence) => addCategory(activeTab, name, amount, transactionCategory, cadence)}
                                 onUpdate={(index, field, val) => updateCategory(activeTab, index, field, val)}
                                 onRemove={(index) => removeCategory(activeTab, index)}
                             />
@@ -437,7 +485,9 @@ export default function BudgetDashboard() {
                         <h2 className="text-lg font-semibold mb-4 capitalize text-gray-900 dark:text-white">{activeTab} Breakdown</h2>
                         <div>
                             {(() => {
-                                const categoryItems = activeTab === 'needs' ? needs : activeTab === 'wants' ? wants : savings
+                                const tabItems = activeTab === 'needs' ? needs : activeTab === 'wants' ? wants : savings
+                                // Monthly items only so annual (yearly) amounts don't distort the breakdown
+                                const categoryItems = tabItems.filter(item => (item.cadence || 'monthly') === 'monthly')
                                 const categoryTotal = categoryItems.reduce((sum, item) => sum + item.amount, 0)
                                 const categoryChartData = categoryItems
                                     .map(item => ({
@@ -525,6 +575,7 @@ const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => 
     const [newName, setNewName] = useState('')
     const [newAmount, setNewAmount] = useState('')
     const [newTransactionCategory, setNewTransactionCategory] = useState('uncategorized')
+    const [newCadence, setNewCadence] = useState('monthly')
 
     const calculatePercentage = (amount) => {
         if (netIncome === 0) return 0
@@ -533,11 +584,18 @@ const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => 
 
     const handleAdd = () => {
         if (newName.trim()) {
-            onAdd(newName.trim(), parseFloat(newAmount) || 0, newTransactionCategory)
+            onAdd(newName.trim(), parseFloat(newAmount) || 0, newTransactionCategory, newCadence)
             setNewName('')
             setNewAmount('')
             setNewTransactionCategory('uncategorized')
+            setNewCadence('monthly')
         }
+    }
+
+    const cadenceSuffix = (cadence) => {
+        if (cadence === 'annual') return '/yr'
+        if (cadence === 'tracking') return ''
+        return '/mo'
     }
 
     const handleKeyPress = (e) => {
@@ -547,6 +605,9 @@ const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => 
     }
 
     const renderCategoryItem = (item, index) => {
+        const cadence = item.cadence || 'monthly'
+        const isMonthlyItem = cadence === 'monthly'
+        const isTracking = cadence === 'tracking'
         const percentage = calculatePercentage(item.amount)
         const isExcluded = item.excluded ?? false
 
@@ -568,23 +629,38 @@ const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => 
                             <option key={cat} value={cat}>{CATEGORY_LABELS[cat]}</option>
                         ))}
                     </select>
+                    <select
+                        value={cadence}
+                        onChange={(e) => onUpdate(index, 'cadence', e.target.value)}
+                        title="Budget cadence"
+                        className="flex-shrink-0 w-full sm:w-28 px-2 py-1.5 min-h-[44px] text-xs bg-white dark:bg-gray-600 border border-gray-200 dark:border-gray-500 rounded text-gray-900 dark:text-white"
+                    >
+                        {BUDGET_CADENCES.map(c => (
+                            <option key={c} value={c}>{CADENCE_LABELS[c]}</option>
+                        ))}
+                    </select>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0 self-center">
-                    <BlurredValue as="div" className="flex items-center border border-gray-200 dark:border-gray-500 rounded bg-white dark:bg-gray-600 min-h-[44px]">
+                    <BlurredValue as="div" className={`flex items-center border border-gray-200 dark:border-gray-500 rounded bg-white dark:bg-gray-600 min-h-[44px] ${isTracking ? 'opacity-40' : ''}`}>
                         <span className="pl-3 text-gray-500 dark:text-gray-400 text-sm">R</span>
                         <input
                             type="number"
-                            value={item.amount}
+                            value={isTracking ? '' : item.amount}
+                            placeholder={isTracking ? '—' : '0'}
+                            disabled={isTracking}
                             onChange={(e) => onUpdate(index, 'amount', e.target.value.replace(/,/g, ''))}
                             onFocus={(e) => e.target.select()}
-                            className="w-24 min-h-[44px] pl-1 pr-2 py-2 bg-transparent border-none focus:ring-0 text-right text-gray-900 dark:text-white"
+                            className="w-20 min-h-[44px] pl-1 pr-1 py-2 bg-transparent border-none focus:ring-0 text-right text-gray-900 dark:text-white disabled:cursor-not-allowed"
                         />
+                        <span className="pr-2 text-gray-400 dark:text-gray-500 text-xs">{cadenceSuffix(cadence)}</span>
                     </BlurredValue>
                     <span className="text-xs text-gray-500 dark:text-gray-400 min-w-[50px] text-right">
                         {isExcluded ? (
                             <span className="text-amber-600 dark:text-amber-400" title="Not compared in Budget Analysis">Excl.</span>
-                        ) : (
+                        ) : isMonthlyItem ? (
                             <BlurredValue>({formatNumber(percentage, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%)</BlurredValue>
+                        ) : (
+                            <span className="text-gray-400 dark:text-gray-500" title="Not counted in the monthly summary">{cadence === 'annual' ? 'Annual' : 'Track'}</span>
                         )}
                     </span>
                     <button
@@ -636,6 +712,16 @@ const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => 
                 >
                     {BUDGET_TRANSACTION_CATEGORIES.map(cat => (
                         <option key={cat} value={cat}>{CATEGORY_LABELS[cat]}</option>
+                    ))}
+                </select>
+                <select
+                    value={newCadence}
+                    onChange={(e) => setNewCadence(e.target.value)}
+                    title="Budget cadence"
+                    className="w-full sm:w-32 px-3 py-3 min-h-[44px] border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors"
+                >
+                    {BUDGET_CADENCES.map(c => (
+                        <option key={c} value={c}>{CADENCE_LABELS[c]}</option>
                     ))}
                 </select>
                 <button

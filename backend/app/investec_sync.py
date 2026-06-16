@@ -12,6 +12,7 @@ from .investec_service import InvestecService
 from .transaction_categorizer import TransactionCategorizer
 from .utils import decrypt_api_key, get_sast_now
 from .logging_utils import redact_description
+from .transaction_categories import is_valid_category
 from datetime import datetime, timedelta
 import logging
 
@@ -282,6 +283,8 @@ def _sync_account_transactions(db: Session, account: models.InvestecAccount):
         # Try to match against rules
         matched = False
         for rule in rules:
+            if not is_valid_category(rule.category):
+                continue
             if _matches_rule_pattern(new_txn.description, rule.pattern):
                 new_txn.category = rule.category
                 new_txn.ai_category_confidence = 1.0
@@ -413,6 +416,8 @@ def sync_historical_transactions_for_user(
                 # Apply rule-based categorization
                 matched = False
                 for rule in rules:
+                    if not is_valid_category(rule.category):
+                        continue
                     if _matches_rule_pattern(new_txn.description, rule.pattern):
                         new_txn.category = rule.category
                         new_txn.ai_category_confidence = 1.0

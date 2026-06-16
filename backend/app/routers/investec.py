@@ -10,7 +10,7 @@ Handles all Investec integration endpoints:
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
 from datetime import datetime, timedelta
 
@@ -22,6 +22,15 @@ from ..transaction_categorizer import TransactionCategorizer
 from ..investec_sync import _sync_user_accounts, _sync_account_transactions
 from ..logging_utils import redact_description
 from ..transaction_budget_summary import build_budget_comparison
+from ..transaction_categories import VALID_TRANSACTION_CATEGORIES, is_valid_category
+from ..transaction_links import (
+    create_transaction_link,
+    delete_transaction_link,
+    effective_debit_amount,
+    get_links_for_transaction,
+    load_user_transaction_links,
+    summarize_linked_transaction,
+)
 from ..transaction_pdf import ExportTransactionRow, build_transactions_pdf
 from ..transaction_query import (
     account_display_name,
@@ -82,6 +91,16 @@ class AccountUpdate(BaseModel):
     reference_name: Optional[str] = None
 
 
+class LinkedTransactionSummaryResponse(BaseModel):
+    link_id: int
+    transaction_id: int
+    description: str
+    amount: float
+    link_amount: float
+    category: Optional[str]
+    transaction_date: Optional[datetime]
+
+
 class TransactionResponse(BaseModel):
     id: int
     account_id: int
@@ -94,18 +113,32 @@ class TransactionResponse(BaseModel):
     category: Optional[str]
     ai_category_confidence: Optional[float]
     user_corrected: bool
+    linked_credits: List[LinkedTransactionSummaryResponse] = []
+    linked_debit: Optional[LinkedTransactionSummaryResponse] = None
+    effective_amount: Optional[float] = None
+    has_links: bool = False
 
     class Config:
         from_attributes = True
 
 
+class TransactionLinkCreate(BaseModel):
+    debit_transaction_id: Optional[int] = Field(None, description="Debit expense to offset")
+    credit_transaction_id: Optional[int] = Field(None, description="Refund or reimbursement credit")
+    amount: Optional[float] = Field(None, description="Partial link amount; defaults to full credit amount")
+
+
+class TransactionLinksResponse(BaseModel):
+    links: List[LinkedTransactionSummaryResponse]
+
+
 class TransactionUpdate(BaseModel):
-    category: Optional[str] = Field(None, description="One of: salary, side_income, investment_income, refund, other_income, groceries_household, bills, subscriptions, transport, lifestyle_misc, savings, loan_repayment, transfers, or empty string for uncategorized")
+    category: Optional[str] = Field(None, description="One of: salary, side_income, investment_income, reimbursements, other_income, groceries, household_home, dining_takeaways, shopping_clothing, travel_accommodation, entertainment, health_wellness, bills, subscriptions, transport, savings, loan_repayment, refund, transfers, or empty string for uncategorized")
 
 
 class CategorizationRuleCreate(BaseModel):
     pattern: str
-    category: str = Field(..., description="One of: salary, side_income, investment_income, refund, other_income, groceries_household, bills, subscriptions, transport, lifestyle_misc, savings, loan_repayment, transfers")
+    category: str = Field(..., description="One of: salary, side_income, investment_income, reimbursements, other_income, groceries, household_home, dining_takeaways, shopping_clothing, travel_accommodation, entertainment, health_wellness, bills, subscriptions, transport, savings, loan_repayment, refund, transfers")
     priority: int = Field(default=10, ge=0, le=100)
 
 
@@ -132,6 +165,10 @@ class CategorizationRuleResponse(BaseModel):
 class ApplyRulesRequest(BaseModel):
     """Optional body for apply-to-existing to accept conflict resolutions."""
     accepted_conflict_ids: Optional[List[int]] = None
+    # Per-transaction manual overrides: {transaction_id: category}. Lets the user
+    # edit (rather than just accept) the proposed category during review. Use an
+    # empty string to set a transaction back to uncategorized.
+    category_overrides: Optional[Dict[int, str]] = None
 
 
 class ConflictPreviewItem(BaseModel):
@@ -398,6 +435,82 @@ async def set_emergency_fund_account(
 # Transaction Management
 # =====================================================
 
+def _linked_summary_to_response(summary) -> LinkedTransactionSummaryResponse:
+    return LinkedTransactionSummaryResponse(
+        link_id=summary.link_id,
+        transaction_id=summary.transaction_id,
+        description=summary.description,
+        amount=summary.amount,
+        link_amount=summary.link_amount,
+        category=summary.category,
+        transaction_date=summary.transaction_date,
+    )
+
+
+def serialize_transaction(
+    transaction: models.BankTransaction,
+    links_by_debit: Optional[Dict[int, List[models.TransactionLink]]] = None,
+    link_by_credit: Optional[Dict[int, models.TransactionLink]] = None,
+) -> TransactionResponse:
+    linked_credits: List[LinkedTransactionSummaryResponse] = []
+    linked_debit: Optional[LinkedTransactionSummaryResponse] = None
+    effective_amount: Optional[float] = None
+
+    if links_by_debit is not None and link_by_credit is not None:
+        if transaction.transaction_type == "DEBIT":
+            debit_links = links_by_debit.get(transaction.id, [])
+            if debit_links:
+                linked_credits = [
+                    _linked_summary_to_response(summarize_linked_transaction(link, "credit"))
+                    for link in debit_links
+                ]
+                effective_amount = effective_debit_amount(transaction, debit_links)
+        elif transaction.transaction_type == "CREDIT":
+            credit_link = link_by_credit.get(transaction.id)
+            if credit_link:
+                linked_debit = _linked_summary_to_response(
+                    summarize_linked_transaction(credit_link, "debit")
+                )
+
+    has_links = bool(linked_credits or linked_debit)
+
+    return TransactionResponse(
+        id=transaction.id,
+        account_id=transaction.account_id,
+        transaction_type=transaction.transaction_type,
+        transaction_category=transaction.transaction_category,
+        status=transaction.status,
+        description=transaction.description,
+        amount=transaction.amount,
+        transaction_date=transaction.transaction_date,
+        category=transaction.category,
+        ai_category_confidence=transaction.ai_category_confidence,
+        user_corrected=transaction.user_corrected,
+        linked_credits=linked_credits,
+        linked_debit=linked_debit,
+        effective_amount=effective_amount,
+        has_links=has_links,
+    )
+
+
+def _build_link_indexes(links: List[models.TransactionLink]):
+    links_by_debit: Dict[int, List[models.TransactionLink]] = {}
+    link_by_credit: Dict[int, models.TransactionLink] = {}
+    for link in links:
+        links_by_debit.setdefault(link.debit_transaction_id, []).append(link)
+        link_by_credit[link.credit_transaction_id] = link
+    return links_by_debit, link_by_credit
+
+
+def serialize_transactions(db: Session, user_id: int, transactions: List[models.BankTransaction]) -> List[TransactionResponse]:
+    links = load_user_transaction_links(db, user_id)
+    links_by_debit, link_by_credit = _build_link_indexes(links)
+    return [
+        serialize_transaction(txn, links_by_debit, link_by_credit)
+        for txn in transactions
+    ]
+
+
 @router.get("/transactions", response_model=List[TransactionResponse])
 async def list_transactions(
     account_id: Optional[int] = None,
@@ -437,7 +550,7 @@ async def list_transactions(
 
     transactions = query.limit(limit).offset(offset).all()
 
-    return transactions
+    return serialize_transactions(db, current_user.id, transactions)
 
 
 @router.get("/transactions/export/pdf")
@@ -683,7 +796,7 @@ async def update_transaction_category(
         raise HTTPException(status_code=404, detail="Transaction not found")
 
     # Validate category (allow None or empty string for uncategorized)
-    valid_categories = ["salary", "side_income", "investment_income", "refund", "other_income", "groceries_household", "bills", "subscriptions", "transport", "lifestyle_misc", "savings", "loan_repayment", "transfers"]
+    valid_categories = VALID_TRANSACTION_CATEGORIES
 
     # Handle uncategorized (empty string or None)
     if update.category == "" or update.category is None:
@@ -701,7 +814,84 @@ async def update_transaction_category(
     db.commit()
     db.refresh(transaction)
 
-    return transaction
+    links = get_links_for_transaction(db, current_user.id, transaction.id)
+    links_by_debit, link_by_credit = _build_link_indexes(links)
+    return serialize_transaction(transaction, links_by_debit, link_by_credit)
+
+
+@router.get("/transactions/{transaction_id}/links", response_model=TransactionLinksResponse)
+async def list_transaction_links(
+    transaction_id: int,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """List links where the transaction is either the debit or the credit."""
+    txn = db.query(models.BankTransaction).filter(
+        models.BankTransaction.id == transaction_id,
+        models.BankTransaction.user_id == current_user.id,
+    ).first()
+    if not txn:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    links = get_links_for_transaction(db, current_user.id, transaction_id)
+    summaries = []
+    for link in links:
+        role = "credit" if link.debit_transaction_id == transaction_id else "debit"
+        summaries.append(_linked_summary_to_response(summarize_linked_transaction(link, role)))
+    return TransactionLinksResponse(links=summaries)
+
+
+@router.post("/transactions/{transaction_id}/links", response_model=LinkedTransactionSummaryResponse)
+async def create_link_for_transaction(
+    transaction_id: int,
+    body: TransactionLinkCreate,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Create a link between a debit expense and an offset credit."""
+    txn = db.query(models.BankTransaction).filter(
+        models.BankTransaction.id == transaction_id,
+        models.BankTransaction.user_id == current_user.id,
+    ).first()
+    if not txn:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    if txn.transaction_type == "DEBIT":
+        if not body.credit_transaction_id:
+            raise HTTPException(status_code=400, detail="credit_transaction_id is required when linking from a debit")
+        debit_id = transaction_id
+        credit_id = body.credit_transaction_id
+        summary_role = "credit"
+    else:
+        if not body.debit_transaction_id:
+            raise HTTPException(status_code=400, detail="debit_transaction_id is required when linking from a credit")
+        debit_id = body.debit_transaction_id
+        credit_id = transaction_id
+        summary_role = "debit"
+
+    link = create_transaction_link(
+        db,
+        current_user.id,
+        debit_transaction_id=debit_id,
+        credit_transaction_id=credit_id,
+        amount=body.amount,
+    )
+    fresh_links = get_links_for_transaction(db, current_user.id, transaction_id)
+    created = next((l for l in fresh_links if l.id == link.id), None)
+    if not created:
+        raise HTTPException(status_code=500, detail="Link created but could not be loaded")
+    return _linked_summary_to_response(summarize_linked_transaction(created, summary_role))
+
+
+@router.delete("/transaction-links/{link_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_transaction_link(
+    link_id: int,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Remove a transaction link."""
+    delete_transaction_link(db, current_user.id, link_id)
+    return None
 
 
 @router.delete("/transactions/{transaction_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -871,7 +1061,7 @@ async def create_rule(
 ):
     """Create a new categorization rule."""
     # Validate category
-    valid_categories = ["salary", "side_income", "investment_income", "refund", "other_income", "groceries_household", "bills", "subscriptions", "transport", "lifestyle_misc", "savings", "loan_repayment", "transfers"]
+    valid_categories = VALID_TRANSACTION_CATEGORIES
     if rule.category not in valid_categories:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -957,9 +1147,13 @@ def _matches_rule_pattern(description: str, pattern: str) -> bool:
 def _get_matching_rule(description: str, rules: list) -> Optional[tuple]:
     """
     Return (rule, proposed_category) for the first matching rule, or None.
-    Rules should be sorted by priority desc.
+    Rules should be sorted by priority desc. Rules whose stored category is no
+    longer a valid slug (e.g. left over from an old taxonomy) are skipped so they
+    can't propagate dead categories onto transactions.
     """
     for rule in rules:
+        if not is_valid_category(rule.category):
+            continue
         if _matches_rule_pattern(description, rule.pattern):
             return (rule, rule.category)
     return None
@@ -1048,12 +1242,13 @@ async def apply_single_rule_to_existing_transactions(
     ).all()
 
     categorized_count = 0
-    for txn in transactions:
-        if _matches_rule_pattern(txn.description, rule.pattern):
-            txn.category = rule.category
-            txn.ai_category_confidence = 1.0
-            rule.usage_count += 1
-            categorized_count += 1
+    if is_valid_category(rule.category):
+        for txn in transactions:
+            if _matches_rule_pattern(txn.description, rule.pattern):
+                txn.category = rule.category
+                txn.ai_category_confidence = 1.0
+                rule.usage_count += 1
+                categorized_count += 1
 
     db.commit()
 
@@ -1076,6 +1271,7 @@ async def apply_rules_to_existing_transactions(
     already categorized but user accepted the rule's proposed category).
     """
     accepted_conflict_ids = (request.accepted_conflict_ids if request else None) or []
+    category_overrides = (request.category_overrides if request else None) or {}
 
     # Load active rules (sorted by priority)
     rules = db.query(models.CategorizationRule).filter(
@@ -1093,6 +1289,8 @@ async def apply_rules_to_existing_transactions(
     categorized_count = 0
     for txn in uncategorized_txns:
         for rule in rules:
+            if not is_valid_category(rule.category):
+                continue
             if _matches_rule_pattern(txn.description, rule.pattern):
                 txn.category = rule.category
                 txn.ai_category_confidence = 1.0
@@ -1118,6 +1316,29 @@ async def apply_rules_to_existing_transactions(
                 rule.usage_count += 1
                 conflicts_resolved += 1
 
+    # 3. Apply per-transaction manual overrides (user edited the category during review)
+    overrides_applied = 0
+    if category_overrides:
+        override_ids = set(category_overrides.keys())
+        override_txns = db.query(models.BankTransaction).filter(
+            models.BankTransaction.user_id == current_user.id,
+            models.BankTransaction.id.in_(override_ids)
+        ).all()
+
+        for txn in override_txns:
+            new_category = category_overrides.get(txn.id)
+            if new_category == "" or new_category is None:
+                txn.category = None
+            elif new_category in VALID_TRANSACTION_CATEGORIES:
+                txn.category = new_category
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid category '{new_category}'. Must be one of: {', '.join(VALID_TRANSACTION_CATEGORIES)} or empty for uncategorized"
+                )
+            txn.user_corrected = True
+            overrides_applied += 1
+
     db.commit()
 
     return {
@@ -1125,5 +1346,6 @@ async def apply_rules_to_existing_transactions(
         "total": len(uncategorized_txns),
         "categorized": categorized_count,
         "uncategorized": len(uncategorized_txns) - categorized_count,
-        "conflicts_resolved": conflicts_resolved
+        "conflicts_resolved": conflicts_resolved,
+        "overrides_applied": overrides_applied
     }
