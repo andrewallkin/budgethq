@@ -10,7 +10,7 @@ Primary stack: **React + Vite + TailwindCSS + Recharts** (`frontend/`), **FastAP
 
 | Area | What you get |
 |------|----------------|
-| **Auth** | JWT-based login and registration restricted to emails listed in `AUTHORIZED_USERS`; per-user data isolation. |
+| **Auth** | JWT-based login and registration; optional allowlist via `AUTHORIZED_USERS` when `RESTRICT_AUTHORIZED_USERS=true` (default); per-user data isolation. |
 | **Tax & payslip** | SARS-aligned PAYE/UIF/medical rebate logic driven by FY-specific tables in the backend (`tax_engine`). Detailed payslip model, fringe benefits; optional payslip PDF storage in Google Cloud Storage (GCS). |
 | **Budget** | Needs / wants / savings structure, charts, autosave against the authenticated user—not a single demo user. |
 | **Emergency savings** | Goals tied to budget “Needs” (e.g. 3/6/12 months), progress and time-to-goal views. |
@@ -55,7 +55,7 @@ Primary stack: **React + Vite + TailwindCSS + Recharts** (`frontend/`), **FastAP
 Copy [.env.example](.env.example) to `.env` and fill values. Important details:
 
 - **Database URL**: The backend **builds** the connection string from `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_HOST`, `POSTGRES_PORT`, and `POSTGRES_DB`—it does not read a separate `DATABASE_URL` variable.
-- **Auth**: `AUTHORIZED_USERS` is a comma-separated list of allowed registrant emails.
+- **Auth**: `RESTRICT_AUTHORIZED_USERS` (default `true`) gates registration/login against `AUTHORIZED_USERS`, a comma-separated list of allowed registrant emails. Set `RESTRICT_AUTHORIZED_USERS=false` for open auth.
 - **`ENCRYPTION_KEY`**: Required **Fernet** key (see `.env.example`) if users store encrypted secrets (for example Investec credentials or OpenAI keys in-app).
 - **Google**: `GCP_SERVICE_ACCOUNT_CREDENTIALS` must be the service account JSON **encoded as Base64** (not a filesystem path).
 - **`GOOGLE_SPREADSHEET_ID`**: Used for ETF tab sync and FX rates (FX worksheet/tab is created/seeding when missing; see `.env.example` for optional overrides).
@@ -184,7 +184,7 @@ Remote flow (simplified):
 3. `docker compose build` / `docker compose up -d --force-recreate`.
 4. `docker compose exec backend … ./run_migrations.sh`.
 
-Representative secrets: `VPS_HOST`, `VPS_PORT`, `VPS_USER`, `VPS_SSH_KEY`; `GH_USERNAME`, `GH_PAT`; Postgres (`POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT`, `POSTGRES_HOST`); `BACKEND_PORT`, `FRONTEND_PORT`; `AUTHORIZED_USERS`, `ENCRYPTION_KEY`; `GCP_SERVICE_ACCOUNT_CREDENTIALS`, `GOOGLE_SPREADSHEET_ID`; `GCS_PAYSLIPS_BUCKET_NAME`.
+Representative secrets: `VPS_HOST`, `VPS_PORT`, `VPS_USER`, `VPS_SSH_KEY`; `GH_USERNAME`, `GH_PAT`; Postgres (`POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT`, `POSTGRES_HOST`); `BACKEND_PORT`, `FRONTEND_PORT`; `RESTRICT_AUTHORIZED_USERS`, `AUTHORIZED_USERS`, `ENCRYPTION_KEY`; `GCP_SERVICE_ACCOUNT_CREDENTIALS`, `GOOGLE_SPREADSHEET_ID`; `GCS_PAYSLIPS_BUCKET_NAME`.
 
 ---
 
@@ -199,6 +199,6 @@ Annual TFSA caps are sourced from backend tax tables per SA financial year (for 
 | Symptom | Things to verify |
 |---------|-------------------|
 | **Prices / FX stale** | Service account Editor on sheet; Base64 credential valid; `GOOGLE_SPREADSHEET_ID`; backend logs (`make dev-logs`). |
-| **Registration refused** | Email exactly present in `AUTHORIZED_USERS`; backend logs if needed. |
+| **Registration refused** | `RESTRICT_AUTHORIZED_USERS=true` and email exactly present in `AUTHORIZED_USERS`; backend logs if needed. Set `RESTRICT_AUTHORIZED_USERS=false` for open registration. |
 | **Migrations fail** | Connectivity; `POSTGRES_*` matches running Postgres; Alembic current vs filesystem (`make migrate-history`). |
 | **Investec unavailable** | `ENCRYPTION_KEY` set before saving credentials; OAuth/API fields in Settings. |

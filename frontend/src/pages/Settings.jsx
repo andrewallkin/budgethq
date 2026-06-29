@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import axios from 'axios'
 import { CheckCircle, XCircle, RefreshCw, AlertTriangle, LayoutDashboard, HelpCircle } from 'lucide-react'
 import { formatDateSafe } from '../utils/numberFormatting'
+import { fetchAuthConfig } from '../utils/authConfig'
 import ConfirmModal from '../components/ConfirmModal'
 import { useAutoClearingMessage } from '../hooks/useAutoClearingMessage'
 
@@ -29,6 +30,7 @@ export default function Settings() {
     const [usernameError, setUsernameError] = useState('')
     const [usernameSuccess, setUsernameSuccess] = useAutoClearingMessage(8000)
     const [usernameLoading, setUsernameLoading] = useState(false)
+    const [restrictAuthorizedUsers, setRestrictAuthorizedUsers] = useState(true)
 
     // OpenAI API Key state
     const [openaiApiKey, setOpenaiApiKey] = useState('')
@@ -67,6 +69,12 @@ export default function Settings() {
             setUsername(user.username)
         }
     }, [user])
+
+    useEffect(() => {
+        fetchAuthConfig().then((config) => {
+            setRestrictAuthorizedUsers(config.restrict_authorized_users)
+        })
+    }, [])
 
     // Check if user has API key on mount
     useEffect(() => {
@@ -348,7 +356,9 @@ export default function Settings() {
                                     {usernameLoading ? 'Saving...' : 'Save'}
                                 </button>
                             </div>
-                            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">Must be in the authorized users list</p>
+                            {restrictAuthorizedUsers && (
+                                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">Must be in the authorized users list</p>
+                            )}
                         </form>
                     </div>
 
