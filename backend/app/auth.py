@@ -1,11 +1,52 @@
+import os
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Literal, Optional
 from jose import JWTError, jwt
 import bcrypt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from . import models, database
+
+AuthorizedContext = Literal["registration", "login", "username_change"]
+
+_RESTRICTED_MESSAGES = {
+    "registration": "Registration is currently restricted. Only authorized users can create accounts.",
+    "login": "Access restricted. This account is not authorized to login.",
+    "username_change": "Username must be in the authorized users list",
+}
+
+
+def is_authorized_users_restriction_enabled() -> bool:
+    value = os.getenv("RESTRICT_AUTHORIZED_USERS", "true").strip().lower()
+    if value in ("false", "0", "no"):
+        return False
+    if value in ("true", "1", "yes", ""):
+        return True
+    return True
+
+
+def get_authorized_users_list() -> list[str]:
+    authorized_users = os.getenv("AUTHORIZED_USERS", "")
+    if not authorized_users:
+        return []
+    return [u.strip() for u in authorized_users.split(",") if u.strip()]
+
+
+def ensure_username_authorized(
+    username: str,
+    *,
+    context: AuthorizedContext = "registration",
+    headers: dict | None = None,
+) -> None:
+    if not is_authorized_users_restriction_enabled():
+        return
+    if username not in get_authorized_users_list():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_RESTRICTED_MESSAGES[context],
+            headers=headers,
+        )
 
 # Secret key for JWT encoding/decoding
 SECRET_KEY = "your-secret-key-keep-it-secret"

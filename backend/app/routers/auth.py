@@ -1,5 +1,4 @@
 import logging
-import os
 from fastapi import APIRouter, HTTPException, status, Depends
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -36,18 +35,18 @@ class UserPreferences(BaseModel):
     has_investec_account: bool
     show_ra_under_investments: bool
 
+class AuthConfig(BaseModel):
+    restrict_authorized_users: bool
+
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+@router.get("/config", response_model=AuthConfig)
+def get_auth_config():
+    return AuthConfig(restrict_authorized_users=auth.is_authorized_users_restriction_enabled())
 
 @router.post("/register", response_model=Token)
 def register(user: UserCreate, db: Session = Depends(database.get_db)):
-    # Restrict registration to authorized users only
-    authorized_users = os.environ.get("AUTHORIZED_USERS")
-    authorized_list = [u.strip() for u in authorized_users.split(",")]
-    if user.username not in authorized_list:
-        raise HTTPException(
-            status_code=403,
-            detail="Registration is currently restricted. Only authorized users can create accounts."
-        )
+    auth.ensure_username_authorized(user.username, context="registration")
 
     db_user = db.query(models.User).filter(models.User.username == user.username).first()
     if db_user:
@@ -76,15 +75,11 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Restrict login to authorized users only
-    authorized_users = os.environ.get("AUTHORIZED_USERS")
-    authorized_list = [u.strip() for u in authorized_users.split(",")]
-    if user.username not in authorized_list:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access restricted. This account is not authorized to login.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    auth.ensure_username_authorized(
+        user.username,
+        context="login",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
     access_token = auth.create_access_token(data={"sub": user.username})
     logger.info(
@@ -216,15 +211,8 @@ async def change_username(
             detail="Username cannot be empty"
         )
     
-    # Check if username is in authorized list
-    authorized_users = os.environ.get("AUTHORIZED_USERS")
-    authorized_list = [u.strip() for u in authorized_users.split(",")]
-    if new_username not in authorized_list:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Username must be in the authorized users list"
-        )
-    
+    auth.ensure_username_authorized(new_username, context="username_change")
+
     # Check if username is already taken by another user
     existing_user = db.query(models.User).filter(
         models.User.username == new_username,

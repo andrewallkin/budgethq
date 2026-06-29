@@ -41,6 +41,7 @@ jobs:
           ENV_GCS_PAYSLIPS_BUCKET_NAME: ${{ secrets.GCS_PAYSLIPS_BUCKET_NAME }}
           ENV_GOOGLE_SPREADSHEET_ID: ${{ secrets.GOOGLE_SPREADSHEET_ID }}
           ENV_AUTHORIZED_USERS: ${{ secrets.AUTHORIZED_USERS }}
+          ENV_RESTRICT_AUTHORIZED_USERS: ${{ secrets.RESTRICT_AUTHORIZED_USERS }}
           ENV_ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
         run: |
           ssh -t -i ~/.ssh/id_rsa -p ${{ secrets.VPS_PORT }} -o StrictHostKeyChecking=no -o ServerAliveInterval=50 -o ServerAliveCountMax=10 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} <<EOF
@@ -92,6 +93,7 @@ jobs:
           GOOGLE_SPREADSHEET_ID=${ENV_GOOGLE_SPREADSHEET_ID}
 
           AUTHORIZED_USERS=${ENV_AUTHORIZED_USERS}
+          RESTRICT_AUTHORIZED_USERS=${ENV_RESTRICT_AUTHORIZED_USERS}
           ENCRYPTION_KEY=${ENV_ENCRYPTION_KEY}
           EOF_ENV
           echo "✓ Environment configured"
