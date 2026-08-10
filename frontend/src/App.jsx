@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Routes, Route, Link, useLocation, Navigate } from 'react-router-dom'
-import { LayoutDashboard, PieChart as PieChartIcon, Home, Moon, Sun, LogOut, Settings as SettingsIcon, ChevronLeft, ChevronRight, Calculator, Shield, TrendingUp, Menu, HelpCircle, Building2 } from 'lucide-react'
+import { Routes, Route, Link, useLocation, Navigate, Outlet } from 'react-router-dom'
+import { LayoutDashboard, PieChart as PieChartIcon, Home, Moon, Sun, LogOut, Settings as SettingsIcon, ChevronLeft, ChevronRight, Calculator, Shield, TrendingUp, Menu, HelpCircle, Building2, Sparkles } from 'lucide-react'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import BudgetDashboard from './pages/BudgetDashboard'
 import RATaxCalculator from './pages/RATaxCalculator'
@@ -17,6 +17,9 @@ import BudgetAnalysis from './pages/BudgetAnalysis'
 import CategoryGuide from './pages/CategoryGuide'
 import InvestmentsLanding from './pages/InvestmentsLanding'
 import InvestmentPortfolioPage from './pages/InvestmentPortfolioPage'
+import InvestmentsV2Landing from './pages/investments-v2/InvestmentsV2Landing'
+import InvestmentsV2Detail from './pages/investments-v2/InvestmentsV2Detail'
+import { InvestmentsV2Provider } from './investments-v2/InvestmentsV2Provider'
 import InvestecLanding from './pages/InvestecLanding'
 import HomeOverview from './pages/HomeOverview'
 
@@ -38,6 +41,14 @@ function RaSectionRoute({ children }) {
     }
 
     return children
+}
+
+function InvestmentsV2Layout() {
+    return (
+        <InvestmentsV2Provider>
+            <Outlet />
+        </InvestmentsV2Provider>
+    )
 }
 
 function AppContent() {
@@ -75,6 +86,7 @@ function AppContent() {
         { path: '/salary', label: 'Payslip & Tax', icon: Calculator },
         { path: '/budget', label: 'Budget Dashboard', icon: LayoutDashboard },
         { path: '/investments', label: 'Investments', icon: PieChartIcon },
+        { path: '/investments-v2', label: 'Investments 2.0', icon: Sparkles },
         { path: '/emergency-savings', label: 'Emergency Savings', icon: Shield },
         ...(showInvestecNav ? [{ path: '/investec', label: 'Investec Banking', icon: Building2 }] : []),
         { path: '/category-guide', label: 'Budget Category Guide', icon: HelpCircle },
@@ -119,8 +131,12 @@ function AppContent() {
             <nav className={`flex-1 ${collapsed && !isMobile ? 'px-2' : 'px-4'} space-y-2`}>
                 {navItems.map((item) => {
                     const Icon = item.icon
-                    const isActive = item.path === '/investments'
-                        ? location.pathname.startsWith('/investments') || location.pathname === '/portfolio'
+                    const isActive = item.path === '/investments-v2'
+                        ? location.pathname.startsWith('/investments-v2')
+                        : item.path === '/investments'
+                        ? (location.pathname.startsWith('/investments') &&
+                              !location.pathname.startsWith('/investments-v2')) ||
+                          location.pathname === '/portfolio'
                         : item.path === '/investec'
                         ? location.pathname.startsWith('/investec')
                         : location.pathname === item.path
@@ -227,6 +243,17 @@ function AppContent() {
                         <Route path="/investments/ra" element={<ProtectedRoute><RaSectionRoute><RAPerformance /></RaSectionRoute></ProtectedRoute>} />
                         <Route path="/investments" element={<ProtectedRoute><InvestmentsLanding /></ProtectedRoute>} />
                         <Route path="/investments/:portfolioSlug" element={<ProtectedRoute><InvestmentPortfolioPage /></ProtectedRoute>} />
+                        <Route
+                            path="/investments-v2"
+                            element={
+                                <ProtectedRoute>
+                                    <InvestmentsV2Layout />
+                                </ProtectedRoute>
+                            }
+                        >
+                            <Route index element={<InvestmentsV2Landing />} />
+                            <Route path=":accountId" element={<InvestmentsV2Detail />} />
+                        </Route>
                         <Route path="/portfolio" element={<Navigate to="/investments/tfsa" replace />} />
                         <Route path="/emergency-savings" element={<ProtectedRoute><EmergencySavings /></ProtectedRoute>} />
                         <Route path="/ra" element={<ProtectedRoute><Navigate to="/investments/ra" replace /></ProtectedRoute>} />

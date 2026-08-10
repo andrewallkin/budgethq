@@ -15,6 +15,9 @@ RUN uv export --extra backend --no-dev --frozen > requirements.txt && \
 # Copy application code from backend directory
 COPY backend/app ./app
 
+# Install Chromium for Playwright automation
+RUN playwright install --with-deps chromium
+
 # Copy Alembic migration files from backend directory
 COPY backend/alembic.ini .
 COPY backend/alembic ./alembic

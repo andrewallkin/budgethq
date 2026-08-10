@@ -19,6 +19,7 @@ from .utils import get_sast_now
 from . import models
 from . import history
 from .investec_sync import sync_investec_accounts, sync_investec_transactions
+from .services.sygnia import run_scheduled_sygnia_sync
 
 
 # Initialize logger
@@ -392,6 +393,15 @@ def start_scheduler():
         replace_existing=True
     )
 
+    # Job 8: Sync Sygnia accounts daily at 05:00 SAST (03:00 UTC)
+    scheduler.add_job(
+        run_scheduled_sygnia_sync,
+        trigger=CronTrigger(hour=3, minute=0),  # 03:00 UTC = 05:00 SAST
+        id='sygnia_daily_sync',
+        name='Sync Sygnia investment accounts',
+        replace_existing=True
+    )
+
     scheduler.start()
 
     logger.info("Background scheduler started with the following jobs:")
@@ -402,6 +412,7 @@ def start_scheduler():
     logger.info("  - Data cleanup: Sundays at 03:00 SAST (01:00 UTC)")
     logger.info("  - Investec account sync: every hour")
     logger.info("  - Investec transaction sync: every 15 minutes")
+    logger.info("  - Sygnia account sync: daily at 05:00 SAST (03:00 UTC)")
 
 
 def stop_scheduler():
