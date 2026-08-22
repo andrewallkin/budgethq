@@ -6,6 +6,7 @@ import BudgetDashboard from './pages/BudgetDashboard'
 import RATaxCalculator from './pages/RATaxCalculator'
 import RAPerformance from './pages/RAPerformance'
 import EmergencySavings from './pages/EmergencySavings'
+import { SHOW_EMERGENCY_SAVINGS_UI } from './config/featureFlags'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import Settings from './pages/Settings'
@@ -19,9 +20,13 @@ import InvestmentsLanding from './pages/InvestmentsLanding'
 import InvestmentPortfolioPage from './pages/InvestmentPortfolioPage'
 import InvestmentsV2Landing from './pages/investments-v2/InvestmentsV2Landing'
 import InvestmentsV2Detail from './pages/investments-v2/InvestmentsV2Detail'
+import InvestmentsV2RaCalculator from './pages/investments-v2/InvestmentsV2RaCalculator'
 import { InvestmentsV2Provider } from './investments-v2/InvestmentsV2Provider'
 import InvestecLanding from './pages/InvestecLanding'
 import HomeOverview from './pages/HomeOverview'
+import UiLabHome from './pages/ui-lab/UiLabHome'
+import UiLabBudget from './pages/ui-lab/UiLabBudget'
+import UiLabInvestments from './pages/ui-lab/UiLabInvestments'
 
 function ProtectedRoute({ children }) {
     const { user } = useAuth()
@@ -87,11 +92,15 @@ function AppContent() {
         { path: '/budget', label: 'Budget Dashboard', icon: LayoutDashboard },
         { path: '/investments', label: 'Investments', icon: PieChartIcon },
         { path: '/investments-v2', label: 'Investments 2.0', icon: Sparkles },
-        { path: '/emergency-savings', label: 'Emergency Savings', icon: Shield },
+        ...(SHOW_EMERGENCY_SAVINGS_UI
+            ? [{ path: '/emergency-savings', label: 'Emergency Savings', icon: Shield }]
+            : []),
         ...(showInvestecNav ? [{ path: '/investec', label: 'Investec Banking', icon: Building2 }] : []),
         { path: '/category-guide', label: 'Budget Category Guide', icon: HelpCircle },
         { path: '/settings', label: 'Settings', icon: SettingsIcon },
+        { path: '/ui-lab/home', label: 'UI Lab', icon: Sparkles },
     ]
+    const isUiLab = location.pathname.startsWith('/ui-lab')
 
     // Don't show sidebar on login/register pages
     if (location.pathname === '/login' || location.pathname === '/register') {
@@ -107,7 +116,9 @@ function AppContent() {
         <>
             <div className={`p-6 flex ${collapsed && !isMobile ? 'justify-center' : 'justify-between'} items-center`}>
                 {(!collapsed || isMobile) && (
-                    <h1 className="text-xl font-bold text-gray-800 dark:text-white">📊 BudgetHQ</h1>
+                    <h1 className={`text-xl ${isUiLab ? 'font-semibold tracking-tight' : 'font-bold'} text-gray-800 dark:text-white`}>
+                        {isUiLab ? 'BudgetHQ' : '📊 BudgetHQ'}
+                    </h1>
                 )}
                 {!isMobile && (
                     <div className={`flex items-center gap-2 ${collapsed ? 'flex-col' : ''}`}>
@@ -131,7 +142,9 @@ function AppContent() {
             <nav className={`flex-1 ${collapsed && !isMobile ? 'px-2' : 'px-4'} space-y-2`}>
                 {navItems.map((item) => {
                     const Icon = item.icon
-                    const isActive = item.path === '/investments-v2'
+                    const isActive = item.path === '/ui-lab/home'
+                        ? location.pathname.startsWith('/ui-lab')
+                        : item.path === '/investments-v2'
                         ? location.pathname.startsWith('/investments-v2')
                         : item.path === '/investments'
                         ? (location.pathname.startsWith('/investments') &&
@@ -147,7 +160,7 @@ function AppContent() {
                             className={`flex items-center ${collapsed && !isMobile ? 'justify-center px-2' : 'px-4'} py-3 rounded-lg transition-colors ${isActive
                                 ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
                                 : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                                }`}
+                                } ${isUiLab && isActive ? 'border-l-2 border-blue-600 rounded-l-none' : ''} ${isUiLab ? 'text-sm' : ''}`}
                             title={collapsed && !isMobile ? item.label : ''}
                         >
                             <Icon className={`w-5 h-5 ${collapsed && !isMobile ? '' : 'mr-3'}`} />
@@ -180,7 +193,7 @@ function AppContent() {
     )
 
     return (
-        <div className="flex h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
+        <div className={`flex h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-200${isUiLab ? ' ui-lab' : ''}`}>
             {/* Mobile header bar */}
             <header className="lg:hidden fixed top-0 left-0 right-0 h-14 z-30 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between px-5 sm:px-6">
                 <button
@@ -190,7 +203,9 @@ function AppContent() {
                 >
                     <Menu className="w-6 h-6" />
                 </button>
-                <h1 className="text-lg font-bold text-gray-800 dark:text-white">📊 BudgetHQ</h1>
+                <h1 className={`text-lg ${isUiLab ? 'font-semibold tracking-tight' : 'font-bold'} text-gray-800 dark:text-white`}>
+                    {isUiLab ? 'BudgetHQ' : '📊 BudgetHQ'}
+                </h1>
                 <div className="flex items-center gap-1">
                     <button
                         onClick={() => setDarkMode(!darkMode)}
@@ -252,10 +267,20 @@ function AppContent() {
                             }
                         >
                             <Route index element={<InvestmentsV2Landing />} />
+                            <Route path="ra/calculator" element={<InvestmentsV2RaCalculator />} />
                             <Route path=":accountId" element={<InvestmentsV2Detail />} />
                         </Route>
                         <Route path="/portfolio" element={<Navigate to="/investments/tfsa" replace />} />
-                        <Route path="/emergency-savings" element={<ProtectedRoute><EmergencySavings /></ProtectedRoute>} />
+                        <Route
+                            path="/emergency-savings"
+                            element={
+                                SHOW_EMERGENCY_SAVINGS_UI ? (
+                                    <ProtectedRoute><EmergencySavings /></ProtectedRoute>
+                                ) : (
+                                    <Navigate to="/" replace />
+                                )
+                            }
+                        />
                         <Route path="/ra" element={<ProtectedRoute><Navigate to="/investments/ra" replace /></ProtectedRoute>} />
                         <Route path="/ra-calculator" element={<ProtectedRoute><Navigate to="/investments/ra/calculator" replace /></ProtectedRoute>} />
                         <Route path="/investec" element={<ProtectedRoute><InvestecLanding /></ProtectedRoute>} />
@@ -265,6 +290,10 @@ function AppContent() {
                         <Route path="/investec/budget-analysis" element={<ProtectedRoute><BudgetAnalysis /></ProtectedRoute>} />
                         <Route path="/category-guide" element={<ProtectedRoute><CategoryGuide /></ProtectedRoute>} />
                         <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+                        <Route path="/ui-lab" element={<ProtectedRoute><Navigate to="/ui-lab/home" replace /></ProtectedRoute>} />
+                        <Route path="/ui-lab/home" element={<ProtectedRoute><UiLabHome /></ProtectedRoute>} />
+                        <Route path="/ui-lab/budget" element={<ProtectedRoute><UiLabBudget /></ProtectedRoute>} />
+                        <Route path="/ui-lab/investments" element={<ProtectedRoute><UiLabInvestments /></ProtectedRoute>} />
                     </Routes>
                 </div>
             </div>
@@ -451,7 +480,7 @@ function HomePage() {
                     </div>
                 </div>
 
-                {/* Emergency Savings Card */}
+                {SHOW_EMERGENCY_SAVINGS_UI && (
                 <div className="flex flex-col h-full bg-gradient-to-br from-amber-50 to-amber-100 dark:from-amber-900/20 dark:to-amber-800/20 rounded-2xl shadow-lg border border-amber-200 dark:border-amber-800 overflow-hidden hover:shadow-xl transition-all">
                     <div className="p-4 sm:p-6 lg:p-8 flex-1 flex flex-col">
                         <div className="flex items-center mb-6">
@@ -505,6 +534,7 @@ function HomePage() {
                         </Link>
                     </div>
                 </div>
+                )}
 
                 {showRaUnderInvestments && (
                     <>
