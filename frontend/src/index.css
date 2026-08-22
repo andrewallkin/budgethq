@@ -5,3 +5,12 @@
 body {
   @apply bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-white transition-colors duration-200;
 }
+
+.ui-lab {
+  font-family: "Geist", ui-sans-serif, system-ui, sans-serif;
+}
+
+.ui-lab .tabular-nums,
+.ui-lab .font-mono {
+  font-family: "Geist Mono", ui-monospace, monospace;
+}
