@@ -3,9 +3,12 @@ import {
     createSygniaAccount as createSygniaAccountApi,
     deleteSygniaAccount as deleteSygniaAccountApi,
     getSygniaAccount,
+    listInvestmentPortfolios,
     listSygniaAccounts,
+    updateSygniaAccount as updateSygniaAccountApi,
 } from './api'
 import { getAdapter } from './integrations/registry'
+import { combinedHoldingsTotal } from './sheetsAccounts'
 import { SOURCE_IDS } from './types'
 
 const InvestmentsV2Context = createContext(null)
@@ -16,23 +19,51 @@ function accountIdsMatch(left, right) {
 
 export function InvestmentsV2Provider({ children }) {
     const [accounts, setAccounts] = useState([])
+    const [fx, setFx] = useState(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState(null)
 
     const refreshAccounts = useCallback(async () => {
-        setError(null)
-        try {
-            const next = await listSygniaAccounts()
-            setAccounts(next)
-            return next
-        } catch (err) {
+        const errors = []
+        let sygnia = []
+        let sheets = []
+        let nextFx = null
+
+        const results = await Promise.allSettled([
+            listSygniaAccounts(),
+            listInvestmentPortfolios(),
+        ])
+
+        if (results[0].status === 'fulfilled') {
+            sygnia = results[0].value || []
+        } else {
+            const err = results[0].reason
             const message =
-                err.response?.data?.detail ||
-                err.message ||
-                'Failed to load investment accounts'
-            setError(typeof message === 'string' ? message : 'Failed to load investment accounts')
-            throw err
+                err?.response?.data?.detail ||
+                err?.message ||
+                'Failed to load Sygnia accounts'
+            errors.push(typeof message === 'string' ? message : 'Failed to load Sygnia accounts')
         }
+
+        if (results[1].status === 'fulfilled') {
+            sheets = results[1].value?.accounts || []
+            nextFx = results[1].value?.fx || null
+        } else {
+            const err = results[1].reason
+            const message =
+                err?.response?.data?.detail ||
+                err?.message ||
+                'Failed to load Google Sheets accounts'
+            errors.push(
+                typeof message === 'string' ? message : 'Failed to load Google Sheets accounts',
+            )
+        }
+
+        const next = [...sheets, ...sygnia]
+        setAccounts(next)
+        setFx(nextFx)
+        setError(errors.length ? errors.join(' ') : null)
+        return next
     }, [])
 
     useEffect(() => {
@@ -81,6 +112,22 @@ export function InvestmentsV2Provider({ children }) {
         [refreshAccounts],
     )
 
+    const updateAccount = useCallback(
+        async (accountId, { name, product_type }) => {
+            const account = getAccount(accountId)
+            if (!account) {
+                throw new Error('Account not found')
+            }
+            if (account.sourceId === SOURCE_IDS.GOOGLE_SHEETS) {
+                throw new Error('Google Sheets accounts are not available yet')
+            }
+            const detail = await updateSygniaAccountApi(accountId, { name, product_type })
+            await refreshAccounts()
+            return detail
+        },
+        [getAccount, refreshAccounts],
+    )
+
     const deleteAccount = useCallback(
         async (accountId) => {
             const account = getAccount(accountId)
@@ -112,33 +159,38 @@ export function InvestmentsV2Provider({ children }) {
         [],
     )
 
-    const value = useMemo(
-        () => ({
+    const value = useMemo(() => {
+        const holdings = combinedHoldingsTotal(accounts, fx)
+        return {
             accounts,
             loading,
             error,
             refreshAccounts,
             createAccount,
             createSygniaAccount,
+            updateAccount,
             deleteAccount,
             getAccount,
             getDetail,
             fetchAccountDetail,
-            totalHoldings: accounts.reduce((sum, a) => sum + (a.totalValue || 0), 0),
-        }),
-        [
-            accounts,
-            loading,
-            error,
-            refreshAccounts,
-            createAccount,
-            createSygniaAccount,
-            deleteAccount,
-            getAccount,
-            getDetail,
-            fetchAccountDetail,
-        ],
-    )
+            totalHoldings: holdings.total,
+            fxNote: holdings.fxNote,
+            holdingsOmitted: holdings.omitted,
+        }
+    }, [
+        accounts,
+        fx,
+        loading,
+        error,
+        refreshAccounts,
+        createAccount,
+        createSygniaAccount,
+        updateAccount,
+        deleteAccount,
+        getAccount,
+        getDetail,
+        fetchAccountDetail,
+    ])
 
     return (
         <InvestmentsV2Context.Provider value={value}>

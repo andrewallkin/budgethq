@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { mapInvestmentPortfolios } from './sheetsAccounts'
 import { SOURCE_IDS } from './types'
 
 const BASE = '/api/investments-v2'
@@ -22,7 +23,45 @@ export function mapSygniaAccountSummary(apiAccount) {
         lastSyncedAt: apiAccount.last_synced_at,
         lastSyncStatus: apiAccount.last_sync_status,
         lastSyncError: apiAccount.last_sync_error,
+        productType: apiAccount.product_type,
     }
+}
+
+export async function listInvestmentPortfolios() {
+    const { data } = await axios.get('/api/investments')
+    return {
+        accounts: mapInvestmentPortfolios(data?.portfolios),
+        fx: data?.fx || null,
+        baseCurrency: data?.base_currency || data?.fx?.base_currency || 'ZAR',
+    }
+}
+
+export async function suggestSygniaProductType({ accountTypeName, accountTypeCode }) {
+    const { data } = await axios.get(`${BASE}/sygnia/product-type-suggestion`, {
+        params: {
+            account_type_name: accountTypeName || undefined,
+            account_type_code: accountTypeCode || undefined,
+        },
+    })
+    return data
+}
+
+export async function updateSygniaAccount(accountId, { name, product_type }) {
+    const body = {}
+    if (name !== undefined) body.name = name
+    if (product_type !== undefined) body.product_type = product_type
+    const { data } = await axios.patch(`${BASE}/sygnia/accounts/${accountId}`, body)
+    return data
+}
+
+export async function syncSygniaAccount(accountId) {
+    const { data } = await axios.post(`${BASE}/sygnia/accounts/${accountId}/sync`)
+    return data
+}
+
+export async function getRaSummary() {
+    const { data } = await axios.get(`${BASE}/ra-summary`)
+    return data
 }
 
 export async function testSygniaLogin({ username, password }) {

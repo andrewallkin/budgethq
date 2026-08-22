@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Check, ChevronLeft, X, Loader2, ShieldCheck } from 'lucide-react'
+import AccountProductTypeSelect from './AccountProductTypeSelect'
 import {
     listSygniaLogins,
+    suggestSygniaProductType,
     testSygniaLogin,
     testSygniaLoginById,
 } from '../../investments-v2/api'
@@ -33,8 +35,10 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
     const [discoveredAccounts, setDiscoveredAccounts] = useState([])
     const [selectedAccountCode, setSelectedAccountCode] = useState(null)
     const [name, setName] = useState('')
+    const [productType, setProductType] = useState(null)
     const [error, setError] = useState('')
     const [creating, setCreating] = useState(false)
+    const userPickedProductType = useRef(false)
 
     const isLastStep = step >= STEPS.length - 1
     const selectedAccount = discoveredAccounts.find(
@@ -65,6 +69,28 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
         }
     }, [isOpen])
 
+    useEffect(() => {
+        userPickedProductType.current = false
+    }, [selectedAccountCode])
+
+    useEffect(() => {
+        if (step !== 2 || !selectedAccount) return
+        let cancelled = false
+        suggestSygniaProductType({
+            accountTypeName: selectedAccount.accountTypeName,
+            accountTypeCode: selectedAccount.accountTypeCode,
+        })
+            .then((data) => {
+                if (!cancelled && data?.product_type && !userPickedProductType.current) {
+                    setProductType(data.product_type)
+                }
+            })
+            .catch(() => {})
+        return () => {
+            cancelled = true
+        }
+    }, [step, selectedAccount])
+
     if (!isOpen) return null
 
     const clearSecrets = () => {
@@ -85,6 +111,7 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
         setDiscoveredAccounts([])
         setSelectedAccountCode(null)
         setName('')
+        setProductType(null)
         setError('')
         setCreating(false)
     }
@@ -170,6 +197,7 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
         }
         if (step === 2) {
             setName('')
+            setProductType(null)
         }
         setStep((s) => Math.max(s - 1, 0))
     }
@@ -205,6 +233,10 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
             setError('Enter a display name for this account')
             return
         }
+        if (!productType) {
+            setError('Choose a product type for this account')
+            return
+        }
 
         setCreating(true)
         setError('')
@@ -212,6 +244,7 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
             const payload = {
                 account_code: selectedAccountCode,
                 name: name.trim(),
+                product_type: productType,
             }
             if (loginMode === 'existing' && selectedLoginId) {
                 payload.login_id = selectedLoginId
@@ -244,7 +277,7 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
     const canContinueFromConnect =
         connectionVerified && discoveredAccounts.length > 0 && !testingConnection
     const canContinueFromAccount = Boolean(selectedAccountCode)
-    const createDisabled = creating || !name.trim()
+    const createDisabled = creating || !name.trim() || !productType
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -459,10 +492,6 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
                                     </div>
                                 </div>
                             )}
-
-                            <p className="text-xs text-gray-400 dark:text-gray-500">
-                                Google Sheets support is coming soon.
-                            </p>
                         </div>
                     )}
 
@@ -540,6 +569,29 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
                                     className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                                     autoFocus
                                 />
+                            </div>
+                            <div>
+                                <label
+                                    htmlFor="wizard-product-type"
+                                    className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                                >
+                                    Product type
+                                </label>
+                                <AccountProductTypeSelect
+                                    id="wizard-product-type"
+                                    value={productType}
+                                    onChange={(value) => {
+                                        userPickedProductType.current = true
+                                        setProductType(value)
+                                    }}
+                                    disabled={creating}
+                                />
+                                {selectedAccount?.accountTypeName && (
+                                    <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                                        Suggested from Sygnia: {selectedAccount.accountTypeName}. You
+                                        can change this before creating the account.
+                                    </p>
+                                )}
                             </div>
                             {creating && (
                                 <div className="rounded-xl border border-teal-200 dark:border-teal-800 bg-teal-50/70 dark:bg-teal-900/20 px-4 py-3">

@@ -44,7 +44,7 @@ function useSygniaHistory() {
     return ctx
 }
 
-export function SygniaHistoryProvider({ accountId, children }) {
+export function SygniaHistoryProvider({ accountId, refreshKey, children }) {
     const [loading, setLoading] = useState(true)
     const [isSaving, setIsSaving] = useState(false)
     const [valueSnapshots, setValueSnapshots] = useState([])
@@ -89,7 +89,7 @@ export function SygniaHistoryProvider({ accountId, children }) {
 
     useEffect(() => {
         fetchHistory()
-    }, [fetchHistory])
+    }, [fetchHistory, refreshKey])
 
     const portfolioValueNum = latestPortfolioValueFromApi
     const totalContributionsNum = totalContributionsFromApi

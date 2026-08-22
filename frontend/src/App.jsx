@@ -20,6 +20,7 @@ import InvestmentsLanding from './pages/InvestmentsLanding'
 import InvestmentPortfolioPage from './pages/InvestmentPortfolioPage'
 import InvestmentsV2Landing from './pages/investments-v2/InvestmentsV2Landing'
 import InvestmentsV2Detail from './pages/investments-v2/InvestmentsV2Detail'
+import InvestmentsV2RaCalculator from './pages/investments-v2/InvestmentsV2RaCalculator'
 import { InvestmentsV2Provider } from './investments-v2/InvestmentsV2Provider'
 import InvestecLanding from './pages/InvestecLanding'
 import HomeOverview from './pages/HomeOverview'
@@ -67,19 +68,21 @@ function AppContent() {
         return saved ? JSON.parse(saved) : false
     })
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+    const isUiLab = location.pathname.startsWith('/ui-lab')
     // Close mobile menu when route changes
     useEffect(() => {
         setIsMobileMenuOpen(false)
     }, [location.pathname])
 
     useEffect(() => {
-        if (darkMode) {
+        const useDark = darkMode && !isUiLab
+        if (useDark) {
             document.documentElement.classList.add('dark')
         } else {
             document.documentElement.classList.remove('dark')
         }
         localStorage.setItem('darkMode', JSON.stringify(darkMode))
-    }, [darkMode])
+    }, [darkMode, isUiLab])
 
     useEffect(() => {
         localStorage.setItem('sidebarCollapsed', JSON.stringify(isSidebarCollapsed))
@@ -99,7 +102,6 @@ function AppContent() {
         { path: '/settings', label: 'Settings', icon: SettingsIcon },
         { path: '/ui-lab/home', label: 'UI Lab', icon: Sparkles },
     ]
-    const isUiLab = location.pathname.startsWith('/ui-lab')
 
     // Don't show sidebar on login/register pages
     if (location.pathname === '/login' || location.pathname === '/register') {
@@ -115,7 +117,7 @@ function AppContent() {
         <>
             <div className={`p-6 flex ${collapsed && !isMobile ? 'justify-center' : 'justify-between'} items-center`}>
                 {(!collapsed || isMobile) && (
-                    <h1 className={`text-xl ${isUiLab ? 'font-semibold tracking-tight' : 'font-bold'} text-gray-800 dark:text-white`}>
+                    <h1 className={`text-xl ${isUiLab ? 'font-semibold tracking-tight text-neutral-950 dark:text-white' : 'font-bold text-gray-800 dark:text-white'}`}>
                         {isUiLab ? 'BudgetHQ' : '📊 BudgetHQ'}
                     </h1>
                 )}
@@ -128,6 +130,7 @@ function AppContent() {
                         >
                             {collapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
                         </button>
+                        {!isUiLab && (
                         <button
                             onClick={() => setDarkMode(!darkMode)}
                             className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 transition-colors"
@@ -135,6 +138,7 @@ function AppContent() {
                         >
                             {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
                         </button>
+                        )}
                     </div>
                 )}
             </div>
@@ -156,10 +160,15 @@ function AppContent() {
                         <Link
                             key={item.path}
                             to={item.path}
-                            className={`flex items-center ${collapsed && !isMobile ? 'justify-center px-2' : 'px-4'} py-3 rounded-lg transition-colors ${isActive
-                                ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
-                                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                                } ${isUiLab && isActive ? 'border-l-2 border-blue-600 rounded-l-none' : ''} ${isUiLab ? 'text-sm' : ''}`}
+                            className={`flex items-center ${collapsed && !isMobile ? 'justify-center px-2' : 'px-4'} py-3 transition-colors ${
+                                isUiLab
+                                    ? `rounded-2xl text-sm ${isActive
+                                        ? 'bg-white text-neutral-950 shadow-[0_8px_24px_rgba(17,17,17,0.06)] dark:bg-neutral-800 dark:text-white'
+                                        : 'text-neutral-500 hover:bg-white/70 dark:hover:bg-neutral-800/70'}`
+                                    : `rounded-lg ${isActive
+                                        ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
+                                        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}`
+                            }`}
                             title={collapsed && !isMobile ? item.label : ''}
                         >
                             <Icon className={`w-5 h-5 ${collapsed && !isMobile ? '' : 'mr-3'}`} />
@@ -192,7 +201,7 @@ function AppContent() {
     )
 
     return (
-        <div className={`flex h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-200${isUiLab ? ' ui-lab' : ''}`}>
+        <div className={`flex h-screen transition-colors duration-200${isUiLab ? ' ui-lab bg-[#F3F4F6]' : ' bg-gray-50 dark:bg-gray-900'}`}>
             {/* Mobile header bar */}
             <header className="lg:hidden fixed top-0 left-0 right-0 h-14 z-30 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between px-5 sm:px-6">
                 <button
@@ -206,6 +215,7 @@ function AppContent() {
                     {isUiLab ? 'BudgetHQ' : '📊 BudgetHQ'}
                 </h1>
                 <div className="flex items-center gap-1">
+                    {!isUiLab && (
                     <button
                         onClick={() => setDarkMode(!darkMode)}
                         className="p-2 min-w-[44px] min-h-[44px] rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 transition-colors flex items-center justify-center"
@@ -213,6 +223,7 @@ function AppContent() {
                     >
                         {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
                     </button>
+                    )}
                     <button
                         onClick={logout}
                         className="p-2 min-w-[44px] min-h-[44px] rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 transition-colors flex items-center justify-center"
@@ -234,15 +245,15 @@ function AppContent() {
 
             {/* Mobile drawer */}
             <aside
-                className={`lg:hidden fixed inset-y-0 left-0 w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 z-50 flex flex-col transform transition-transform duration-300 ease-in-out ${
+                className={`lg:hidden fixed inset-y-0 left-0 w-64 z-50 flex flex-col transform transition-transform duration-300 ease-in-out ${
                     isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
-                }`}
+                } ${isUiLab ? 'bg-[#F3F4F6] dark:bg-neutral-950 border-r border-transparent' : 'bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700'}`}
             >
                 <SidebarContent collapsed={false} isMobile />
             </aside>
 
             {/* Desktop sidebar */}
-            <aside className={`hidden lg:flex ${isSidebarCollapsed ? 'w-16' : 'w-64'} bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex-col transition-all duration-300 ease-in-out overflow-hidden shrink-0`}>
+            <aside className={`hidden lg:flex ${isSidebarCollapsed ? 'w-16' : 'w-64'} flex-col transition-all duration-300 ease-in-out overflow-hidden shrink-0 ${isUiLab ? 'bg-[#F3F4F6] dark:bg-neutral-950 border-r border-transparent' : 'bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700'}`}>
                 <SidebarContent collapsed={isSidebarCollapsed} isMobile={false} />
             </aside>
 
@@ -266,6 +277,16 @@ function AppContent() {
                             }
                         >
                             <Route index element={<InvestmentsV2Landing />} />
+                            <Route path="ra/calculator" element={<InvestmentsV2RaCalculator />} />
+                            <Route
+                                path="sheets/:portfolioSlug"
+                                element={
+                                    <InvestmentPortfolioPage
+                                        hubBackLink={{ to: '/investments-v2', label: 'Investments 2.0' }}
+                                        notFoundTo="/investments-v2"
+                                    />
+                                }
+                            />
                             <Route path=":accountId" element={<InvestmentsV2Detail />} />
                         </Route>
                         <Route path="/portfolio" element={<Navigate to="/investments/tfsa" replace />} />

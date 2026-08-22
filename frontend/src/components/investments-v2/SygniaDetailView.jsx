@@ -61,7 +61,10 @@ export default function SygniaDetailView({ accountId, detail }) {
     const foreignAllocation = detail.foreign_allocation
 
     return (
-        <SygniaHistoryProvider accountId={accountId}>
+        <SygniaHistoryProvider
+            accountId={accountId}
+            refreshKey={detail.last_synced_at || detail.as_of_date}
+        >
             <div className="space-y-6">
                 <SygniaOverviewCards />
 

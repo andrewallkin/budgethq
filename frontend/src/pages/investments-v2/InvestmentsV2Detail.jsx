@@ -1,15 +1,19 @@
 import { useEffect, useState } from 'react'
-import { Link, Navigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Loader2, ShieldCheck } from 'lucide-react'
+import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
+import { ArrowLeft, Calculator, Loader2, ShieldCheck } from 'lucide-react'
 import SygniaDetailView from '../../components/investments-v2/SygniaDetailView'
+import DeleteSygniaAccountButton from '../../components/investments-v2/DeleteSygniaAccountButton'
+import SygniaManualSyncButton from '../../components/investments-v2/SygniaManualSyncButton'
 import SygniaSyncStatusBadge from '../../components/investments-v2/SygniaSyncStatusBadge'
 import { useInvestmentsV2 } from '../../investments-v2/InvestmentsV2Provider'
-import { SOURCE_IDS } from '../../investments-v2/types'
+import { SOURCE_IDS, productTypeLabel, stripAccountCodeFromName, labelsMatch } from '../../investments-v2/types'
 import { formatDateSafe, formatDateTimeSafe } from '../../utils/numberFormatting'
 
 export default function InvestmentsV2Detail() {
     const { accountId } = useParams()
-    const { getAccount, fetchAccountDetail, loading: accountsLoading } = useInvestmentsV2()
+    const navigate = useNavigate()
+    const { getAccount, fetchAccountDetail, refreshAccounts, loading: accountsLoading } =
+        useInvestmentsV2()
     const account = getAccount(accountId)
     const [detail, setDetail] = useState(null)
     const [detailLoading, setDetailLoading] = useState(true)
@@ -49,6 +53,8 @@ export default function InvestmentsV2Detail() {
         }
     }, [account, fetchAccountDetail])
 
+    const productType = account?.productType ?? detail?.product_type ?? null
+
     if (accountsLoading && !account) {
         return (
             <div className="flex items-center justify-center py-16 text-gray-500 dark:text-gray-400">
@@ -63,12 +69,23 @@ export default function InvestmentsV2Detail() {
     }
 
     const meta = detail || account
+    const accountCode = meta.account_code || account.accountCode
     const typeLabel =
         meta.account_type_name ||
         meta.accountTypeName ||
         meta.account_type_code ||
         meta.accountTypeCode ||
         null
+    const title =
+        stripAccountCodeFromName(meta.name, accountCode) ||
+        productTypeLabel(productType) ||
+        meta.name
+    const showSygniaType = typeLabel && !labelsMatch(typeLabel, title)
+    const budgetType = productTypeLabel(productType)
+    const showBudgetType = budgetType && !labelsMatch(budgetType, title) && !labelsMatch(budgetType, typeLabel)
+    const reg28 = meta.reg28_compliant ?? account.reg28Compliant
+    const asOf = meta.as_of_date || account.asOfDate
+    const lastSynced = meta.last_synced_at || account.lastSyncedAt
 
     return (
         <div className="space-y-6 pb-6">
@@ -82,67 +99,103 @@ export default function InvestmentsV2Detail() {
                 </Link>
             </div>
 
-            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-600 p-6 shadow-sm space-y-4">
-                <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-600 p-6 shadow-sm">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
-                                {meta.name}
-                            </h1>
-                            {meta.reg28_compliant != null && (
-                                <span
-                                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                                        meta.reg28_compliant
-                                            ? 'bg-green-50 text-green-800 dark:bg-green-900/30 dark:text-green-300'
-                                            : 'bg-amber-50 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300'
-                                    }`}
-                                >
-                                    <ShieldCheck className="w-3 h-3" aria-hidden />
-                                    Reg 28 {meta.reg28_compliant ? 'compliant' : 'non-compliant'}
+                        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white text-balance">
+                            {title}
+                        </h1>
+                        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-gray-500 dark:text-gray-400">
+                            {accountCode && (
+                                <span className="font-mono font-medium text-gray-700 dark:text-gray-300">
+                                    {accountCode}
                                 </span>
                             )}
-                        </div>
-                        <dl className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-sm">
-                            <div>
-                                <dt className="text-gray-500 dark:text-gray-400">Account code</dt>
-                                <dd className="font-mono font-medium text-gray-900 dark:text-white">
-                                    {meta.account_code || account.accountCode}
-                                </dd>
-                            </div>
-                            {typeLabel && (
-                                <div>
-                                    <dt className="text-gray-500 dark:text-gray-400">Account type</dt>
-                                    <dd className="font-medium text-gray-900 dark:text-white">{typeLabel}</dd>
-                                </div>
+                            {accountCode && reg28 != null && (
+                                <span className="text-gray-300 dark:text-gray-600" aria-hidden>
+                                    ·
+                                </span>
                             )}
-                            <div>
-                                <dt className="text-gray-500 dark:text-gray-400">Value as of</dt>
-                                <dd className="font-medium text-gray-900 dark:text-white">
-                                    {formatDateSafe(meta.as_of_date || account.asOfDate, {
+                            {reg28 != null && (
+                                <span
+                                    className={`inline-flex items-center gap-1 ${
+                                        reg28
+                                            ? 'text-green-700 dark:text-green-300'
+                                            : 'text-amber-700 dark:text-amber-300'
+                                    }`}
+                                >
+                                    <ShieldCheck className="w-3.5 h-3.5" aria-hidden />
+                                    Reg 28 {reg28 ? 'compliant' : 'non-compliant'}
+                                </span>
+                            )}
+                            {showSygniaType && (
+                                <>
+                                    <span className="text-gray-300 dark:text-gray-600" aria-hidden>
+                                        ·
+                                    </span>
+                                    <span>{typeLabel}</span>
+                                </>
+                            )}
+                            {showBudgetType && (
+                                <>
+                                    <span className="text-gray-300 dark:text-gray-600" aria-hidden>
+                                        ·
+                                    </span>
+                                    <span>{budgetType}</span>
+                                </>
+                            )}
+                        </div>
+                        <p className="mt-1.5 text-sm text-gray-500 dark:text-gray-400">
+                            {asOf && (
+                                <>
+                                    As of{' '}
+                                    {formatDateSafe(asOf, {
                                         day: 'numeric',
                                         month: 'short',
                                         year: 'numeric',
                                     })}
-                                </dd>
-                            </div>
-                            {(meta.last_synced_at || account.lastSyncedAt) && (
-                                <div>
-                                    <dt className="text-gray-500 dark:text-gray-400">Last synced</dt>
-                                    <dd className="font-medium text-gray-900 dark:text-white">
-                                        {formatDateTimeSafe(meta.last_synced_at || account.lastSyncedAt)}
-                                    </dd>
-                                </div>
+                                </>
                             )}
-                        </dl>
+                            {asOf && lastSynced && (
+                                <span className="text-gray-300 dark:text-gray-600" aria-hidden>
+                                    {' '}
+                                    ·{' '}
+                                </span>
+                            )}
+                            {lastSynced && <>Last synced {formatDateTimeSafe(lastSynced)}</>}
+                        </p>
+                        {productType === 'ra' && (
+                            <p className="mt-2">
+                                <Link
+                                    to="/investments-v2/ra/calculator"
+                                    state={{ fromAccountId: account.id }}
+                                    className="inline-flex items-center gap-1.5 text-sm font-medium text-teal-700 dark:text-teal-300 hover:text-teal-800 dark:hover:text-teal-200"
+                                >
+                                    <Calculator className="w-4 h-4" aria-hidden />
+                                    RA tax calculator
+                                </Link>
+                            </p>
+                        )}
                     </div>
-                    <SygniaSyncStatusBadge
-                        status={meta.last_sync_status || account.lastSyncStatus}
-                        error={meta.last_sync_error || account.lastSyncError}
-                    />
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
+                        <SygniaSyncStatusBadge
+                            status={meta.last_sync_status || account.lastSyncStatus}
+                            error={meta.last_sync_error || account.lastSyncError}
+                        />
+                        <SygniaManualSyncButton
+                            accountId={account.id}
+                            onSynced={async (data) => {
+                                setDetail(data)
+                                await refreshAccounts()
+                            }}
+                        />
+                        <DeleteSygniaAccountButton
+                            accountId={account.id}
+                            accountName={meta.name}
+                            onDeleted={() => navigate('/investments-v2')}
+                        />
+                    </div>
                 </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 border-t border-gray-100 dark:border-gray-700 pt-3">
-                    Sygnia values are T−1. BudgetHQ syncs around 05:00 SAST daily — no manual refresh.
-                </p>
             </div>
 
             {detailLoading && (

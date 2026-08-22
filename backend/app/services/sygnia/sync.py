@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 from datetime import date
 
+from time import monotonic
+
 from sqlalchemy.orm import Session, joinedload
 
 from ...database import SessionLocal
@@ -30,17 +32,28 @@ def sync_account(db: Session, account_id: int, source: str) -> dict:
         .first()
     )
     if account is None:
+        logger.warning("Sygnia sync account not found account_id=%s source=%s", account_id, source)
         return {"ok": False, "message": "Sygnia account not found.", "account_id": account_id}
+
+    started = monotonic()
+    logger.info(
+        "Sygnia sync starting account_id=%s code=%s source=%s",
+        account_id,
+        account.account_code,
+        source,
+    )
 
     login = account.login
     if login is None:
         _mark_sync_error(db, account, "Sygnia login not found for account.")
+        logger.warning("Sygnia sync missing login account_id=%s source=%s", account_id, source)
         return {"ok": False, "message": "Sygnia login not found for account.", "account_id": account_id}
 
     username = decrypt_api_key(login.username_encrypted)
     password = decrypt_api_key(login.password_encrypted)
     if not username or not password:
         _mark_sync_error(db, account, "Stored Sygnia credentials are missing or invalid.")
+        logger.warning("Sygnia sync missing credentials account_id=%s source=%s", account_id, source)
         return {
             "ok": False,
             "message": "Stored Sygnia credentials are missing or invalid.",
@@ -52,12 +65,28 @@ def sync_account(db: Session, account_id: int, source: str) -> dict:
     if not scrape_result.get("ok"):
         message = scrape_result.get("message") or "Sygnia scrape failed."
         _mark_sync_error(db, account, message)
+        logger.warning(
+            "Sygnia sync scrape failed account_id=%s code=%s source=%s elapsed_ms=%s: %s",
+            account_id,
+            account.account_code,
+            source,
+            int((monotonic() - started) * 1000),
+            message,
+        )
         return {"ok": False, "message": message, "account_id": account_id}
 
     try:
         persist_scrape(db, account, scrape_result, source)
         _mark_sync_success(db, account, scrape_result)
         db.commit()
+        logger.info(
+            "Sygnia sync succeeded account_id=%s code=%s source=%s as_of_date=%s elapsed_ms=%s",
+            account_id,
+            account.account_code,
+            source,
+            scrape_result.get("as_of_date"),
+            int((monotonic() - started) * 1000),
+        )
         return {
             "ok": True,
             "message": scrape_result.get("message") or "Sync completed.",

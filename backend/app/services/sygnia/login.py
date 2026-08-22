@@ -11,6 +11,66 @@ logger = logging.getLogger(__name__)
 
 TARGET_URL = "https://online.sygnia.com/Alchemy/Investments/Summary"
 DUMP_SETTLE_MS = 5_000
+# Docker/Chromium: sandbox + small /dev/shm commonly break headless launch.
+CHROMIUM_LAUNCH_ARGS = ["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"]
+
+
+def launch_chromium(playwright, *, headless: bool = True):
+    """Launch Chromium with flags that work in the backend Docker image."""
+    logger.info(
+        "Sygnia Playwright launching Chromium headless=%s args=%s",
+        headless,
+        CHROMIUM_LAUNCH_ARGS,
+    )
+    browser = playwright.chromium.launch(headless=headless, args=CHROMIUM_LAUNCH_ARGS)
+    logger.info("Sygnia Playwright Chromium launched")
+    return browser
+
+
+def page_snapshot(page) -> str:
+    """Safe one-line page state for logs (never includes credentials)."""
+    try:
+        title = page.title()
+    except Exception:  # noqa: BLE001
+        title = "?"
+    try:
+        url = page.url
+    except Exception:  # noqa: BLE001
+        url = "?"
+    return f"url={url!r} title={title!r}"
+
+
+def attach_page_debug_listeners(page) -> None:
+    """Log page errors and browser console errors during a Playwright session."""
+
+    def _on_page_error(exc) -> None:
+        logger.warning("Sygnia Playwright pageerror: %s", exc)
+
+    def _on_console(msg) -> None:
+        if msg.type in ("error", "warning"):
+            logger.info("Sygnia Playwright console %s: %s", msg.type, msg.text)
+
+    page.on("pageerror", _on_page_error)
+    page.on("console", _on_console)
+
+
+def wait_after_navigation(page, *, timeout_ms: int = 60_000) -> None:
+    """
+    Wait for the SPA to settle without requiring networkidle.
+
+    Sygnia keeps analytics/websocket traffic; networkidle often times out even
+    after a successful login.
+    """
+    try:
+        page.wait_for_load_state("domcontentloaded", timeout=timeout_ms)
+    except PlaywrightTimeoutError:
+        logger.info("Sygnia wait_after_navigation: domcontentloaded timed out (%s)", page_snapshot(page))
+    try:
+        page.wait_for_load_state("load", timeout=15_000)
+    except PlaywrightTimeoutError:
+        logger.info("Sygnia wait_after_navigation: load timed out (%s)", page_snapshot(page))
+    page.wait_for_timeout(2_000)
+    logger.info("Sygnia wait_after_navigation settled (%s)", page_snapshot(page))
 
 
 def _username_field(page):
@@ -40,17 +100,20 @@ def _password_field(page):
 
 def fill_login(page, username: str, password: str) -> None:
     """Two-step Alchemy login: Username → Next, then Password → Login."""
+    logger.info("Sygnia login: filling username step (%s)", page_snapshot(page))
     page.wait_for_load_state("domcontentloaded")
 
     user_field = _username_field(page)
     user_field.wait_for(state="visible", timeout=30_000)
     user_field.fill(username)
     page.get_by_role("button", name="Next").click()
+    logger.info("Sygnia login: username submitted, waiting for password (%s)", page_snapshot(page))
 
     password_field = _password_field(page)
     password_field.wait_for(state="visible", timeout=30_000)
     password_field.fill(password)
     page.get_by_role("button", name="Login").click()
+    logger.info("Sygnia login: password submitted (%s)", page_snapshot(page))
 
 
 def looks_logged_in(page) -> bool:
@@ -92,7 +155,7 @@ def test_login(username: str, password: str, *, headless: bool = True) -> dict:
         return {"ok": False, "message": "Username and password are required.", "url": ""}
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=headless)
+        browser = launch_chromium(p, headless=headless)
         context = browser.new_context()
         page = context.new_page()
         try:
@@ -103,9 +166,7 @@ def test_login(username: str, password: str, *, headless: bool = True) -> dict:
 
             if on_login_flow(page):
                 fill_login(page, username, password)
-                page.wait_for_load_state("networkidle", timeout=60_000)
-
-            page.wait_for_timeout(2_000)
+                wait_after_navigation(page)
 
             if looks_logged_in(page):
                 return {
@@ -143,4 +204,4 @@ def dismiss_post_login_modals(page, *, max_modals: int = 5) -> None:
         page.wait_for_timeout(500)
 
     if dismissed:
-        logger.debug("Dismissed %d Sygnia promo modal(s)", dismissed)
+        logger.info("Sygnia dismissed %d post-login promo modal(s)", dismissed)

@@ -649,6 +649,7 @@ class SygniaAccount(Base):
     login_id = Column(Integer, ForeignKey("sygnia_logins.id"), index=True, nullable=False)
     account_code = Column(String, nullable=False)
     name = Column(String, nullable=False)
+    product_type = Column(String, nullable=True)  # ra | tfsa | offshore
     account_type_name = Column(String, nullable=True)
     account_type_code = Column(String, nullable=True)
     foreign_allocation = Column(Float, nullable=True)

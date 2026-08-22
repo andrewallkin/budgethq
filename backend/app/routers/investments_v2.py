@@ -10,10 +10,13 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, model_validator
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from .. import auth, database, models
+from ..services.account_product import remaining_ra_room
 from ..services.sygnia import sync_account, test_login_and_list_accounts
+from ..services.sygnia.extract import parse_zar_amount
+from ..tax_engine import get_tax_config
 from ..utils import (
     decrypt_api_key,
     encrypt_api_key,
@@ -61,6 +64,7 @@ class CreateSygniaAccountRequest(BaseModel):
     password: Optional[str] = Field(default=None, max_length=200)
     account_code: str = Field(min_length=1, max_length=64)
     name: str = Field(min_length=1, max_length=200)
+    product_type: str = Field(min_length=1, max_length=32)
 
     @model_validator(mode="after")
     def validate_login_source(self) -> "CreateSygniaAccountRequest":
@@ -76,6 +80,11 @@ class CreateSygniaAccountRequest(BaseModel):
         if has_username != has_password:
             raise ValueError("username and password must both be provided.")
         return self
+
+
+class UpdateSygniaAccountRequest(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    product_type: Optional[str] = Field(default=None, max_length=32)
 
 
 class SygniaSnapshotData(BaseModel):
@@ -162,10 +171,41 @@ def _connected_account_codes(db: Session, user_id: int) -> set[str]:
     return {row[0] for row in rows}
 
 
-def _latest_portfolio_value(db: Session, account_id: int) -> float:
+def _latest_portfolio_value(
+    db: Session,
+    account_id: int,
+    as_of_date: Optional[date] = None,
+) -> float:
+    """Current portfolio value: last scrape as-of, else newest history row that is not in the future.
+
+    Manual month-end snapshots are stored as the last day of the month, which can be after
+    today's T−1 scrape. Prefer the scrape as-of date so the overview card matches holdings.
+    """
+    today = get_sast_now().date()
+    if as_of_date is None:
+        as_of_date = (
+            db.query(models.SygniaAccount.as_of_date)
+            .filter(models.SygniaAccount.id == account_id)
+            .scalar()
+        )
+    if as_of_date is not None:
+        synced = (
+            db.query(models.SygniaValueHistory)
+            .filter(
+                models.SygniaValueHistory.account_id == account_id,
+                models.SygniaValueHistory.record_date == as_of_date,
+            )
+            .first()
+        )
+        if synced:
+            return round(synced.portfolio_value or 0, 2)
+
     latest = (
         db.query(models.SygniaValueHistory)
-        .filter(models.SygniaValueHistory.account_id == account_id)
+        .filter(
+            models.SygniaValueHistory.account_id == account_id,
+            models.SygniaValueHistory.record_date <= today,
+        )
         .order_by(models.SygniaValueHistory.record_date.desc())
         .first()
     )
@@ -209,6 +249,7 @@ def _serialize_account_summary(account: models.SygniaAccount, latest_value: floa
         "id": account.id,
         "login_id": account.login_id,
         "name": account.name,
+        "product_type": account.product_type,
         "account_code": account.account_code,
         "account_type_name": account.account_type_name,
         "account_type_code": account.account_type_code,
@@ -404,7 +445,7 @@ def _build_history_payload(
         .all()
     )
     total_contributions = round(sum(c.amount or 0 for c in all_contributions), 2)
-    latest_portfolio_value = _latest_portfolio_value(db, account.id)
+    latest_portfolio_value = _latest_portfolio_value(db, account.id, account.as_of_date)
     growth = round(latest_portfolio_value - total_contributions, 2)
 
     return {
@@ -417,6 +458,123 @@ def _build_history_payload(
         "latest_portfolio_value": latest_portfolio_value,
         "growth": growth,
     }
+
+
+def _latest_payslip_gross_monthly(db: Session, user_id: int) -> float:
+    """Monthly gross from latest payslip (same logic as GET /salary)."""
+    latest_payslip = (
+        db.query(models.MonthlyPayslip)
+        .filter(models.MonthlyPayslip.user_id == user_id)
+        .order_by(models.MonthlyPayslip.year.desc(), models.MonthlyPayslip.month.desc())
+        .options(
+            selectinload(models.MonthlyPayslip.items),
+            selectinload(models.MonthlyPayslip.additional_income),
+        )
+        .first()
+    )
+    if not latest_payslip:
+        return 0.0
+
+    company_contrib = sum(
+        i.amount for i in latest_payslip.items if i.item_type == "company_contribution"
+    )
+    additional_income = sum(i.amount for i in (latest_payslip.additional_income or []))
+    return round(latest_payslip.gross_salary + company_contrib + additional_income, 2)
+
+
+def _build_ra_summary_payload(db: Session, user_id: int) -> dict:
+    fy_start_year = get_sa_financial_year_start()
+    fy_start_date = date(fy_start_year, 3, 1)
+    fy_end_date = date(fy_start_year + 1, 2, 28)
+    financial_year_label = format_sa_financial_year_label(fy_start_year)
+
+    ra_accounts = (
+        db.query(models.SygniaAccount)
+        .filter(
+            models.SygniaAccount.user_id == user_id,
+            models.SygniaAccount.product_type == "ra",
+        )
+        .options(joinedload(models.SygniaAccount.debit_order))
+        .order_by(models.SygniaAccount.name)
+        .all()
+    )
+
+    account_ids = [account.id for account in ra_accounts]
+    fy_contrib_by_account: dict[int, float] = {account_id: 0.0 for account_id in account_ids}
+    if account_ids:
+        contribution_rows = (
+            db.query(models.SygniaContribution)
+            .filter(
+                models.SygniaContribution.account_id.in_(account_ids),
+                models.SygniaContribution.contribution_date >= fy_start_date,
+                models.SygniaContribution.contribution_date <= fy_end_date,
+            )
+            .all()
+        )
+        for row in contribution_rows:
+            fy_contrib_by_account[row.account_id] = fy_contrib_by_account.get(row.account_id, 0) + (
+                row.amount or 0
+            )
+
+    accounts_payload: list[dict] = []
+    total_value = 0.0
+    contributions_current_fy_total = 0.0
+
+    for account in ra_accounts:
+        latest_value = _latest_portfolio_value(db, account.id, account.as_of_date)
+        account_fy = round(fy_contrib_by_account.get(account.id, 0), 2)
+        contributions_current_fy_total += account_fy
+        total_value += latest_value
+
+        suggested_monthly: float | None = None
+        debit = account.debit_order
+        if debit and debit.debit_order_amount:
+            suggested_monthly = parse_zar_amount(debit.debit_order_amount)
+
+        accounts_payload.append(
+            {
+                "id": account.id,
+                "name": account.name,
+                "latest_portfolio_value": latest_value,
+                "contributions_current_fy": account_fy,
+                "suggested_monthly_from_debit_order": suggested_monthly,
+            }
+        )
+
+    contributions_current_fy_total = round(contributions_current_fy_total, 2)
+    total_value = round(total_value, 2)
+
+    gross = _latest_payslip_gross_monthly(db, user_id)
+    ra_max_deduction: float | None = None
+    remaining_room: float | None = None
+    if gross > 0:
+        tax_config = get_tax_config(fy_start_year)
+        ra_max_deduction = round(min(gross * 12 * 0.275, tax_config["ra_max_deduction"]), 2)
+        remaining_room = remaining_ra_room(ra_max_deduction, contributions_current_fy_total)
+
+    return {
+        "accounts": accounts_payload,
+        "total_value": total_value,
+        "contributions_current_fy": contributions_current_fy_total,
+        "ra_max_deduction": ra_max_deduction,
+        "remaining_room": remaining_room,
+        "financial_year_label": financial_year_label,
+        "financial_year_start": fy_start_year,
+    }
+
+
+# ---------------------------------------------------------------------------
+# RA summary
+# ---------------------------------------------------------------------------
+
+
+@router.get("/ra-summary")
+async def get_ra_summary(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db),
+):
+    """Aggregate RA accounts, FY contributions, and remaining deduction room."""
+    return _build_ra_summary_payload(db, current_user.id)
 
 
 # ---------------------------------------------------------------------------
@@ -532,6 +690,11 @@ async def create_sygnia_account(
     if not account_code:
         raise HTTPException(status_code=400, detail="account_code is required.")
 
+    from ..services.account_product import is_valid_product_type
+
+    if not is_valid_product_type(body.product_type):
+        raise HTTPException(status_code=400, detail="Invalid product_type.")
+
     existing = (
         db.query(models.SygniaAccount)
         .filter(
@@ -591,6 +754,7 @@ async def create_sygnia_account(
         login_id=login.id,
         account_code=account_code,
         name=body.name.strip(),
+        product_type=body.product_type,
         last_sync_status="pending",
     )
     db.add(account)
@@ -614,8 +778,8 @@ async def create_sygnia_account(
             sync_result.get("message"),
         )
 
-    latest_value = _latest_portfolio_value(db, account.id)
     account = _get_user_account(db, account.id, current_user.id, with_children=True)
+    latest_value = _latest_portfolio_value(db, account.id, account.as_of_date)
     detail = _serialize_account_detail(account, latest_value)
     detail["initial_sync"] = {
         "ok": bool(sync_result.get("ok")),
@@ -637,9 +801,48 @@ async def list_sygnia_accounts(
         .all()
     )
     return [
-        _serialize_account_summary(account, _latest_portfolio_value(db, account.id))
+        _serialize_account_summary(
+            account, _latest_portfolio_value(db, account.id, account.as_of_date)
+        )
         for account in accounts
     ]
+
+
+@router.patch("/sygnia/accounts/{account_id}")
+async def update_sygnia_account(
+    account_id: int,
+    body: UpdateSygniaAccountRequest,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db),
+):
+    """Update Sygnia account name and/or product type."""
+    from ..services.account_product import is_valid_product_type
+
+    account = _get_user_account(db, account_id, current_user.id)
+    if body.name is not None:
+        account.name = body.name.strip()
+    if body.product_type is not None:
+        if not is_valid_product_type(body.product_type):
+            raise HTTPException(status_code=400, detail="Invalid product_type.")
+        account.product_type = body.product_type
+    db.commit()
+    db.refresh(account)
+    latest_value = _latest_portfolio_value(db, account.id, account.as_of_date)
+    return _serialize_account_summary(account, latest_value)
+
+
+@router.get("/sygnia/product-type-suggestion")
+async def sygnia_product_type_suggestion(
+    account_type_name: Optional[str] = None,
+    account_type_code: Optional[str] = None,
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    from ..services.account_product import PRODUCT_TYPE_LABELS, suggest_product_type
+
+    product_type = suggest_product_type(account_type_name, account_type_code)
+    if product_type is None:
+        return {"product_type": None, "label": None}
+    return {"product_type": product_type, "label": PRODUCT_TYPE_LABELS[product_type]}
 
 
 @router.get("/sygnia/accounts/{account_id}")
@@ -650,8 +853,40 @@ async def get_sygnia_account(
 ):
     """Sygnia account detail with current-state children and latest value."""
     account = _get_user_account(db, account_id, current_user.id, with_children=True)
-    latest_value = _latest_portfolio_value(db, account.id)
+    latest_value = _latest_portfolio_value(db, account.id, account.as_of_date)
     return _serialize_account_detail(account, latest_value)
+
+
+@router.post("/sygnia/accounts/{account_id}/sync")
+async def sync_sygnia_account(
+    account_id: int,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db),
+):
+    """Trigger an on-demand Playwright sync (for testing and catch-up)."""
+    account = _get_user_account(db, account_id, current_user.id)
+    logger.info(
+        "Sygnia manual sync requested user_id=%s account_id=%s code=%s",
+        current_user.id,
+        account.id,
+        account.account_code,
+    )
+    sync_result = await asyncio.to_thread(_sync_account_in_thread, account.id, "manual")
+    db.refresh(account)
+    logger.info(
+        "Sygnia manual sync finished account_id=%s ok=%s message=%s",
+        account.id,
+        sync_result.get("ok"),
+        sync_result.get("message"),
+    )
+    account = _get_user_account(db, account.id, current_user.id, with_children=True)
+    latest_value = _latest_portfolio_value(db, account.id, account.as_of_date)
+    detail = _serialize_account_detail(account, latest_value)
+    detail["sync"] = {
+        "ok": bool(sync_result.get("ok")),
+        "message": str(sync_result.get("message") or ""),
+    }
+    return detail
 
 
 @router.delete("/sygnia/accounts/{account_id}")

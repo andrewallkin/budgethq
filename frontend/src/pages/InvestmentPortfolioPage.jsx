@@ -3,7 +3,10 @@ import { Navigate, useParams } from 'react-router-dom'
 import axios from 'axios'
 import TFSAPortfolio from './TFSAPortfolio'
 
-export default function InvestmentPortfolioPage() {
+export default function InvestmentPortfolioPage({
+    hubBackLink = { to: '/investments', label: 'Investments' },
+    notFoundTo = '/investments',
+}) {
     const { portfolioSlug } = useParams()
     const [loading, setLoading] = useState(true)
     const [portfolio, setPortfolio] = useState(null)
@@ -33,7 +36,7 @@ export default function InvestmentPortfolioPage() {
         return <div className="p-8 text-center text-gray-500">Loading portfolio...</div>
     }
     if (notFound) {
-        return <Navigate to="/investments" replace />
+        return <Navigate to={notFoundTo} replace />
     }
     if (!portfolio) return null
 
@@ -48,7 +51,7 @@ export default function InvestmentPortfolioPage() {
             currencyCode={portfolio.currency_code || 'ZAR'}
             isTfsa={portfolio.is_default_tfsa}
             showTargetAllocation={showTargetAllocation}
-            hubBackLink={{ to: '/investments', label: 'Investments' }}
+            hubBackLink={hubBackLink}
             onPortfolioMetaUpdated={(data) =>
                 setPortfolio((p) =>
                     p && data.id === p.id

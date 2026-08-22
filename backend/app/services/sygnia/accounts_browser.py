@@ -9,10 +9,13 @@ from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
 from .login import (
     DUMP_SETTLE_MS,
     TARGET_URL,
+    attach_page_debug_listeners,
     dismiss_post_login_modals,
     fill_login,
     looks_logged_in,
     on_login_flow,
+    page_snapshot,
+    wait_after_navigation,
 )
 
 logger = logging.getLogger(__name__)
@@ -100,22 +103,28 @@ def read_accounts(page: Page) -> tuple[list[dict], str | None]:
     """Return (mapped accounts, error message)."""
     result = page.evaluate(LIST_ACCOUNTS_JS)
     if not result.get("ok"):
-        return [], str(result.get("error") or "Failed to read Sygnia accounts.")
+        error = str(result.get("error") or "Failed to read Sygnia accounts.")
+        logger.warning("Sygnia read_accounts failed: %s (%s)", error, page_snapshot(page))
+        return [], error
     raw_accounts = result.get("accounts") or []
-    return [map_account_for_api(a) for a in raw_accounts], None
+    mapped = [map_account_for_api(a) for a in raw_accounts]
+    codes = [a.get("accountCode") for a in mapped]
+    logger.info("Sygnia read_accounts count=%s codes=%s (%s)", len(mapped), codes, page_snapshot(page))
+    return mapped, None
 
 
 def select_account(page: Page, account_code: str) -> str | None:
     """Select account by code. Returns error message on failure."""
+    logger.info("Sygnia select_account code=%s (%s)", account_code, page_snapshot(page))
     result = page.evaluate(SELECT_ACCOUNT_JS, account_code)
     if not result.get("ok"):
-        return str(result.get("error") or f"Failed to select account {account_code}.")
-    logger.debug("Selected Sygnia account %s", result.get("value"))
-    try:
-        page.wait_for_load_state("networkidle", timeout=60_000)
-    except PlaywrightTimeoutError:
-        pass
+        error = str(result.get("error") or f"Failed to select account {account_code}.")
+        logger.warning("Sygnia select_account failed: %s (%s)", error, page_snapshot(page))
+        return error
+    logger.info("Sygnia select_account value=%s, waiting for summary", result.get("value"))
+    wait_after_navigation(page)
     page.wait_for_timeout(POST_SELECT_SETTLE_MS)
+    logger.info("Sygnia select_account settled (%s)", page_snapshot(page))
     return None
 
 
@@ -125,26 +134,46 @@ def login_and_open_summary(page: Page, username: str, password: str) -> str | No
 
     Returns None on success or an error message.
     """
+    attach_page_debug_listeners(page)
+    logger.info("Sygnia login_and_open_summary: goto %s", TARGET_URL)
     page.goto(TARGET_URL, wait_until="domcontentloaded")
+    logger.info(
+        "Sygnia after goto on_login_flow=%s looks_logged_in=%s (%s)",
+        on_login_flow(page),
+        looks_logged_in(page),
+        page_snapshot(page),
+    )
 
     if not on_login_flow(page):
+        logger.info("Sygnia login form not visible yet; waiting 3s")
         page.wait_for_timeout(3_000)
+        logger.info(
+            "Sygnia after wait on_login_flow=%s looks_logged_in=%s (%s)",
+            on_login_flow(page),
+            looks_logged_in(page),
+            page_snapshot(page),
+        )
 
     if on_login_flow(page):
         fill_login(page, username, password)
-        page.wait_for_load_state("networkidle", timeout=60_000)
-
-    page.wait_for_timeout(2_000)
+        wait_after_navigation(page)
 
     if not looks_logged_in(page):
-        return "Login did not reach Investments Summary."
+        message = "Login did not reach Investments Summary."
+        logger.warning("Sygnia %s (%s)", message, page_snapshot(page))
+        return message
 
+    logger.info("Sygnia login looks successful; dismissing modals (%s)", page_snapshot(page))
     dismiss_post_login_modals(page)
     page.wait_for_timeout(DUMP_SETTLE_MS)
 
     try:
+        logger.info("Sygnia waiting for #accountSelector")
         wait_for_account_selector(page)
     except PlaywrightTimeoutError as exc:
-        return f"Account selector did not load: {exc}"
+        message = f"Account selector did not load: {exc}"
+        logger.warning("Sygnia %s (%s)", message, page_snapshot(page))
+        return message
 
+    logger.info("Sygnia account selector ready (%s)", page_snapshot(page))
     return None
