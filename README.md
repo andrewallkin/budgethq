@@ -70,7 +70,7 @@ make dev-up
 # docker-compose -f docker-compose.dev.yml up -d
 ```
 
-- **Frontend:** http://localhost:3000  
+- **Frontend:** http://localhost:3000 (Vite HMR in `docker-compose.dev.yml`; rebuild with `make dev-build` after `package.json` changes)  
 - **Backend / OpenAPI:** http://localhost:8000 and http://localhost:8000/docs  
 - **Postgres (host):** `localhost:${POSTGRES_PORT:-5432}`
 
