@@ -123,7 +123,7 @@ export const labHome = {
     },
     accounts: {
         totalBalance: 63200,
-        count: 3,
+        count: 2,
         lastSyncedLabel: '21 Aug',
         rows: [
             { name: 'Investec Private', value: 45200 },
