@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Check, ChevronLeft, X, Loader2, ShieldCheck } from 'lucide-react'
+import { Check, ChevronLeft, FileSpreadsheet, Bot, X, Loader2, ShieldCheck } from 'lucide-react'
 import AccountProductTypeSelect from './AccountProductTypeSelect'
 import {
     listSygniaLogins,
@@ -8,8 +8,21 @@ import {
     testSygniaLoginById,
 } from '../../investments-v2/api'
 import { useInvestmentsV2 } from '../../investments-v2/InvestmentsV2Provider'
+import {
+    WIZARD_SOURCE_KINDS,
+    listPlaywrightAdapters,
+} from '../../investments-v2/integrations/registry'
+import { PORTFOLIO_CURRENCIES, SOURCE_IDS } from '../../investments-v2/types'
 
-const STEPS = ['Connect', 'Account', 'Name']
+const METHOD_STEPS = ['Method']
+const SHEETS_STEPS = ['Method', 'Details']
+const PLAYWRIGHT_STEPS = ['Method', 'Platform', 'Connect', 'Account', 'Name']
+
+function wizardStepsFor(sourceKind) {
+    if (sourceKind === 'playwright') return PLAYWRIGHT_STEPS
+    if (sourceKind === 'google_sheets') return SHEETS_STEPS
+    return METHOD_STEPS
+}
 
 function formatApiError(err, fallback) {
     const detail = err.response?.data?.detail
@@ -20,9 +33,14 @@ function formatApiError(err, fallback) {
 }
 
 export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
-    const { createSygniaAccount: persistSygniaAccount } = useInvestmentsV2()
+    const {
+        createSygniaAccount: persistSygniaAccount,
+        createSheetsAccount: persistSheetsAccount,
+    } = useInvestmentsV2()
 
     const [step, setStep] = useState(0)
+    const [sourceKind, setSourceKind] = useState(null)
+    const [platformId, setPlatformId] = useState(null)
     const [savedLogins, setSavedLogins] = useState([])
     const [loadingLogins, setLoadingLogins] = useState(false)
     const [loginMode, setLoginMode] = useState('new')
@@ -35,18 +53,25 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
     const [discoveredAccounts, setDiscoveredAccounts] = useState([])
     const [selectedAccountCode, setSelectedAccountCode] = useState(null)
     const [name, setName] = useState('')
+    const [sheetsName, setSheetsName] = useState('')
+    const [sheetsCurrency, setSheetsCurrency] = useState('')
+    const [sheetsTrackAllocation, setSheetsTrackAllocation] = useState(true)
     const [productType, setProductType] = useState(null)
     const [error, setError] = useState('')
     const [creating, setCreating] = useState(false)
     const userPickedProductType = useRef(false)
 
-    const isLastStep = step >= STEPS.length - 1
+    const wizardSteps = wizardStepsFor(sourceKind)
+    const stepLabel = wizardSteps[step]
+    const playwrightAdapters = listPlaywrightAdapters()
     const selectedAccount = discoveredAccounts.find(
         (a) => a.accountCode === selectedAccountCode,
     )
 
     useEffect(() => {
-        if (!isOpen) return
+        if (!isOpen || stepLabel !== 'Connect' || platformId !== SOURCE_IDS.SYGNIA_PLAYWRIGHT) {
+            return
+        }
         let cancelled = false
         setLoadingLogins(true)
         listSygniaLogins()
@@ -67,14 +92,14 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
         return () => {
             cancelled = true
         }
-    }, [isOpen])
+    }, [isOpen, stepLabel, platformId])
 
     useEffect(() => {
         userPickedProductType.current = false
     }, [selectedAccountCode])
 
     useEffect(() => {
-        if (step !== 2 || !selectedAccount) return
+        if (stepLabel !== 'Name' || !selectedAccount) return
         let cancelled = false
         suggestSygniaProductType({
             accountTypeName: selectedAccount.accountTypeName,
@@ -89,7 +114,7 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
         return () => {
             cancelled = true
         }
-    }, [step, selectedAccount])
+    }, [stepLabel, selectedAccount])
 
     if (!isOpen) return null
 
@@ -99,6 +124,8 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
 
     const reset = () => {
         setStep(0)
+        setSourceKind(null)
+        setPlatformId(null)
         setSavedLogins([])
         setLoadingLogins(false)
         setLoginMode('new')
@@ -111,6 +138,9 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
         setDiscoveredAccounts([])
         setSelectedAccountCode(null)
         setName('')
+        setSheetsName('')
+        setSheetsCurrency('')
+        setSheetsTrackAllocation(true)
         setProductType(null)
         setError('')
         setCreating(false)
@@ -190,12 +220,21 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
         }
     }
 
-    const goBack = () => {
+    const handleSourceKindChange = (nextKind) => {
+        setSourceKind(nextKind)
         setError('')
-        if (step === 1) {
+        if (nextKind !== 'playwright') {
+            setPlatformId(null)
             invalidateConnection()
         }
-        if (step === 2) {
+    }
+
+    const goBack = () => {
+        setError('')
+        if (stepLabel === 'Connect') {
+            invalidateConnection()
+        }
+        if (stepLabel === 'Name') {
             setName('')
             setProductType(null)
         }
@@ -204,7 +243,19 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
 
     const goNext = () => {
         setError('')
-        if (step === 0) {
+        if (stepLabel === 'Method') {
+            if (!sourceKind) {
+                setError('Choose Playwright or Google Sheets')
+                return
+            }
+        }
+        if (stepLabel === 'Platform') {
+            if (!platformId) {
+                setError('Select a platform to connect')
+                return
+            }
+        }
+        if (stepLabel === 'Connect') {
             if (!connectionVerified) {
                 setError('Test the connection successfully before continuing')
                 return
@@ -214,7 +265,7 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
                 return
             }
         }
-        if (step === 1) {
+        if (stepLabel === 'Account') {
             if (!selectedAccountCode) {
                 setError('Select a Sygnia account to connect')
                 return
@@ -225,22 +276,41 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
                 setName(`${typeLabel} (${account.accountCode})`)
             }
         }
-        setStep((s) => Math.min(s + 1, STEPS.length - 1))
+        setStep((s) => Math.min(s + 1, wizardSteps.length - 1))
     }
 
     const handleCreate = async () => {
-        if (!selectedAccountCode || !name.trim()) {
-            setError('Enter a display name for this account')
-            return
-        }
-        if (!productType) {
-            setError('Choose a product type for this account')
-            return
-        }
-
         setCreating(true)
         setError('')
         try {
+            if (sourceKind === 'google_sheets') {
+                if (!sheetsName.trim() || !sheetsCurrency) {
+                    setError('Enter a name and currency for this account')
+                    setCreating(false)
+                    return
+                }
+                const account = await persistSheetsAccount({
+                    name: sheetsName.trim(),
+                    currencyCode: sheetsCurrency,
+                    targetAllocationEnabled: sheetsTrackAllocation,
+                })
+                reset()
+                onClose()
+                onCreated?.(account)
+                return
+            }
+
+            if (!selectedAccountCode || !name.trim()) {
+                setError('Enter a display name for this account')
+                setCreating(false)
+                return
+            }
+            if (!productType) {
+                setError('Choose a product type for this account')
+                setCreating(false)
+                return
+            }
+
             const payload = {
                 account_code: selectedAccountCode,
                 name: name.trim(),
@@ -264,6 +334,7 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
                 id: detail.id,
                 name: detail.name ?? name.trim(),
                 accountCode: detail.account_code ?? selectedAccountCode,
+                sourceId: SOURCE_IDS.SYGNIA_PLAYWRIGHT,
             }
             reset()
             onClose()
@@ -274,10 +345,38 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
         }
     }
 
+    const canContinueFromMethod = sourceKind === 'playwright' || sourceKind === 'google_sheets'
+    const canContinueFromPlatform = Boolean(platformId)
     const canContinueFromConnect =
         connectionVerified && discoveredAccounts.length > 0 && !testingConnection
     const canContinueFromAccount = Boolean(selectedAccountCode)
-    const createDisabled = creating || !name.trim() || !productType
+    const createDisabled =
+        creating ||
+        (sourceKind === 'google_sheets'
+            ? !sheetsName.trim() || !sheetsCurrency
+            : !name.trim() || !productType)
+    const isLastStep = stepLabel === 'Name' || stepLabel === 'Details'
+    const continueDisabled =
+        testingConnection ||
+        (stepLabel === 'Method' && !canContinueFromMethod) ||
+        (stepLabel === 'Platform' && !canContinueFromPlatform) ||
+        (stepLabel === 'Connect' && !canContinueFromConnect) ||
+        (stepLabel === 'Account' && !canContinueFromAccount)
+
+    const wizardTitle =
+        platformId === SOURCE_IDS.SYGNIA_PLAYWRIGHT
+            ? 'Connect Sygnia account'
+            : sourceKind === 'google_sheets'
+              ? 'Add Google Sheets account'
+              : 'Add account'
+    const wizardSubtitle =
+        platformId === SOURCE_IDS.SYGNIA_PLAYWRIGHT
+            ? 'Sign in to Sygnia, pick an account, and run an initial sync.'
+            : sourceKind === 'playwright'
+              ? 'Choose a broker or platform to connect with Playwright.'
+              : sourceKind === 'google_sheets'
+                ? 'Name the account and choose its currency. A sheet tab is created automatically.'
+                : 'Choose how this account should sync.'
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -285,7 +384,7 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="create-account-title"
-                className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-lg w-full border border-gray-200 dark:border-gray-600 overflow-hidden"
+                className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-xl w-full border border-gray-200 dark:border-gray-600 overflow-hidden"
             >
                 <div className="px-6 pt-5 pb-4 border-b border-gray-100 dark:border-gray-700">
                     <div className="flex items-start justify-between gap-3">
@@ -294,10 +393,10 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
                                 id="create-account-title"
                                 className="text-lg font-semibold text-gray-900 dark:text-white"
                             >
-                                Connect Sygnia account
+                                {wizardTitle}
                             </h2>
                             <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-                                Sign in to Sygnia, pick an account, and run an initial sync.
+                                {wizardSubtitle}
                             </p>
                         </div>
                         <button
@@ -311,7 +410,7 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
                     </div>
 
                     <ol className="mt-5 flex items-center gap-2">
-                        {STEPS.map((label, i) => {
+                        {wizardSteps.map((label, i) => {
                             const active = i === step
                             const done = i < step
                             return (
@@ -336,7 +435,7 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
                                     >
                                         {label}
                                     </span>
-                                    {i < STEPS.length - 1 && (
+                                    {i < wizardSteps.length - 1 && (
                                         <span className="hidden sm:block flex-1 h-px bg-gray-200 dark:bg-gray-600 ml-1" />
                                     )}
                                 </li>
@@ -346,7 +445,138 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
                 </div>
 
                 <div className="px-6 py-5 min-h-[280px]">
-                    {step === 0 && (
+                    {stepLabel === 'Method' && (
+                        <div className="space-y-3">
+                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                                Accounts can sync through Playwright automation or a Google Sheet.
+                            </p>
+                            {WIZARD_SOURCE_KINDS.map((kind) => {
+                                const selected = sourceKind === kind.id
+                                const Icon = kind.id === 'playwright' ? Bot : FileSpreadsheet
+                                return (
+                                    <button
+                                        key={kind.id}
+                                        type="button"
+                                        onClick={() => handleSourceKindChange(kind.id)}
+                                        className={`w-full text-left rounded-xl border p-4 transition-colors ${
+                                            selected
+                                                ? 'border-teal-500 bg-teal-50/80 dark:bg-teal-900/20 dark:border-teal-400'
+                                                : 'border-gray-200 dark:border-gray-600 hover:border-teal-300 dark:hover:border-teal-600'
+                                        }`}
+                                    >
+                                        <span className="flex items-start gap-3">
+                                            <Icon className="w-5 h-5 mt-0.5 shrink-0 text-teal-700 dark:text-teal-300" />
+                                            <span className="min-w-0 flex-1">
+                                                <span className="block font-semibold text-gray-900 dark:text-white">
+                                                    {kind.label}
+                                                </span>
+                                                <span className="block text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                                                    {kind.description}
+                                                </span>
+                                            </span>
+                                        </span>
+                                    </button>
+                                )
+                            })}
+                        </div>
+                    )}
+
+                    {stepLabel === 'Details' && (
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    Account name
+                                </label>
+                                <input
+                                    value={sheetsName}
+                                    onChange={(e) => setSheetsName(e.target.value)}
+                                    placeholder="e.g. USD brokerage"
+                                    className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                    autoFocus
+                                />
+                            </div>
+                            <div>
+                                <label
+                                    htmlFor="wizard-sheets-currency"
+                                    className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                                >
+                                    Currency
+                                </label>
+                                <select
+                                    id="wizard-sheets-currency"
+                                    value={sheetsCurrency}
+                                    onChange={(e) => setSheetsCurrency(e.target.value)}
+                                    className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                >
+                                    <option value="" disabled>
+                                        Select currency
+                                    </option>
+                                    {PORTFOLIO_CURRENCIES.map((code) => (
+                                        <option key={code} value={code}>
+                                            {code}
+                                        </option>
+                                    ))}
+                                </select>
+                                <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                                    A Google Sheet tab is created for this account when you save.
+                                </p>
+                            </div>
+                            <label className="flex items-start gap-3 text-sm text-gray-700 dark:text-gray-300 cursor-pointer select-none">
+                                <input
+                                    type="checkbox"
+                                    className="mt-0.5 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                                    checked={sheetsTrackAllocation}
+                                    onChange={(e) => setSheetsTrackAllocation(e.target.checked)}
+                                />
+                                <span>
+                                    <span className="font-medium text-gray-900 dark:text-white">
+                                        Track target allocation
+                                    </span>
+                                    <span className="block text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                                        Show target weights and rebalance helpers on this account.
+                                        You can change this later.
+                                    </span>
+                                </span>
+                            </label>
+                        </div>
+                    )}
+
+                    {stepLabel === 'Platform' && (
+                        <div className="space-y-3">
+                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                                Select the broker or platform to connect. More options can be added
+                                later.
+                            </p>
+                            {playwrightAdapters.map((adapter) => {
+                                const selected = platformId === adapter.id
+                                return (
+                                    <button
+                                        key={adapter.id}
+                                        type="button"
+                                        onClick={() => {
+                                            setPlatformId(adapter.id)
+                                            invalidateConnection()
+                                            setError('')
+                                        }}
+                                        className={`w-full text-left rounded-xl border p-4 transition-colors ${
+                                            selected
+                                                ? 'border-teal-500 bg-teal-50/80 dark:bg-teal-900/20 dark:border-teal-400'
+                                                : 'border-gray-200 dark:border-gray-600 hover:border-teal-300 dark:hover:border-teal-600'
+                                        }`}
+                                    >
+                                        <span className="block font-semibold text-gray-900 dark:text-white">
+                                            {adapter.label}
+                                        </span>
+                                        <span className="block text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                                            {adapter.description}
+                                        </span>
+                                    </button>
+                                )
+                            })}
+                        </div>
+                    )}
+
+                    {stepLabel === 'Connect' && (
                         <div className="space-y-4">
                             {loadingLogins ? (
                                 <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
@@ -495,7 +725,7 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
                         </div>
                     )}
 
-                    {step === 1 && (
+                    {stepLabel === 'Account' && (
                         <div className="space-y-3">
                             <p className="text-sm text-gray-500 dark:text-gray-400">
                                 Select the Sygnia account to connect. Already-linked accounts are
@@ -538,7 +768,7 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
                         </div>
                     )}
 
-                    {step === 2 && (
+                    {stepLabel === 'Name' && (
                         <div className="space-y-4">
                             {selectedAccount && (
                                 <dl className="rounded-xl border border-gray-200 dark:border-gray-600 px-4 py-3 text-sm space-y-2">
@@ -629,11 +859,7 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
                         <button
                             type="button"
                             onClick={goNext}
-                            disabled={
-                                testingConnection ||
-                                (step === 0 && !canContinueFromConnect) ||
-                                (step === 1 && !canContinueFromAccount)
-                            }
+                            disabled={continueDisabled}
                             className="px-5 py-2 rounded-lg bg-teal-600 text-white hover:bg-teal-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             Continue

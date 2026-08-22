@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Navigate, useParams } from 'react-router-dom'
+import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import axios from 'axios'
+import { useInvestmentsV2Optional } from '../investments-v2/InvestmentsV2Provider'
+import { sheetsAccountId } from '../investments-v2/sheetsAccounts'
 import TFSAPortfolio from './TFSAPortfolio'
 
 export default function InvestmentPortfolioPage({
@@ -8,6 +10,8 @@ export default function InvestmentPortfolioPage({
     notFoundTo = '/investments',
 }) {
     const { portfolioSlug } = useParams()
+    const navigate = useNavigate()
+    const investmentsV2 = useInvestmentsV2Optional()
     const [loading, setLoading] = useState(true)
     const [portfolio, setPortfolio] = useState(null)
     const [notFound, setNotFound] = useState(false)
@@ -52,6 +56,13 @@ export default function InvestmentPortfolioPage({
             isTfsa={portfolio.is_default_tfsa}
             showTargetAllocation={showTargetAllocation}
             hubBackLink={hubBackLink}
+            onPortfolioDeleted={async () => {
+                if (investmentsV2 && portfolio?.id != null) {
+                    investmentsV2.removeAccount(sheetsAccountId(portfolio.id))
+                    await investmentsV2.refreshAccounts()
+                }
+                navigate(hubBackLink?.to || notFoundTo)
+            }}
             onPortfolioMetaUpdated={(data) =>
                 setPortfolio((p) =>
                     p && data.id === p.id

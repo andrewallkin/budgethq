@@ -3,9 +3,6 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Plus, Wallet, Loader2 } from 'lucide-react'
 import BlurredValue from '../../components/BlurredValue'
 import CreateAccountWizard from '../../components/investments-v2/CreateAccountWizard'
-import DeleteSygniaAccountButton from '../../components/investments-v2/DeleteSygniaAccountButton'
-import SygniaManualSyncButton from '../../components/investments-v2/SygniaManualSyncButton'
-import SygniaSyncStatusBadge from '../../components/investments-v2/SygniaSyncStatusBadge'
 import { useInvestmentsV2 } from '../../investments-v2/InvestmentsV2Provider'
 import {
     productTypeLabel,
@@ -16,7 +13,7 @@ import {
 import { formatCurrency, formatDateSafe } from '../../utils/numberFormatting'
 
 export default function InvestmentsV2Landing() {
-    const { accounts, totalHoldings, fxNote, holdingsOmitted, loading, error, refreshAccounts } =
+    const { accounts, totalHoldings, fxNote, holdingsOmitted, loading, error } =
         useInvestmentsV2()
     const [wizardOpen, setWizardOpen] = useState(false)
     const navigate = useNavigate()
@@ -147,27 +144,6 @@ export default function InvestmentsV2Landing() {
                                             </>
                                         )}
                                     </div>
-                                    {!isSheets && (
-                                        <div className="flex flex-col items-end gap-1.5 shrink-0">
-                                            <SygniaSyncStatusBadge
-                                                status={account.lastSyncStatus}
-                                                error={account.lastSyncError}
-                                                compact
-                                            />
-                                            <SygniaManualSyncButton
-                                                accountId={account.id}
-                                                compact
-                                                onSynced={async () => {
-                                                    await refreshAccounts()
-                                                }}
-                                            />
-                                            <DeleteSygniaAccountButton
-                                                accountId={account.id}
-                                                accountName={account.name}
-                                                compact
-                                            />
-                                        </div>
-                                    )}
                                 </div>
                                 <div className="mt-4 flex items-baseline justify-between gap-2">
                                     <BlurredValue>
@@ -200,7 +176,9 @@ export default function InvestmentsV2Landing() {
                 onClose={() => setWizardOpen(false)}
                 onCreated={(account) => {
                     setWizardOpen(false)
-                    if (account?.id != null) {
+                    if (account?.sourceId === SOURCE_IDS.GOOGLE_SHEETS && account?.slug) {
+                        navigate(`/investments-v2/sheets/${account.slug}`)
+                    } else if (account?.id != null) {
                         navigate(`/investments-v2/${account.id}`)
                     }
                 }}

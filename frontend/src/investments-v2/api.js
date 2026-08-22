@@ -36,6 +36,22 @@ export async function listInvestmentPortfolios() {
     }
 }
 
+export async function createInvestmentPortfolio({ name, currencyCode, targetAllocationEnabled }) {
+    const { data } = await axios.post('/api/investments', {
+        name,
+        currency_code: currencyCode,
+        target_allocation_enabled: targetAllocationEnabled,
+    })
+    return mapInvestmentPortfolios([data])[0]
+}
+
+export async function deleteInvestmentPortfolio(numericId) {
+    const { data } = await axios.delete(`/api/investments/${numericId}`, {
+        params: { confirm: true },
+    })
+    return data
+}
+
 export async function suggestSygniaProductType({ accountTypeName, accountTypeCode }) {
     const { data } = await axios.get(`${BASE}/sygnia/product-type-suggestion`, {
         params: {
@@ -51,11 +67,6 @@ export async function updateSygniaAccount(accountId, { name, product_type }) {
     if (name !== undefined) body.name = name
     if (product_type !== undefined) body.product_type = product_type
     const { data } = await axios.patch(`${BASE}/sygnia/accounts/${accountId}`, body)
-    return data
-}
-
-export async function syncSygniaAccount(accountId) {
-    const { data } = await axios.post(`${BASE}/sygnia/accounts/${accountId}/sync`)
     return data
 }
 

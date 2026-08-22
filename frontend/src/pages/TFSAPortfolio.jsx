@@ -29,6 +29,7 @@ export default function TFSAPortfolio({
     showTargetAllocation = true,
     currencyCode = 'ZAR',
     onPortfolioMetaUpdated,
+    onPortfolioDeleted,
     hubBackLink = null,
 }) {
     const { blurSensitiveValues } = useAuth()
@@ -46,6 +47,9 @@ export default function TFSAPortfolio({
     const [showBuySellModal, setShowBuySellModal] = useState(false)
     const [showEditModal, setShowEditModal] = useState(false)
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+    const [showDeletePortfolioConfirm, setShowDeletePortfolioConfirm] = useState(false)
+    const [deletingPortfolio, setDeletingPortfolio] = useState(false)
+    const [deletePortfolioError, setDeletePortfolioError] = useState('')
     const [showDetailsModal, setShowDetailsModal] = useState(false)
     const [selectedHolding, setSelectedHolding] = useState(null)
     const [holdingToDelete, setHoldingToDelete] = useState(null)
@@ -392,6 +396,23 @@ export default function TFSAPortfolio({
         fn?.()
         if (!limitProceedRef.current) {
             setShowLimitConfirm(false)
+        }
+    }
+
+    const handleDeletePortfolio = async () => {
+        if (!portfolioId || isTfsa || deletingPortfolio) return
+        setDeletePortfolioError('')
+        setDeletingPortfolio(true)
+        try {
+            await axios.delete(`/api/investments/${portfolioId}`, { params: { confirm: true } })
+            setShowDeletePortfolioConfirm(false)
+            await onPortfolioDeleted?.()
+        } catch (err) {
+            setDeletePortfolioError(
+                err.response?.data?.detail || 'Failed to delete account',
+            )
+        } finally {
+            setDeletingPortfolio(false)
         }
     }
 
@@ -1388,6 +1409,58 @@ export default function TFSAPortfolio({
                 }}
                 holding={selectedHolding}
                 onSuccess={fetchHoldings}
+            />
+
+            {!isTfsa && portfolioId && (
+                <section className="rounded-xl border border-red-200 dark:border-red-900/60 bg-white dark:bg-gray-800 p-4 sm:p-5">
+                    <h2 className="text-sm font-semibold text-gray-900 dark:text-white">
+                        Delete account
+                    </h2>
+                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 max-w-xl">
+                        Remove this Google Sheets account from BudgetHQ. Delete is only allowed
+                        when the account has no holdings.
+                    </p>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setDeletePortfolioError('')
+                            setShowDeletePortfolioConfirm(true)
+                        }}
+                        className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 font-medium"
+                    >
+                        <Trash2 className="w-4 h-4 shrink-0" aria-hidden />
+                        Delete account
+                    </button>
+                </section>
+            )}
+
+            <ConfirmModal
+                isOpen={showDeletePortfolioConfirm}
+                onClose={() => {
+                    if (deletingPortfolio) return
+                    setShowDeletePortfolioConfirm(false)
+                    setDeletePortfolioError('')
+                }}
+                onConfirm={handleDeletePortfolio}
+                closeOnConfirm={false}
+                title="Delete account"
+                message={
+                    <>
+                        Delete &ldquo;{portfolioName}&rdquo;? This cannot be undone.
+                        {deletePortfolioError && (
+                            <span className="block mt-3 text-sm text-red-600 dark:text-red-400">
+                                {deletePortfolioError}
+                            </span>
+                        )}
+                    </>
+                }
+                details={[
+                    'This action cannot be undone.',
+                    'Delete is only allowed when the account has no holdings.',
+                ]}
+                confirmText={deletingPortfolio ? 'Deleting…' : 'Delete'}
+                cancelText="Cancel"
+                variant="danger"
             />
 
             <ConfirmModal

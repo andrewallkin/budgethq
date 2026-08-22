@@ -36,6 +36,7 @@ def _normalize_currency_code(code: str | None) -> str:
 class InvestmentCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     currency_code: str | None = Field(default=None, max_length=3)
+    target_allocation_enabled: bool | None = Field(default=None)
 
 
 class InvestmentUpdateRequest(BaseModel):
@@ -274,6 +275,9 @@ async def create_investment(
 
     cc = _normalize_currency_code(request.currency_code)
 
+    track_allocation = (
+        True if request.target_allocation_enabled is None else bool(request.target_allocation_enabled)
+    )
     portfolio = models.InvestmentPortfolio(
         user_id=current_user.id,
         name=request.name.strip(),
@@ -281,6 +285,7 @@ async def create_investment(
         is_default_tfsa=False,
         is_active=True,
         currency_code=cc,
+        target_allocation_enabled=track_allocation,
     )
     db.add(portfolio)
     db.flush()

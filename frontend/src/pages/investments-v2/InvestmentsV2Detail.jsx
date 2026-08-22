@@ -3,8 +3,6 @@ import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Calculator, Loader2, ShieldCheck } from 'lucide-react'
 import SygniaDetailView from '../../components/investments-v2/SygniaDetailView'
 import DeleteSygniaAccountButton from '../../components/investments-v2/DeleteSygniaAccountButton'
-import SygniaManualSyncButton from '../../components/investments-v2/SygniaManualSyncButton'
-import SygniaSyncStatusBadge from '../../components/investments-v2/SygniaSyncStatusBadge'
 import { useInvestmentsV2 } from '../../investments-v2/InvestmentsV2Provider'
 import { SOURCE_IDS, productTypeLabel, stripAccountCodeFromName, labelsMatch } from '../../investments-v2/types'
 import { formatDateSafe, formatDateTimeSafe } from '../../utils/numberFormatting'
@@ -12,7 +10,7 @@ import { formatDateSafe, formatDateTimeSafe } from '../../utils/numberFormatting
 export default function InvestmentsV2Detail() {
     const { accountId } = useParams()
     const navigate = useNavigate()
-    const { getAccount, fetchAccountDetail, refreshAccounts, loading: accountsLoading } =
+    const { getAccount, fetchAccountDetail, loading: accountsLoading } =
         useInvestmentsV2()
     const account = getAccount(accountId)
     const [detail, setDetail] = useState(null)
@@ -177,24 +175,6 @@ export default function InvestmentsV2Detail() {
                             </p>
                         )}
                     </div>
-                    <div className="flex flex-wrap items-center gap-2 shrink-0">
-                        <SygniaSyncStatusBadge
-                            status={meta.last_sync_status || account.lastSyncStatus}
-                            error={meta.last_sync_error || account.lastSyncError}
-                        />
-                        <SygniaManualSyncButton
-                            accountId={account.id}
-                            onSynced={async (data) => {
-                                setDetail(data)
-                                await refreshAccounts()
-                            }}
-                        />
-                        <DeleteSygniaAccountButton
-                            accountId={account.id}
-                            accountName={meta.name}
-                            onDeleted={() => navigate('/investments-v2')}
-                        />
-                    </div>
                 </div>
             </div>
 
@@ -214,6 +194,21 @@ export default function InvestmentsV2Detail() {
             {!detailLoading && !detailError && detail && (
                 <SygniaDetailView accountId={account.id} detail={detail} />
             )}
+
+            <section className="rounded-2xl border border-red-200 dark:border-red-900/60 bg-white dark:bg-gray-800 p-5">
+                <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Remove account</h2>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 max-w-xl">
+                    Disconnect this account from BudgetHQ. Synced holdings and history are deleted
+                    here; the account at the broker is not closed.
+                </p>
+                <div className="mt-4">
+                    <DeleteSygniaAccountButton
+                        accountId={account.id}
+                        accountName={meta.name}
+                        onDeleted={() => navigate('/investments-v2')}
+                    />
+                </div>
+            </section>
         </div>
     )
 }

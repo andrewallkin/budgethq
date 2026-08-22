@@ -1,6 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import {
+    createInvestmentPortfolio,
     createSygniaAccount as createSygniaAccountApi,
+    deleteInvestmentPortfolio,
     deleteSygniaAccount as deleteSygniaAccountApi,
     getSygniaAccount,
     listInvestmentPortfolios,
@@ -84,6 +86,10 @@ export function InvestmentsV2Provider({ children }) {
         [accounts],
     )
 
+    const removeAccount = useCallback((accountId) => {
+        setAccounts((prev) => prev.filter((a) => !accountIdsMatch(a.id, accountId)))
+    }, [])
+
     const getDetail = useCallback((account) => {
         if (!account) return null
         if (account.sourceId === SOURCE_IDS.SYGNIA_PLAYWRIGHT) {
@@ -112,6 +118,19 @@ export function InvestmentsV2Provider({ children }) {
         [refreshAccounts],
     )
 
+    const createSheetsAccount = useCallback(
+        async ({ name, currencyCode, targetAllocationEnabled }) => {
+            const account = await createInvestmentPortfolio({
+                name,
+                currencyCode,
+                targetAllocationEnabled,
+            })
+            await refreshAccounts()
+            return account
+        },
+        [refreshAccounts],
+    )
+
     const updateAccount = useCallback(
         async (accountId, { name, product_type }) => {
             const account = getAccount(accountId)
@@ -135,12 +154,20 @@ export function InvestmentsV2Provider({ children }) {
                 throw new Error('Account not found')
             }
             if (account.sourceId === SOURCE_IDS.GOOGLE_SHEETS) {
-                throw new Error('Google Sheets accounts are not available yet')
+                if (account.isDefaultTfsa) {
+                    throw new Error('TFSA portfolio cannot be deleted')
+                }
+                if (account.numericId == null) {
+                    throw new Error('Account not found')
+                }
+                await deleteInvestmentPortfolio(account.numericId)
+            } else {
+                await deleteSygniaAccountApi(accountId)
             }
-            await deleteSygniaAccountApi(accountId)
+            removeAccount(accountId)
             await refreshAccounts()
         },
-        [getAccount, refreshAccounts],
+        [getAccount, refreshAccounts, removeAccount],
     )
 
     /** @deprecated Task 7 — use createSygniaAccount with account_code + credentials. */
@@ -166,8 +193,10 @@ export function InvestmentsV2Provider({ children }) {
             loading,
             error,
             refreshAccounts,
+            removeAccount,
             createAccount,
             createSygniaAccount,
+            createSheetsAccount,
             updateAccount,
             deleteAccount,
             getAccount,
@@ -183,8 +212,10 @@ export function InvestmentsV2Provider({ children }) {
         loading,
         error,
         refreshAccounts,
+        removeAccount,
         createAccount,
         createSygniaAccount,
+        createSheetsAccount,
         updateAccount,
         deleteAccount,
         getAccount,
@@ -205,4 +236,8 @@ export function useInvestmentsV2() {
         throw new Error('useInvestmentsV2 must be used within InvestmentsV2Provider')
     }
     return ctx
+}
+
+export function useInvestmentsV2Optional() {
+    return useContext(InvestmentsV2Context)
 }
