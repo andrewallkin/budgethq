@@ -6,6 +6,7 @@ import BudgetDashboard from './pages/BudgetDashboard'
 import RATaxCalculator from './pages/RATaxCalculator'
 import RAPerformance from './pages/RAPerformance'
 import EmergencySavings from './pages/EmergencySavings'
+import { SHOW_EMERGENCY_SAVINGS_UI } from './config/featureFlags'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import Settings from './pages/Settings'
@@ -90,7 +91,9 @@ function AppContent() {
         { path: '/budget', label: 'Budget Dashboard', icon: LayoutDashboard },
         { path: '/investments', label: 'Investments', icon: PieChartIcon },
         { path: '/investments-v2', label: 'Investments 2.0', icon: Sparkles },
-        { path: '/emergency-savings', label: 'Emergency Savings', icon: Shield },
+        ...(SHOW_EMERGENCY_SAVINGS_UI
+            ? [{ path: '/emergency-savings', label: 'Emergency Savings', icon: Shield }]
+            : []),
         ...(showInvestecNav ? [{ path: '/investec', label: 'Investec Banking', icon: Building2 }] : []),
         { path: '/category-guide', label: 'Budget Category Guide', icon: HelpCircle },
         { path: '/settings', label: 'Settings', icon: SettingsIcon },
@@ -266,7 +269,16 @@ function AppContent() {
                             <Route path=":accountId" element={<InvestmentsV2Detail />} />
                         </Route>
                         <Route path="/portfolio" element={<Navigate to="/investments/tfsa" replace />} />
-                        <Route path="/emergency-savings" element={<ProtectedRoute><EmergencySavings /></ProtectedRoute>} />
+                        <Route
+                            path="/emergency-savings"
+                            element={
+                                SHOW_EMERGENCY_SAVINGS_UI ? (
+                                    <ProtectedRoute><EmergencySavings /></ProtectedRoute>
+                                ) : (
+                                    <Navigate to="/" replace />
+                                )
+                            }
+                        />
                         <Route path="/ra" element={<ProtectedRoute><Navigate to="/investments/ra" replace /></ProtectedRoute>} />
                         <Route path="/ra-calculator" element={<ProtectedRoute><Navigate to="/investments/ra/calculator" replace /></ProtectedRoute>} />
                         <Route path="/investec" element={<ProtectedRoute><InvestecLanding /></ProtectedRoute>} />
@@ -466,7 +478,7 @@ function HomePage() {
                     </div>
                 </div>
 
-                {/* Emergency Savings Card */}
+                {SHOW_EMERGENCY_SAVINGS_UI && (
                 <div className="flex flex-col h-full bg-gradient-to-br from-amber-50 to-amber-100 dark:from-amber-900/20 dark:to-amber-800/20 rounded-2xl shadow-lg border border-amber-200 dark:border-amber-800 overflow-hidden hover:shadow-xl transition-all">
                     <div className="p-4 sm:p-6 lg:p-8 flex-1 flex flex-col">
                         <div className="flex items-center mb-6">
@@ -520,6 +532,7 @@ function HomePage() {
                         </Link>
                     </div>
                 </div>
+                )}
 
                 {showRaUnderInvestments && (
                     <>

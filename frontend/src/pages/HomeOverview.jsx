@@ -5,6 +5,7 @@ import { ArrowUpRight, Landmark, LayoutDashboard, PieChart as PieChartIcon, Shie
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts'
 import BlurredValue from '../components/BlurredValue'
 import { computeEffectiveEmergencyFund, getEmergencyFundAccount } from '../utils/emergencyFundSource'
+import { SHOW_EMERGENCY_SAVINGS_UI } from '../config/featureFlags'
 import { formatCurrency, formatDateSafe } from '../utils/numberFormatting'
 
 const BUDGET_COLORS = {
@@ -273,14 +274,16 @@ export default function HomeOverview() {
             icon: PieChartIcon,
             accent: 'emerald',
         },
-        {
-            title: 'Emergency',
-            value: overview.emergency.currentFund,
-            meta: overview.emergency.progress == null ? 'No target set' : `${Math.round(overview.emergency.progress)}% funded`,
-            to: '/emergency-savings',
-            icon: Shield,
-            accent: 'amber',
-        },
+        ...(SHOW_EMERGENCY_SAVINGS_UI
+            ? [{
+                title: 'Emergency',
+                value: overview.emergency.currentFund,
+                meta: overview.emergency.progress == null ? 'No target set' : `${Math.round(overview.emergency.progress)}% funded`,
+                to: '/emergency-savings',
+                icon: Shield,
+                accent: 'amber',
+            }]
+            : []),
         {
             title: 'Accounts',
             value: overview.accounts.totalBalance,
@@ -457,6 +460,7 @@ export default function HomeOverview() {
                     )}
                 </section>
 
+                {SHOW_EMERGENCY_SAVINGS_UI && (
                 <section className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 sm:p-6 shadow-sm">
                     <div className="flex items-center justify-between gap-4 mb-6">
                         <div>
@@ -501,6 +505,7 @@ export default function HomeOverview() {
                         </div>
                     </div>
                 </section>
+                )}
             </div>
 
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 sm:gap-6">
