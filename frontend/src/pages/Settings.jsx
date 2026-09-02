@@ -369,8 +369,15 @@ export default function Settings() {
         }
     }
 
-    const externalInvestmentsApiUrl = 'https://<your-domain>/api/external/investments/summary'
-    const externalApiCurlExample = `curl -s ${externalInvestmentsApiUrl} \\\n  -H "Authorization: Bearer ${generatedExternalApiKey || 'bhq_YOUR_KEY'}"`
+    const externalInvestmentsApiBase = 'https://<your-domain>/api/external/investments'
+    const externalApiKeyPlaceholder = generatedExternalApiKey || 'bhq_YOUR_KEY'
+    const externalApiCurlExample = `# Summary (sleeve totals)
+curl -s ${externalInvestmentsApiBase}/summary \\
+  -H "Authorization: Bearer ${externalApiKeyPlaceholder}"
+
+# Composition (holdings + cashflows since your last note)
+curl -s "${externalInvestmentsApiBase}/composition?since=2026-09-01T08:00:00+02:00" \\
+  -H "Authorization: Bearer ${externalApiKeyPlaceholder}"`
 
     const handleUsernameChange = async (e) => {
         e.preventDefault()
@@ -556,17 +563,27 @@ export default function Settings() {
 
                 {/* External investment API key */}
                 <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
-                    <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center justify-between mb-1 gap-3">
                         <h2 className="text-base font-semibold text-gray-900 dark:text-white">Investment API Key</h2>
-                        {hasExternalApiKey && (
-                            <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/30 px-2 py-1 rounded-full">
-                                <CheckCircle className="w-3 h-3" /> Active
-                            </span>
-                        )}
+                        <div className="flex items-center gap-2 shrink-0">
+                            <a
+                                href="/api/external/investments/docs"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+                            >
+                                View API docs
+                            </a>
+                            {hasExternalApiKey && (
+                                <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/30 px-2 py-1 rounded-full">
+                                    <CheckCircle className="w-3 h-3" /> Active
+                                </span>
+                            )}
+                        </div>
                     </div>
                     <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                        Create a read-only key so external tools (e.g. Grok) can fetch the latest value of your
-                        investment accounts — TFSA, US portfolios, and RA if enabled under Investments.
+                        Create a read-only key so external tools (e.g. Grok) can fetch investment totals and
+                        per-sleeve composition — TFSA, US portfolios, and RA if enabled under Investments.
                     </p>
                     <div className="mb-4">
                         <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Example request</p>

@@ -1,14 +1,30 @@
 from datetime import datetime, timezone
+from pathlib import Path
+from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 
 from .. import auth, database, models
+from ..external_composition_service import build_external_composition
 from ..fx_service import aggregate_portfolios_base, get_fx_rates_cached
 from ..portfolio_service import ensure_default_tfsa_portfolio
 from .investments import build_investments_summary
 
 router = APIRouter(prefix="/external", tags=["external"])
+
+_EXTERNAL_INVESTMENTS_DOCS_CANDIDATES = (
+    Path(__file__).resolve().parents[2] / "docs" / "external-investments-api.md",
+    Path(__file__).resolve().parents[3] / "docs" / "external-investments-api.md",
+)
+
+
+def _external_investments_docs_path() -> Path:
+    for path in _EXTERNAL_INVESTMENTS_DOCS_CANDIDATES:
+        if path.is_file():
+            return path
+    raise HTTPException(status_code=404, detail="External investments API documentation not found")
 
 
 def _build_external_investments_response(summary: dict) -> dict:
@@ -58,3 +74,29 @@ async def get_external_investments_summary(
     ensure_default_tfsa_portfolio(db, current_user.id)
     summary = build_investments_summary(db, current_user)
     return _build_external_investments_response(summary)
+
+
+@router.get("/investments/composition")
+async def get_external_investments_composition(
+    since: Optional[str] = Query(
+        default=None,
+        description="ISO datetime for cashflow deltas (e.g. last 08:00 note). Defaults to previous daily EOD.",
+    ),
+    current_user: models.User = Depends(auth.get_user_from_external_api_key),
+    db: Session = Depends(database.get_db),
+):
+    """
+    Read-only per-sleeve holdings and cashflows for external integrations (e.g. Grok).
+
+    Authenticate with: Authorization: Bearer bhq_...
+    """
+    return build_external_composition(db, current_user, since_param=since)
+
+
+@router.get("/investments/docs", response_class=PlainTextResponse)
+async def get_external_investments_docs():
+    """Markdown documentation for the external investments API."""
+    return PlainTextResponse(
+        _external_investments_docs_path().read_text(encoding="utf-8"),
+        media_type="text/markdown; charset=utf-8",
+    )

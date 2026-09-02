@@ -234,3 +234,131 @@ class TestExternalInvestmentsSummaryEndpoint:
         client = _make_external_client(MagicMock())
         response = client.get("/api/external/investments/summary")
         assert response.status_code == 401
+
+
+class TestExternalInvestmentsCompositionEndpoint:
+    def test_composition_endpoint_returns_accounts(self):
+        user = MagicMock()
+        user.id = 1
+        user.show_ra_under_investments = True
+
+        composition = {
+            "as_of": "2026-09-02T14:00:00",
+            "base_currency": "ZAR",
+            "since": "2026-09-01T23:59:59",
+            "since_source": "parameter",
+            "fx": {
+                "base_currency": "ZAR",
+                "rates": {"USD": 18.0},
+                "as_of": "2026-09-02T12:00:00+00:00",
+                "configured": True,
+            },
+            "accounts": [
+                {
+                    "name": "TFSA",
+                    "slug": "tfsa",
+                    "currency": "ZAR",
+                    "source": "sheets",
+                    "composition_available": True,
+                    "value": 500.0,
+                    "value_base": 500.0,
+                    "as_of": "2026-09-02T14:00:00",
+                    "is_retirement_annuity": False,
+                    "holdings": [
+                        {
+                            "ticker": "JSE:STX40",
+                            "name": "Satrix Top 40",
+                            "instrument_type": "etf",
+                            "region": "South Africa",
+                            "shares": 10.0,
+                            "price": 50.0,
+                            "price_updated_at": "2026-09-02T14:00:00",
+                            "value": 500.0,
+                            "value_base": 500.0,
+                            "weight_actual": 100.0,
+                            "weight_target": 100.0,
+                            "weight_drift": 0.0,
+                            "cost_basis": 450.0,
+                            "unrealized_gain": 50.0,
+                        }
+                    ],
+                    "cashflows": {
+                        "deposits_this_fy": 36000.0,
+                        "remaining_fy_allowance": 10000.0,
+                        "deposits_since": 0.0,
+                    },
+                },
+                {
+                    "name": "US Account",
+                    "slug": "usd-account",
+                    "currency": "USD",
+                    "source": "sheets",
+                    "composition_available": True,
+                    "value": 100.0,
+                    "value_base": 1800.0,
+                    "as_of": "2026-09-02T14:00:00",
+                    "is_retirement_annuity": False,
+                    "holdings": [],
+                    "cashflows": {
+                        "buys_since": 50.0,
+                        "sells_since": 0.0,
+                        "net_invested_since": 50.0,
+                    },
+                },
+                {
+                    "name": "Retirement Annuity",
+                    "slug": "ra",
+                    "currency": "ZAR",
+                    "source": "ra_manual",
+                    "composition_available": False,
+                    "value": 200000.0,
+                    "value_base": 200000.0,
+                    "as_of": "2026-09-01",
+                    "is_retirement_annuity": True,
+                    "cashflows": {
+                        "contributions_this_fy": 5000.0,
+                        "contributions_since": 2000.0,
+                        "cumulative_contributions": 150000.0,
+                    },
+                },
+            ],
+        }
+
+        with patch("app.routers.external.ensure_default_tfsa_portfolio"), patch(
+            "app.routers.external.build_external_composition", return_value=composition
+        ) as build_mock:
+            client = _make_external_client(MagicMock(), user=user)
+            response = client.get(
+                "/api/external/investments/composition",
+                params={"since": "2026-09-01T08:00:00+02:00"},
+            )
+
+        assert response.status_code == 200
+        build_mock.assert_called_once()
+        assert build_mock.call_args.kwargs["since_param"] == "2026-09-01T08:00:00+02:00"
+        body = response.json()
+        assert body["since_source"] == "parameter"
+        assert body["fx"]["rates"]["USD"] == 18.0
+        assert body["accounts"][0]["holdings"][0]["ticker"] == "JSE:STX40"
+        assert "weight_target" in body["accounts"][0]["holdings"][0]
+        assert "weight_target" not in body["accounts"][1]["holdings"]
+        assert body["accounts"][2]["composition_available"] is False
+        assert "holdings" not in body["accounts"][2]
+
+    def test_composition_endpoint_requires_auth_when_not_overridden(self):
+        client = _make_external_client(MagicMock())
+        response = client.get("/api/external/investments/composition")
+        assert response.status_code == 401
+
+
+class TestExternalInvestmentsDocsEndpoint:
+    def test_docs_endpoint_returns_markdown(self):
+        client = _make_external_client(MagicMock())
+        with patch(
+            "app.routers.external._external_investments_docs_path",
+            return_value=Path(__file__).resolve().parent.parent / "docs" / "external-investments-api.md",
+        ):
+            response = client.get("/api/external/investments/docs")
+        assert response.status_code == 200
+        assert "text/markdown" in response.headers.get("content-type", "")
+        assert "# External Investments API" in response.text
