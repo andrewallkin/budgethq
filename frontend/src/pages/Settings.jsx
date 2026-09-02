@@ -39,6 +39,18 @@ export default function Settings() {
     const [apiKeySuccess, setApiKeySuccess] = useAutoClearingMessage(8000)
     const [apiKeyLoading, setApiKeyLoading] = useState(false)
 
+    // BudgetHQ external API key (for Grok / integrations)
+    const [hasExternalApiKey, setHasExternalApiKey] = useState(false)
+    const [externalApiKeyPrefix, setExternalApiKeyPrefix] = useState('')
+    const [externalApiKeyCreatedAt, setExternalApiKeyCreatedAt] = useState('')
+    const [generatedExternalApiKey, setGeneratedExternalApiKey] = useState('')
+    const [externalApiKeyError, setExternalApiKeyError] = useState('')
+    const [externalApiKeySuccess, setExternalApiKeySuccess] = useAutoClearingMessage(8000)
+    const [externalApiKeyLoading, setExternalApiKeyLoading] = useState(false)
+    const [showRevokeExternalApiKeyConfirm, setShowRevokeExternalApiKeyConfirm] = useState(false)
+    const [showRegenerateExternalApiKeyConfirm, setShowRegenerateExternalApiKeyConfirm] = useState(false)
+    const [externalApiKeyCopied, setExternalApiKeyCopied] = useState(false)
+
     // Investec settings state
     const [connectionStatus, setConnectionStatus] = useState(null)
     const [credentials, setCredentials] = useState({
@@ -87,6 +99,20 @@ export default function Settings() {
             }
         }
         checkApiKey()
+    }, [])
+
+    useEffect(() => {
+        const fetchExternalApiKeyStatus = async () => {
+            try {
+                const response = await axios.get('/api/auth/user/settings/external-api-key')
+                setHasExternalApiKey(response.data.has_key)
+                setExternalApiKeyPrefix(response.data.prefix || '')
+                setExternalApiKeyCreatedAt(response.data.created_at || '')
+            } catch (err) {
+                console.error('Failed to check external API key status', err)
+            }
+        }
+        fetchExternalApiKeyStatus()
     }, [])
 
     const fetchConnectionStatus = async () => {
@@ -292,6 +318,60 @@ export default function Settings() {
         }
     }
 
+    const doGenerateExternalApiKey = async () => {
+        setExternalApiKeyError('')
+        setExternalApiKeySuccess('')
+        setGeneratedExternalApiKey('')
+        setExternalApiKeyLoading(true)
+
+        try {
+            const response = await axios.post('/api/auth/user/settings/external-api-key')
+            setGeneratedExternalApiKey(response.data.api_key)
+            setHasExternalApiKey(true)
+            setExternalApiKeyPrefix(response.data.prefix || '')
+            setExternalApiKeyCreatedAt(response.data.created_at || '')
+            setExternalApiKeySuccess(response.data.message || 'API key generated. Copy it now.')
+        } catch (err) {
+            setExternalApiKeyError(err.response?.data?.detail || 'Failed to generate API key')
+        } finally {
+            setExternalApiKeyLoading(false)
+        }
+    }
+
+    const doRevokeExternalApiKey = async () => {
+        setExternalApiKeyError('')
+        setExternalApiKeySuccess('')
+        setExternalApiKeyLoading(true)
+
+        try {
+            await axios.delete('/api/auth/user/settings/external-api-key')
+            setHasExternalApiKey(false)
+            setExternalApiKeyPrefix('')
+            setExternalApiKeyCreatedAt('')
+            setGeneratedExternalApiKey('')
+            setExternalApiKeyCopied(false)
+            setExternalApiKeySuccess('External API key revoked successfully')
+        } catch (err) {
+            setExternalApiKeyError(err.response?.data?.detail || 'Failed to revoke API key')
+        } finally {
+            setExternalApiKeyLoading(false)
+        }
+    }
+
+    const handleCopyExternalApiKey = async () => {
+        if (!generatedExternalApiKey) return
+        try {
+            await navigator.clipboard.writeText(generatedExternalApiKey)
+            setExternalApiKeyCopied(true)
+            setTimeout(() => setExternalApiKeyCopied(false), 2000)
+        } catch (err) {
+            setExternalApiKeyError('Failed to copy to clipboard')
+        }
+    }
+
+    const externalInvestmentsApiUrl = 'https://<your-domain>/api/external/investments/summary'
+    const externalApiCurlExample = `curl -s ${externalInvestmentsApiUrl} \\\n  -H "Authorization: Bearer ${generatedExternalApiKey || 'bhq_YOUR_KEY'}"`
+
     const handleUsernameChange = async (e) => {
         e.preventDefault()
         setUsernameError('')
@@ -472,6 +552,81 @@ export default function Settings() {
                             )}
                         </div>
                     </form>
+                </div>
+
+                {/* External investment API key */}
+                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
+                    <div className="flex items-center justify-between mb-1">
+                        <h2 className="text-base font-semibold text-gray-900 dark:text-white">Investment API Key</h2>
+                        {hasExternalApiKey && (
+                            <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/30 px-2 py-1 rounded-full">
+                                <CheckCircle className="w-3 h-3" /> Active
+                            </span>
+                        )}
+                    </div>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                        Create a read-only key so external tools (e.g. Grok) can fetch the latest value of your
+                        investment accounts — TFSA, US portfolios, and RA if enabled under Investments.
+                    </p>
+                    <div className="mb-4">
+                        <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Example request</p>
+                        <pre className="text-xs overflow-x-auto text-gray-900 dark:text-gray-100 bg-gray-50 dark:bg-gray-900 p-3 rounded-lg border border-gray-200 dark:border-gray-700 whitespace-pre-wrap break-all">
+                            {externalApiCurlExample}
+                        </pre>
+                    </div>
+                    {externalApiKeyError && (
+                        <div className="mb-3 p-3 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 rounded-lg text-sm">{externalApiKeyError}</div>
+                    )}
+                    {externalApiKeySuccess && (
+                        <div className="mb-3 p-3 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 rounded-lg text-sm">{externalApiKeySuccess}</div>
+                    )}
+                    {generatedExternalApiKey && (
+                        <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                            <p className="text-xs font-medium text-amber-800 dark:text-amber-200 mb-2">Copy this key now — it won&apos;t be shown again</p>
+                            <div className="flex items-start gap-2">
+                                <code className="flex-1 text-xs break-all text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-900 p-2 rounded border border-amber-200 dark:border-amber-800">
+                                    {generatedExternalApiKey}
+                                </code>
+                                <button
+                                    type="button"
+                                    onClick={handleCopyExternalApiKey}
+                                    title={externalApiKeyCopied ? 'Copied!' : 'Copy to clipboard'}
+                                    aria-label={externalApiKeyCopied ? 'Copied to clipboard' : 'Copy API key to clipboard'}
+                                    className="shrink-0 px-2.5 py-2 text-base rounded-lg border border-amber-200 dark:border-amber-800 bg-white dark:bg-gray-900 hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors"
+                                >
+                                    {externalApiKeyCopied ? '✅' : '📋'}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                    {hasExternalApiKey && externalApiKeyPrefix && !generatedExternalApiKey && (
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                            Current key: <span className="font-mono">{externalApiKeyPrefix}</span>
+                            {externalApiKeyCreatedAt && (
+                                <span className="text-gray-400 dark:text-gray-500"> · created {formatDateSafe(externalApiKeyCreatedAt)}</span>
+                            )}
+                        </p>
+                    )}
+                    <div className="flex gap-2">
+                        <button
+                            type="button"
+                            onClick={() => (hasExternalApiKey ? setShowRegenerateExternalApiKeyConfirm(true) : doGenerateExternalApiKey())}
+                            disabled={externalApiKeyLoading}
+                            className="flex-1 py-2 px-4 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                        >
+                            {externalApiKeyLoading ? 'Working...' : hasExternalApiKey ? 'Regenerate Key' : 'Generate Key'}
+                        </button>
+                        {hasExternalApiKey && (
+                            <button
+                                type="button"
+                                onClick={() => setShowRevokeExternalApiKeyConfirm(true)}
+                                disabled={externalApiKeyLoading}
+                                className="py-2 px-4 text-sm font-medium text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 transition-colors"
+                            >
+                                Revoke
+                            </button>
+                        )}
+                    </div>
                 </div>
 
                 {/* RA under Investments */}
@@ -788,6 +943,28 @@ export default function Settings() {
                 confirmText="Remove Key"
                 cancelText="Cancel"
                 variant="danger"
+            />
+
+            <ConfirmModal
+                isOpen={showRevokeExternalApiKeyConfirm}
+                onClose={() => setShowRevokeExternalApiKeyConfirm(false)}
+                onConfirm={doRevokeExternalApiKey}
+                title="Revoke Investment API Key?"
+                message="External integrations using this key will stop working immediately."
+                confirmText="Revoke Key"
+                cancelText="Cancel"
+                variant="danger"
+            />
+
+            <ConfirmModal
+                isOpen={showRegenerateExternalApiKeyConfirm}
+                onClose={() => setShowRegenerateExternalApiKeyConfirm(false)}
+                onConfirm={doGenerateExternalApiKey}
+                title="Regenerate Investment API Key?"
+                message="This will invalidate your current key. Update any external tools (e.g. Grok) with the new key."
+                confirmText="Regenerate"
+                cancelText="Cancel"
+                variant="warning"
             />
 
             <ConfirmModal

@@ -19,6 +19,11 @@ class User(Base):
     has_investec_account = Column(Boolean, default=False, server_default='false')
     show_ra_under_investments = Column(Boolean, default=False, server_default='false')
 
+    # Per-user external API key (hashed; prefix used for lookup)
+    external_api_key_prefix = Column(String(12), nullable=True, index=True)
+    external_api_key_hash = Column(String, nullable=True)
+    external_api_key_created_at = Column(DateTime, nullable=True)
+
     # Emergency fund designation
     emergency_fund_account_id = Column(Integer, ForeignKey("investec_accounts.id"), nullable=True)
 

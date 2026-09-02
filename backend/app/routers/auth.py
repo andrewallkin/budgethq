@@ -4,7 +4,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from .. import models, database, auth
-from ..utils import encrypt_api_key, decrypt_api_key
+from ..utils import encrypt_api_key, decrypt_api_key, get_sast_now
 from ..logging_utils import redact_email
 
 logger = logging.getLogger(__name__)
@@ -27,6 +27,17 @@ class OpenAIKeyRequest(BaseModel):
 
 class OpenAIKeyStatus(BaseModel):
     has_key: bool
+
+class ExternalApiKeyStatus(BaseModel):
+    has_key: bool
+    prefix: str | None = None
+    created_at: str | None = None
+
+class ExternalApiKeyGenerateResponse(BaseModel):
+    api_key: str
+    prefix: str
+    created_at: str
+    message: str
 
 class UsernameChangeRequest(BaseModel):
     username: str
@@ -162,6 +173,56 @@ async def delete_openai_key(
     db.commit()
     logger.info("OpenAI API key deleted", extra={"user_id": current_user.id})
     return {"status": "success", "message": "OpenAI API key deleted successfully"}
+
+
+@router.post("/user/settings/external-api-key", response_model=ExternalApiKeyGenerateResponse)
+async def generate_external_api_key(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db),
+):
+    """Generate a new external API key. Shown once; replaces any existing key."""
+    full_key, lookup_prefix, key_hash = auth.create_external_api_key_material()
+    created_at = get_sast_now()
+    current_user.external_api_key_prefix = lookup_prefix
+    current_user.external_api_key_hash = key_hash
+    current_user.external_api_key_created_at = created_at
+    db.commit()
+    logger.info("External API key generated", extra={"user_id": current_user.id})
+    return {
+        "api_key": full_key,
+        "prefix": f"{lookup_prefix}...",
+        "created_at": created_at.isoformat(),
+        "message": "Copy this key now. It will not be shown again.",
+    }
+
+
+@router.get("/user/settings/external-api-key", response_model=ExternalApiKeyStatus)
+async def get_external_api_key_status(
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Check whether the user has an external API key configured."""
+    has_key = bool(current_user.external_api_key_hash)
+    prefix = f"{current_user.external_api_key_prefix}..." if current_user.external_api_key_prefix else None
+    created_at = (
+        current_user.external_api_key_created_at.isoformat()
+        if current_user.external_api_key_created_at
+        else None
+    )
+    return {"has_key": has_key, "prefix": prefix, "created_at": created_at}
+
+
+@router.delete("/user/settings/external-api-key")
+async def revoke_external_api_key(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db),
+):
+    """Revoke the user's external API key."""
+    current_user.external_api_key_prefix = None
+    current_user.external_api_key_hash = None
+    current_user.external_api_key_created_at = None
+    db.commit()
+    logger.info("External API key revoked", extra={"user_id": current_user.id})
+    return {"status": "success", "message": "External API key revoked successfully"}
 
 
 @router.get("/user/preferences", response_model=UserPreferences)
