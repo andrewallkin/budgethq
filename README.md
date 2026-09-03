@@ -146,6 +146,8 @@ The bundled Vite config proxies `/api` to `http://backend:8000` for the **Docker
 
 Prefer **Swagger UI** at `/docs` or the **`openapi.json`** snapshot for an accurate list of paths. Groups include auth, budget, salary, payslip uploads, emergency savings, RA, portfolio/TFSA contributions, ETFs and bonds (`/api/etf`, `/api/bond`), Sheets sync helpers, unified investments CRUD (`/api/investments`), manual accounts (`/api/manual-accounts`), Investec (`/api/investec`), analytics/portfolio-history endpoints (`/api/...`), tax and rebalancing calculators (`/api/calculate`), and optional admin endpoints.
 
+**External read-only investments API** (for Grok and other integrations): see [docs/external-investments-api.md](docs/external-investments-api.md) for `GET /api/external/investments/summary` and `GET /api/external/investments/composition`.
+
 ---
 
 ## Database migrations

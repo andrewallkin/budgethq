@@ -54,5 +54,6 @@ etf_bulk_upload.csv
 *.md
 !README.md
 !CLAUDE.md
+!docs/external-investments-api.md
 
 .DS_Store

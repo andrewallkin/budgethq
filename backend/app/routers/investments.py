@@ -90,25 +90,12 @@ def _fx_public_snapshot(fx: FxRatesResult) -> dict:
     }
 
 
-@router.get("/fx-rates")
-async def get_investment_fx_rates(
-    current_user: models.User = Depends(auth.get_current_user),
-):
-    """Latest cached FX snapshot from the configured Google Sheet (same auth as portfolios)."""
-    _ = current_user
-    fx = get_fx_rates_cached()
-    return _fx_public_snapshot(fx)
-
-
-@router.get("")
-async def list_investments(
-    current_user: models.User = Depends(auth.get_current_user),
-    db: Session = Depends(database.get_db),
-):
-    ensure_default_tfsa_portfolio(db, current_user.id)
+def build_investments_summary(db: Session, user: models.User) -> dict:
+    """Aggregate active investment portfolios (and optional RA) for a user."""
+    ensure_default_tfsa_portfolio(db, user.id)
 
     portfolios = db.query(models.InvestmentPortfolio).filter(
-        models.InvestmentPortfolio.user_id == current_user.id,
+        models.InvestmentPortfolio.user_id == user.id,
         models.InvestmentPortfolio.is_active.is_(True),
     ).order_by(models.InvestmentPortfolio.is_default_tfsa.desc(), models.InvestmentPortfolio.name.asc()).all()
 
@@ -118,7 +105,7 @@ async def list_investments(
         value = _portfolio_value(db, portfolio.id)
         total_investments += value
         sheet = db.query(models.UserSheet).filter(
-            models.UserSheet.user_id == current_user.id,
+            models.UserSheet.user_id == user.id,
             models.UserSheet.portfolio_id == portfolio.id,
         ).first()
         result.append({
@@ -133,8 +120,8 @@ async def list_investments(
         })
 
     ra_value_zar = 0.0
-    if bool(getattr(current_user, "show_ra_under_investments", None)):
-        ra_value_zar = _latest_ra_value_zar(db, current_user.id)
+    if bool(getattr(user, "show_ra_under_investments", None)):
+        ra_value_zar = _latest_ra_value_zar(db, user.id)
         ra_entry = {
             "id": None,
             "name": "Retirement Annuity",
@@ -155,7 +142,7 @@ async def list_investments(
     value_currency_pairs = [
         (_portfolio_value(db, p.id), p.currency_code or "ZAR") for p in portfolios
     ]
-    if bool(getattr(current_user, "show_ra_under_investments", None)):
+    if bool(getattr(user, "show_ra_under_investments", None)):
         value_currency_pairs.append((ra_value_zar, "ZAR"))
     total_base, agg_err = aggregate_portfolios_base(value_currency_pairs, fx)
     fx_snap = _fx_public_snapshot(fx)
@@ -168,6 +155,24 @@ async def list_investments(
         "base_currency": fx.base_currency,
         "fx": fx_snap,
     }
+
+
+@router.get("/fx-rates")
+async def get_investment_fx_rates(
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Latest cached FX snapshot from the configured Google Sheet (same auth as portfolios)."""
+    _ = current_user
+    fx = get_fx_rates_cached()
+    return _fx_public_snapshot(fx)
+
+
+@router.get("")
+async def list_investments(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db),
+):
+    return build_investments_summary(db, current_user)
 
 
 @router.get("/slug/{portfolio_slug}")

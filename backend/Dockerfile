@@ -15,6 +15,9 @@ RUN uv export --extra backend --no-dev --frozen > requirements.txt && \
 # Copy application code from backend directory
 COPY backend/app ./app
 
+# External API documentation (served at GET /api/external/investments/docs)
+COPY docs/external-investments-api.md ./docs/external-investments-api.md
+
 # Copy Alembic migration files from backend directory
 COPY backend/alembic.ini .
 COPY backend/alembic ./alembic
