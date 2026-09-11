@@ -1,14 +1,339 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import axios from 'axios'
-import { Search, Filter, AlertTriangle, Sparkles, Zap, RefreshCw, Trash2, Download, Link2 } from 'lucide-react'
+import { Search, ChevronDown, ChevronLeft, ChevronRight, AlertTriangle, RefreshCw, Sparkles, Download, Link2, SlidersHorizontal, Wallet } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { formatCurrency, formatDateSafe } from '../utils/numberFormatting'
 import BlurredValue from '../components/BlurredValue'
 import TransactionDetailsModal from '../components/TransactionDetailsModal'
 import TransactionExportModal from '../components/TransactionExportModal'
-import HubBackLink from '../components/HubBackLink'
+import { BankingLoading, BankingPageHeader } from '../components/BankingNav'
+import {
+    PaperCard,
+    PaperDialog,
+    paperBtnDanger,
+    paperBtnGhost,
+    paperBtnPrimary,
+    paperEyebrow,
+    paperField,
+    paperMoney,
+    paperMoneyTone,
+    paperSegment,
+} from '../components/appUi'
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, NEUTRAL_CATEGORIES, CATEGORY_LABELS } from '../utils/transactionCategories'
 
-const TRANSACTION_TYPES = ['All', 'CREDIT', 'DEBIT']
+const TRANSACTION_TYPES = [
+    { value: 'All', label: 'All types' },
+    { value: 'CREDIT', label: 'Money in' },
+    { value: 'DEBIT', label: 'Money out' },
+]
+
+const DATE_PRESETS = [
+    { id: 'any', label: 'Any time' },
+    { id: '30', label: 'Last 30 days' },
+    { id: 'month', label: 'This month' },
+    { id: '90', label: 'Last 90 days' },
+    { id: 'year', label: 'This year' },
+]
+
+function toIsoDate(date) {
+    const y = date.getFullYear()
+    const m = String(date.getMonth() + 1).padStart(2, '0')
+    const d = String(date.getDate()).padStart(2, '0')
+    return `${y}-${m}-${d}`
+}
+
+function datesForPreset(id) {
+    const today = new Date()
+    if (id === 'any') return { from_date: '', to_date: '' }
+    if (id === '30' || id === '90') {
+        const from = new Date(today)
+        from.setDate(from.getDate() - (id === '30' ? 29 : 89))
+        return { from_date: toIsoDate(from), to_date: toIsoDate(today) }
+    }
+    if (id === 'month') {
+        return {
+            from_date: toIsoDate(new Date(today.getFullYear(), today.getMonth(), 1)),
+            to_date: toIsoDate(today),
+        }
+    }
+    return {
+        from_date: toIsoDate(new Date(today.getFullYear(), 0, 1)),
+        to_date: toIsoDate(today),
+    }
+}
+
+function matchingDatePreset(fromDate, toDate) {
+    return DATE_PRESETS.find((preset) => {
+        const next = datesForPreset(preset.id)
+        return next.from_date === fromDate && next.to_date === toDate
+    })?.id
+}
+
+function accountDisplayName(account) {
+    return account?.reference_name || account?.account_name || 'Account'
+}
+
+function parseIsoDate(value) {
+    if (!value) return null
+    const date = new Date(`${value}T00:00:00`)
+    return Number.isNaN(date.getTime()) ? null : date
+}
+
+function DateField({ id, label, value, onChange, placeholder }) {
+    const [open, setOpen] = useState(false)
+    const selected = parseIsoDate(value)
+    const [year, setYear] = useState(() => (selected || new Date()).getFullYear())
+    const [month, setMonth] = useState(() => (selected || new Date()).getMonth())
+
+    useEffect(() => {
+        if (!open) return
+        const next = parseIsoDate(value) || new Date()
+        setYear(next.getFullYear())
+        setMonth(next.getMonth())
+    }, [open, value])
+
+    const shiftMonth = (delta) => {
+        const next = new Date(year, month + delta, 1)
+        setYear(next.getFullYear())
+        setMonth(next.getMonth())
+    }
+
+    const firstWeekday = new Date(year, month, 1).getDay()
+    const mondayPad = (firstWeekday + 6) % 7
+    const daysInMonth = new Date(year, month + 1, 0).getDate()
+    const cells = [...Array(mondayPad).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)]
+    const monthLabel = new Date(year, month, 1).toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' })
+
+    return (
+        <div>
+            <label className={`${paperEyebrow} mb-1.5 block`} htmlFor={id}>
+                {label}
+            </label>
+            <button
+                type="button"
+                id={id}
+                aria-expanded={open}
+                aria-haspopup="dialog"
+                onClick={() => setOpen((current) => !current)}
+                className={`${paperField} flex items-center justify-between gap-2 text-left`}
+            >
+                <span className={value ? 'text-[var(--paper-ink)]' : 'text-[var(--paper-muted)]'}>
+                    {selected
+                        ? formatDateSafe(value, { day: 'numeric', month: 'short', year: 'numeric' })
+                        : placeholder}
+                </span>
+                <ChevronDown className="h-4 w-4 shrink-0 text-[var(--paper-muted)]" aria-hidden="true" />
+            </button>
+            {open ? (
+                <div className="mt-2 rounded-md border border-[var(--paper-line)] bg-[var(--paper-canvas)] p-3">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                        <button
+                            type="button"
+                            onClick={() => shiftMonth(-1)}
+                            className="inline-flex min-h-9 min-w-9 cursor-pointer items-center justify-center rounded-md text-[var(--paper-muted)] hover:bg-[var(--paper-card)] hover:text-[var(--paper-ink)]"
+                            aria-label="Previous month"
+                        >
+                            <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                        </button>
+                        <p className="text-sm font-medium text-[var(--paper-ink)]">{monthLabel}</p>
+                        <button
+                            type="button"
+                            onClick={() => shiftMonth(1)}
+                            className="inline-flex min-h-9 min-w-9 cursor-pointer items-center justify-center rounded-md text-[var(--paper-muted)] hover:bg-[var(--paper-card)] hover:text-[var(--paper-ink)]"
+                            aria-label="Next month"
+                        >
+                            <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                        </button>
+                    </div>
+                    <div className="grid grid-cols-7 gap-1 text-center text-[11px] text-[var(--paper-muted)]">
+                        {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day, index) => (
+                            <span key={`${day}-${index}`}>{day}</span>
+                        ))}
+                    </div>
+                    <div className="mt-1 grid grid-cols-7 gap-1">
+                        {cells.map((day, index) => {
+                            if (day == null) return <span key={`pad-${index}`} />
+                            const iso = toIsoDate(new Date(year, month, day))
+                            const isSelected = value === iso
+                            return (
+                                <button
+                                    key={iso}
+                                    type="button"
+                                    onClick={() => {
+                                        onChange(iso)
+                                        setOpen(false)
+                                    }}
+                                    className={`min-h-9 cursor-pointer rounded-md text-sm tabular-nums transition-colors ${
+                                        isSelected
+                                            ? 'bg-[var(--paper-ink)] text-[var(--paper-card)]'
+                                            : 'text-[var(--paper-ink)] hover:bg-[var(--paper-card)]'
+                                    }`}
+                                >
+                                    {day}
+                                </button>
+                            )
+                        })}
+                    </div>
+                    {value ? (
+                        <button
+                            type="button"
+                            onClick={() => {
+                                onChange('')
+                                setOpen(false)
+                            }}
+                            className="mt-2 cursor-pointer text-xs text-[var(--paper-muted)] hover:text-[var(--paper-ink)]"
+                        >
+                            Clear date
+                        </button>
+                    ) : null}
+                </div>
+            ) : null}
+        </div>
+    )
+}
+
+function AccountPicker({ accounts, value, onChange }) {
+    const [open, setOpen] = useState(false)
+    const wrapRef = useRef(null)
+    const selected = accounts.find((account) => String(account.id) === String(value))
+
+    useEffect(() => {
+        if (!open) return undefined
+        const onDoc = (event) => {
+            if (!wrapRef.current?.contains(event.target)) setOpen(false)
+        }
+        const onKey = (event) => {
+            if (event.key === 'Escape') setOpen(false)
+        }
+        document.addEventListener('mousedown', onDoc)
+        window.addEventListener('keydown', onKey)
+        return () => {
+            document.removeEventListener('mousedown', onDoc)
+            window.removeEventListener('keydown', onKey)
+        }
+    }, [open])
+
+    const choose = (nextValue) => {
+        onChange(nextValue)
+        setOpen(false)
+    }
+
+    return (
+        <div ref={wrapRef} className="relative">
+            <p className={`${paperEyebrow} mb-1.5`} id="txn-account-label">
+                Account
+            </p>
+            <button
+                type="button"
+                aria-labelledby="txn-account-label"
+                aria-haspopup="listbox"
+                aria-expanded={open}
+                onClick={() => setOpen((current) => !current)}
+                className={`${paperField} flex items-center gap-2 text-left`}
+            >
+                <Wallet className="h-4 w-4 shrink-0 text-[var(--paper-muted)]" aria-hidden="true" />
+                <span className="min-w-0 flex-1 truncate">
+                    {selected ? accountDisplayName(selected) : 'All accounts'}
+                    {selected?.is_primary ? (
+                        <span className="text-[var(--paper-muted)]"> · Primary</span>
+                    ) : null}
+                </span>
+                <ChevronDown className="h-4 w-4 shrink-0 text-[var(--paper-muted)]" aria-hidden="true" />
+            </button>
+            {open ? (
+                <ul
+                    role="listbox"
+                    aria-labelledby="txn-account-label"
+                    className="absolute z-20 mt-1 max-h-72 w-full min-w-[16rem] overflow-auto rounded-md border border-[var(--paper-line)] bg-[var(--paper-card)] py-1"
+                >
+                    <li>
+                        <button
+                            type="button"
+                            role="option"
+                            aria-selected={!value}
+                            onClick={() => choose('')}
+                            className={`flex w-full cursor-pointer flex-col items-start px-3 py-2.5 text-left text-sm transition-colors hover:bg-[var(--paper-canvas)] ${
+                                !value ? 'bg-[var(--paper-canvas)] text-[var(--paper-ink)]' : 'text-[var(--paper-ink)]'
+                            }`}
+                        >
+                            All accounts
+                            <span className="mt-0.5 text-xs text-[var(--paper-muted)]">Every connected account</span>
+                        </button>
+                    </li>
+                    {accounts.map((account) => {
+                        const selectedAccount = String(account.id) === String(value)
+                        return (
+                            <li key={account.id}>
+                                <button
+                                    type="button"
+                                    role="option"
+                                    aria-selected={selectedAccount}
+                                    onClick={() => choose(String(account.id))}
+                                    className={`flex w-full cursor-pointer flex-col items-start px-3 py-2.5 text-left text-sm transition-colors hover:bg-[var(--paper-canvas)] ${
+                                        selectedAccount ? 'bg-[var(--paper-canvas)]' : ''
+                                    }`}
+                                >
+                                    {accountDisplayName(account)}
+                                    <span className="mt-0.5 text-xs text-[var(--paper-muted)]">
+                                        {account.is_primary ? 'Primary · default' : 'Connected account'}
+                                    </span>
+                                </button>
+                            </li>
+                        )
+                    })}
+                </ul>
+            ) : null}
+        </div>
+    )
+}
+
+function CategoryOptions() {
+    return (
+        <>
+            <optgroup label="Income">
+                {INCOME_CATEGORIES.map((cat) => (
+                    <option key={cat} value={cat}>
+                        {CATEGORY_LABELS[cat]}
+                    </option>
+                ))}
+            </optgroup>
+            <optgroup label="Expenses">
+                {EXPENSE_CATEGORIES.map((cat) => (
+                    <option key={cat} value={cat}>
+                        {CATEGORY_LABELS[cat]}
+                    </option>
+                ))}
+            </optgroup>
+            <optgroup label="Neutral">
+                {NEUTRAL_CATEGORIES.map((cat) => (
+                    <option key={cat} value={cat}>
+                        {CATEGORY_LABELS[cat]}
+                    </option>
+                ))}
+            </optgroup>
+        </>
+    )
+}
+
+function groupTransactionsByDate(transactions) {
+    const groups = []
+    let currentKey = null
+    for (const txn of transactions) {
+        const key = String(txn.transaction_date || '').slice(0, 10)
+        if (key !== currentKey) {
+            currentKey = key
+            groups.push({ key, items: [txn] })
+        } else {
+            groups[groups.length - 1].items.push(txn)
+        }
+    }
+    return groups
+}
+
+function signedAmountFor(txn) {
+    const abs = Math.abs(Number(txn.amount) || 0)
+    return txn.transaction_type === 'CREDIT' ? abs : -abs
+}
 
 export default function BankTransactions() {
     const [loading, setLoading] = useState(true)
@@ -27,7 +352,6 @@ export default function BankTransactions() {
     const [selectedTransaction, setSelectedTransaction] = useState(null)
     const [showExportModal, setShowExportModal] = useState(false)
 
-    // Filters
     const [filters, setFilters] = useState({
         from_date: '',
         to_date: '',
@@ -36,10 +360,16 @@ export default function BankTransactions() {
         transaction_type: 'All',
         search: '',
         limit: 50,
-        offset: 0
+        offset: 0,
     })
 
-    const [showFilters, setShowFilters] = useState(false)
+    const [showFilterDialog, setShowFilterDialog] = useState(false)
+    const [filterDraft, setFilterDraft] = useState({
+        from_date: '',
+        to_date: '',
+        category: '',
+        transaction_type: 'All',
+    })
     const [accountsLoaded, setAccountsLoaded] = useState(false)
     const initialLoadDoneRef = useRef(false)
 
@@ -50,9 +380,9 @@ export default function BankTransactions() {
     useEffect(() => {
         if (!accountsLoaded || initialLoadDoneRef.current) return
         initialLoadDoneRef.current = true
-        const primary = accounts.find(a => a.is_primary)
+        const primary = accounts.find((a) => a.is_primary)
         const initialAccountId = primary ? String(primary.id) : ''
-        setFilters(prev => ({ ...prev, account_id: initialAccountId }))
+        setFilters((prev) => ({ ...prev, account_id: initialAccountId }))
         fetchTransactionsWithOverrides({ account_id: initialAccountId })
     }, [accountsLoaded, accounts])
 
@@ -88,7 +418,7 @@ export default function BankTransactions() {
             const response = await axios.get(`/api/investec/transactions?${params.toString()}`)
 
             if (append) {
-                setTransactions(prev => [...prev, ...response.data])
+                setTransactions((prev) => [...prev, ...response.data])
             } else {
                 setTransactions(response.data)
             }
@@ -112,7 +442,7 @@ export default function BankTransactions() {
             const response = await axios.get(`/api/investec/transactions?${params.toString()}`)
             setTransactions(response.data)
             if (selectedTransaction) {
-                const updated = response.data.find(t => t.id === selectedTransaction.id)
+                const updated = response.data.find((t) => t.id === selectedTransaction.id)
                 if (updated) setSelectedTransaction(updated)
             }
         } catch (err) {
@@ -130,23 +460,19 @@ export default function BankTransactions() {
     }
 
     const handleCategoryChange = async (transactionId, newCategory) => {
-        setError('') // Clear any previous errors
+        setError('')
 
         try {
             const response = await axios.patch(`/api/investec/transactions/${transactionId}`, {
-                category: newCategory || null  // Send null instead of empty string
+                category: newCategory || null,
             })
 
-            // Update local state with the response data to ensure consistency
-            setTransactions(transactions.map(txn =>
-                txn.id === transactionId ? response.data : txn
-            ))
+            setTransactions(transactions.map((txn) => (txn.id === transactionId ? response.data : txn)))
             if (selectedTransaction?.id === transactionId) {
                 setSelectedTransaction(response.data)
             }
         } catch (err) {
             setError(err.response?.data?.detail || 'Failed to update category')
-            // Refresh transactions to revert any optimistic UI updates
             fetchTransactions()
         }
     }
@@ -158,23 +484,20 @@ export default function BankTransactions() {
         try {
             const response = await axios.post(`/api/investec/transactions/${transactionId}/categorize-ai`)
 
-            // Update local state with confirmed data from server (including all fields returned)
-            setTransactions(transactions.map(txn =>
-                txn.id === transactionId
-                    ? {
-                        ...txn,
-                        category: response.data.category,
-                        ai_category_confidence: response.data.confidence,
-                        user_corrected: response.data.user_corrected
-                    }
-                    : txn
-            ))
-
-            // Verify the update worked by logging
-            console.log(`Transaction ${transactionId} categorized as: ${response.data.category}`)
+            setTransactions(
+                transactions.map((txn) =>
+                    txn.id === transactionId
+                        ? {
+                              ...txn,
+                              category: response.data.category,
+                              ai_category_confidence: response.data.confidence,
+                              user_corrected: response.data.user_corrected,
+                          }
+                        : txn
+                )
+            )
         } catch (err) {
             setError(err.response?.data?.detail || 'Failed to categorize transaction')
-            // Refresh transactions on error to ensure consistency
             fetchTransactions()
         } finally {
             setCategorizingId(null)
@@ -201,7 +524,7 @@ export default function BankTransactions() {
 
         try {
             await axios.delete(`/api/investec/transactions/${transactionToDelete.id}`)
-            setTransactions(transactions.filter(txn => txn.id !== transactionToDelete.id))
+            setTransactions(transactions.filter((txn) => txn.id !== transactionToDelete.id))
             setTransactionToDelete(null)
         } catch (err) {
             setError(err.response?.data?.detail || 'Failed to delete transaction')
@@ -218,8 +541,6 @@ export default function BankTransactions() {
             const response = await axios.post('/api/investec/transactions/categorize-all-ai')
             setShowBulkCategorizeModal(false)
             setBulkResults(response.data)
-
-            // Refresh transactions to show updated categories
             await fetchTransactions()
         } catch (err) {
             setError(err.response?.data?.detail || 'Failed to categorize transactions')
@@ -229,351 +550,409 @@ export default function BankTransactions() {
         }
     }
 
+    const activeAccounts = accounts.filter((a) => a.is_active)
+    const noAccountsConnected = accountsLoaded && activeAccounts.length === 0
+    const groupedTransactions = useMemo(() => groupTransactionsByDate(transactions), [transactions])
+    const handleAccountChange = (accountId) => {
+        setFilters((prev) => ({ ...prev, account_id: accountId }))
+        setLoading(true)
+        fetchTransactions(false, { account_id: accountId })
+    }
+
+    const openFilterDialog = () => {
+        setFilterDraft({
+            from_date: filters.from_date,
+            to_date: filters.to_date,
+            category: filters.category,
+            transaction_type: filters.transaction_type,
+        })
+        setShowFilterDialog(true)
+    }
+
+    const applyFilterDraft = () => {
+        setFilters((prev) => ({ ...prev, ...filterDraft }))
+        setShowFilterDialog(false)
+        setLoading(true)
+        fetchTransactions(false, filterDraft)
+    }
+
+    const resetFilterDraft = () => {
+        const cleared = {
+            from_date: '',
+            to_date: '',
+            category: '',
+            transaction_type: 'All',
+        }
+        setFilterDraft(cleared)
+        setFilters((prev) => ({ ...prev, ...cleared }))
+        setShowFilterDialog(false)
+        setLoading(true)
+        fetchTransactions(false, cleared)
+    }
+
+    const extraFilterCount = [
+        filters.from_date,
+        filters.to_date,
+        filters.category,
+        filters.transaction_type !== 'All',
+    ].filter(Boolean).length
+    const draftPreset = matchingDatePreset(filterDraft.from_date, filterDraft.to_date)
+
+    const openDetails = (txn) => {
+        setSelectedTransaction(txn)
+        setShowDetailsModal(true)
+    }
+
     if (loading && transactions.length === 0) {
-        return (
-            <div className="flex items-center justify-center h-64">
-                <div className="text-gray-600 dark:text-gray-400">Loading transactions...</div>
-            </div>
-        )
+        return <BankingLoading title="Transactions" message="Loading transactions…" />
     }
 
     return (
-        <div className="space-y-6 sm:space-y-8">
-            <HubBackLink to="/investec" label="Investec Banking" />
-            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
-                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
-                    Bank Transactions
-                </h1>
-                <div className="flex flex-col sm:flex-row gap-3">
-                    <button
-                        onClick={handleSyncTransactions}
-                        disabled={syncing}
-                        className="px-4 py-2.5 min-h-[44px] bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
-                    >
-                        <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
-                        {syncing ? 'Syncing...' : 'Sync Transactions'}
-                    </button>
-                    <button
-                        onClick={() => setShowBulkCategorizeModal(true)}
-                        className="px-4 py-2.5 min-h-[44px] bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center justify-center gap-2"
-                    >
-                        <Sparkles className="w-4 h-4" />
-                        Categorize All with AI
-                    </button>
-                    <button
-                        onClick={() => setShowExportModal(true)}
-                        className="px-4 py-2.5 min-h-[44px] bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2"
-                    >
-                        <Download className="w-4 h-4" />
-                        Download PDF
-                    </button>
-                    <button
-                        onClick={() => setShowFilters(!showFilters)}
-                        className="px-4 py-2.5 min-h-[44px] bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors flex items-center justify-center gap-2"
-                    >
-                        <Filter className="w-4 h-4" />
-                        {showFilters ? 'Hide Filters' : 'Show Filters'}
-                    </button>
-                </div>
-            </div>
+        <div className="mx-auto max-w-[1080px] space-y-6">
+            <BankingPageHeader
+                title="Transactions"
+                actions={
+                    <>
+                        <button type="button" onClick={handleSyncTransactions} disabled={syncing} className={paperBtnPrimary}>
+                            <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} aria-hidden="true" />
+                            {syncing ? 'Syncing…' : 'Sync'}
+                        </button>
+                        <button type="button" onClick={() => setShowBulkCategorizeModal(true)} className={paperBtnGhost}>
+                            Categorize all
+                        </button>
+                        <button type="button" onClick={() => setShowExportModal(true)} className={paperBtnGhost}>
+                            <Download className="h-4 w-4" aria-hidden="true" />
+                            Export
+                        </button>
+                    </>
+                }
+            />
 
             {error && (
-                <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200 rounded-lg flex items-center gap-2">
-                    <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+                <PaperCard className="flex items-center gap-2 p-4 text-[var(--paper-brick)]">
+                    <AlertTriangle className="h-5 w-5 shrink-0" />
                     <span>{error}</span>
-                </div>
+                </PaperCard>
             )}
 
-            {/* Filter Panel */}
-            {showFilters && (
-                <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
-                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Filters</h2>
-
-                    <div className="space-y-6">
-                        {/* Row 1: Date range */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                    From Date
-                                </label>
-                                <input
-                                    type="date"
-                                    value={filters.from_date}
-                                    onChange={(e) => setFilters({ ...filters, from_date: e.target.value })}
-                                    className="w-full px-3 py-2 min-h-[44px] border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                    To Date
-                                </label>
-                                <input
-                                    type="date"
-                                    value={filters.to_date}
-                                    onChange={(e) => setFilters({ ...filters, to_date: e.target.value })}
-                                    className="w-full px-3 py-2 min-h-[44px] border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                                />
-                            </div>
-                        </div>
-
-                        {/* Row 2: Account, Type, Category, Search */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                    Account
-                                </label>
-                                <select
-                                    value={filters.account_id}
-                                    onChange={(e) => setFilters({ ...filters, account_id: e.target.value })}
-                                    className="w-full px-3 py-2 min-h-[44px] border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                                >
-                                    <option value="">All Accounts</option>
-                                {accounts.filter(a => a.is_active).map(acc => (
-                                    <option key={acc.id} value={String(acc.id)}>
-                                            {acc.reference_name || acc.account_name}
-                                            {acc.is_primary ? ' (Primary)' : ''}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                    Type
-                                </label>
-                                <select
-                                    value={filters.transaction_type}
-                                    onChange={(e) => setFilters({ ...filters, transaction_type: e.target.value })}
-                                    className="w-full px-3 py-2 min-h-[44px] border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                                >
-                                    {TRANSACTION_TYPES.map(type => (
-                                        <option key={type} value={type}>{type}</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                    Category
-                                </label>
-                                <select
-                                    value={filters.category}
-                                    onChange={(e) => setFilters({ ...filters, category: e.target.value })}
-                                    className="w-full px-3 py-2 min-h-[44px] border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                                >
-                                    <option value="">All Categories</option>
-                                    <option value="uncategorized">Uncategorized</option>
-                                    <optgroup label="Income">
-                                        {INCOME_CATEGORIES.map(cat => (
-                                            <option key={cat} value={cat}>{CATEGORY_LABELS[cat]}</option>
-                                        ))}
-                                    </optgroup>
-                                    <optgroup label="Expenses">
-                                        {EXPENSE_CATEGORIES.map(cat => (
-                                            <option key={cat} value={cat}>{CATEGORY_LABELS[cat]}</option>
-                                        ))}
-                                    </optgroup>
-                                    <optgroup label="Neutral">
-                                        {NEUTRAL_CATEGORIES.map(cat => (
-                                            <option key={cat} value={cat}>{CATEGORY_LABELS[cat]}</option>
-                                        ))}
-                                    </optgroup>
-                                </select>
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                    Search Description
-                                </label>
-                                <div className="relative">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                                    <input
-                                        type="text"
-                                        value={filters.search}
-                                        onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-                                        placeholder="Search transactions..."
-                                        className="w-full pl-10 pr-3 py-2 min-h-[44px] border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                                    />
-                                </div>
-                            </div>
+            <PaperCard className="p-4 sm:p-5">
+                <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,20rem)_auto] lg:items-end">
+                    <div>
+                        <label className={`${paperEyebrow} mb-1.5 block`} htmlFor="txn-search">
+                            Search
+                        </label>
+                        <div className="relative">
+                            <Search
+                                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--paper-muted)]"
+                                aria-hidden="true"
+                            />
+                            <input
+                                id="txn-search"
+                                type="search"
+                                value={filters.search}
+                                onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+                                onKeyDown={(e) => e.key === 'Enter' && handleApplyFilters()}
+                                placeholder="Merchant, description, or reference"
+                                className={`${paperField} pl-9`}
+                            />
                         </div>
                     </div>
 
-                    <div className="flex gap-3 mt-6">
-                        <button
-                            onClick={handleApplyFilters}
-                            className="px-4 py-2.5 min-h-[44px] bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                        >
-                            Apply Filters
-                        </button>
-                        <button
-                            onClick={() => {
-                                const primary = accounts.find(a => a.is_primary)
-                                const defaultAccountId = primary ? String(primary.id) : ''
-                                setFilters({
-                                    from_date: '',
-                                    to_date: '',
-                                    account_id: defaultAccountId,
-                                    category: '',
-                                    transaction_type: 'All',
-                                    search: '',
-                                    limit: 50,
-                                    offset: 0
-                                })
-                                setLoading(true)
-                                fetchTransactions(false, { account_id: defaultAccountId, from_date: '', to_date: '', category: '', transaction_type: 'All', search: '' })
-                            }}
-                            className="px-4 py-2.5 min-h-[44px] border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                        >
-                            Clear Filters
-                        </button>
-                    </div>
-                </div>
-            )}
+                    <AccountPicker
+                        accounts={activeAccounts}
+                        value={filters.account_id}
+                        onChange={handleAccountChange}
+                    />
 
-            {/* Transactions Table */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-                <div className="overflow-x-auto">
-                    <table className="w-full">
-                        <thead className="bg-gray-50 dark:bg-gray-700/50">
-                            <tr>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-                                    Date
-                                </th>
-                                <th className="w-4 px-1 py-3" />
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-                                    Description
-                                </th>
-                                <th className="px-4 py-3 text-right text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-                                    Amount
-                                </th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-                                    Category
-                                </th>
-                                <th className="px-4 py-3 text-center text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-                                    AI
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                            {transactions.map((txn) => {
+                    <button
+                        type="button"
+                        onClick={openFilterDialog}
+                        className={`${paperBtnGhost} ${extraFilterCount > 0 ? 'border-[var(--paper-ink)]' : ''}`}
+                        aria-haspopup="dialog"
+                        aria-expanded={showFilterDialog}
+                    >
+                        <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
+                        Filters
+                        {extraFilterCount > 0 ? (
+                            <span className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-[var(--paper-ink)] px-1.5 text-[11px] font-medium text-[var(--paper-card)]">
+                                {extraFilterCount}
+                            </span>
+                        ) : null}
+                    </button>
+                </div>
+            </PaperCard>
+
+            <PaperDialog
+                open={showFilterDialog}
+                onClose={() => setShowFilterDialog(false)}
+                title="Filters"
+                description="Narrow the list by date, money direction, or category. Leave fields on their defaults to show everything."
+                maxWidth="max-w-lg"
+                footer={
+                    <>
+                        <button type="button" onClick={resetFilterDraft} className={paperBtnGhost}>
+                            Reset
+                        </button>
+                        <button type="button" onClick={applyFilterDraft} className={paperBtnPrimary}>
+                            Show results
+                        </button>
+                    </>
+                }
+            >
+                <div className="space-y-6">
+                    <div>
+                        <p className={`${paperEyebrow} mb-2`}>Date range</p>
+                        <div className="mb-3 flex flex-wrap gap-2">
+                            {DATE_PRESETS.map((preset) => {
+                                const active = draftPreset === preset.id
                                 return (
-                                    <tr
-                                        key={txn.id}
-                                        className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer"
-                                        onClick={(e) => {
-                                            if (e.target.closest('button, select')) return
-                                            setSelectedTransaction(txn)
-                                            setShowDetailsModal(true)
-                                        }}
+                                    <button
+                                        key={preset.id}
+                                        type="button"
+                                        onClick={() =>
+                                            setFilterDraft((prev) => ({ ...prev, ...datesForPreset(preset.id) }))
+                                        }
+                                        className={`min-h-9 cursor-pointer rounded-full border px-3 text-sm transition-colors ${
+                                            active
+                                                ? 'border-[var(--paper-ink)] bg-[var(--paper-ink)] text-[var(--paper-card)]'
+                                                : 'border-[var(--paper-line)] text-[var(--paper-ink)] hover:bg-[var(--paper-canvas)]'
+                                        }`}
+                                        aria-pressed={active}
                                     >
-                                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                                            {formatDateSafe(txn.transaction_date, {
-                                                day: 'numeric',
-                                                month: 'short',
-                                                year: 'numeric'
-                                            })}
-                                        </td>
-                                        <td className="w-4 px-1 py-3 text-center">
-                                            {txn.status === 'PENDING' && (
-                                                <span
-                                                    className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500/70 dark:bg-amber-400/60"
-                                                    title="Pending"
-                                                />
-                                            )}
-                                        </td>
-                                        <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
-                                            <div className="flex items-start gap-1.5 min-w-[12rem]">
-                                                {txn.has_links && (
-                                                    <Link2 className="w-3.5 h-3.5 text-blue-500 flex-shrink-0 mt-0.5" title="Has linked transactions" />
-                                                )}
-                                                <div className="whitespace-normal break-words">
-                                                    {txn.description}
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className={`px-4 py-3 whitespace-nowrap text-sm text-right font-semibold ${
-                                            txn.transaction_type === 'CREDIT'
-                                                ? 'text-green-600 dark:text-green-400'
-                                                : 'text-red-600 dark:text-red-400'
-                                        }`}>
-                                            {txn.transaction_type === 'CREDIT' ? '+' : '-'}
-                                            <BlurredValue>{formatCurrency(Math.abs(txn.amount))}</BlurredValue>
-                                        </td>
-                                        <td className="px-4 py-3 whitespace-nowrap">
-                                            <select
-                                                value={txn.category || ''}
-                                                onChange={(e) => handleCategoryChange(txn.id, e.target.value)}
-                                                className="text-sm border-0 bg-transparent text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 rounded px-2 py-1"
-                                            >
-                                                <option value="">Uncategorized</option>
-                                                <optgroup label="Income">
-                                                    {INCOME_CATEGORIES.map(cat => (
-                                                        <option key={cat} value={cat} style={{ color: '#16a34a' }}>
-                                                            {CATEGORY_LABELS[cat]}
-                                                        </option>
-                                                    ))}
-                                                </optgroup>
-                                                <optgroup label="Expenses">
-                                                    {EXPENSE_CATEGORIES.map(cat => (
-                                                        <option key={cat} value={cat} style={{ color: '#dc2626' }}>
-                                                            {CATEGORY_LABELS[cat]}
-                                                        </option>
-                                                    ))}
-                                                </optgroup>
-                                                <optgroup label="Neutral">
-                                                    {NEUTRAL_CATEGORIES.map(cat => (
-                                                        <option key={cat} value={cat} style={{ color: '#6b7280' }}>
-                                                            {CATEGORY_LABELS[cat]}
-                                                        </option>
-                                                    ))}
-                                                </optgroup>
-                                            </select>
-                                        </td>
-                                        <td className="px-4 py-3 whitespace-nowrap text-center">
-                                            {!txn.category && !txn.user_corrected && (
-                                                <button
-                                                    onClick={() => handleCategorizeWithAI(txn.id)}
-                                                    disabled={categorizingId === txn.id}
-                                                    className="px-3 py-1.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm flex items-center gap-1.5"
-                                                    title="Categorize with AI"
-                                                >
-                                                    <Zap className="w-3.5 h-3.5" />
-                                                    {categorizingId === txn.id ? '...' : 'AI'}
-                                                </button>
-                                            )}
-                                        </td>
-                                    </tr>
+                                        {preset.label}
+                                    </button>
                                 )
                             })}
-                        </tbody>
-                    </table>
-                </div>
+                        </div>
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                            <DateField
+                                id="txn-from"
+                                label="From"
+                                value={filterDraft.from_date}
+                                onChange={(from_date) => setFilterDraft((prev) => ({ ...prev, from_date }))}
+                                placeholder="Any start date"
+                            />
+                            <DateField
+                                id="txn-to"
+                                label="To"
+                                value={filterDraft.to_date}
+                                onChange={(to_date) => setFilterDraft((prev) => ({ ...prev, to_date }))}
+                                placeholder="Any end date"
+                            />
+                        </div>
+                    </div>
 
-                {transactions.length === 0 && (
-                    <div className="text-center py-12 text-gray-600 dark:text-gray-400">
-                        No transactions found
+                    <div>
+                        <p className={`${paperEyebrow} mb-1.5`} id="txn-type-label">
+                            Direction
+                        </p>
+                        <div className={`${paperSegment} w-full`} role="group" aria-labelledby="txn-type-label">
+                            {TRANSACTION_TYPES.map((type) => {
+                                const active = filterDraft.transaction_type === type.value
+                                return (
+                                    <button
+                                        key={type.value}
+                                        type="button"
+                                        onClick={() =>
+                                            setFilterDraft((prev) => ({
+                                                ...prev,
+                                                transaction_type: type.value,
+                                            }))
+                                        }
+                                        className={`min-h-9 min-w-0 flex-1 cursor-pointer rounded-md px-3 text-sm font-medium transition-colors ${
+                                            active
+                                                ? 'bg-[var(--paper-ink)] text-[var(--paper-card)]'
+                                                : 'text-[var(--paper-muted)] hover:text-[var(--paper-ink)]'
+                                        }`}
+                                        aria-pressed={active}
+                                    >
+                                        {type.label}
+                                    </button>
+                                )
+                            })}
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className={`${paperEyebrow} mb-1.5 block`} htmlFor="txn-category">
+                            Category
+                        </label>
+                        <select
+                            id="txn-category"
+                            value={filterDraft.category}
+                            onChange={(e) => setFilterDraft((prev) => ({ ...prev, category: e.target.value }))}
+                            className={paperField}
+                        >
+                            <option value="">Any category</option>
+                            <option value="uncategorized">Uncategorized only</option>
+                            <CategoryOptions />
+                        </select>
+                    </div>
+                </div>
+            </PaperDialog>
+
+            <PaperCard className="overflow-hidden">
+                {transactions.length > 0 ? (
+                    <div>
+                        {groupedTransactions.map((group) => (
+                            <section
+                                key={group.key || 'undated'}
+                                className="border-t border-[var(--paper-line)] first:border-t-0"
+                            >
+                                <header className="flex items-end justify-between gap-3 border-b border-[var(--paper-line)] bg-[var(--paper-canvas)] px-4 py-3.5 sm:px-5">
+                                    <div className="min-w-0">
+                                        <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-[var(--paper-muted)]">
+                                            {formatDateSafe(group.key, { weekday: 'long' })}
+                                        </p>
+                                        <h2 className="mt-0.5 text-base font-semibold tracking-tight text-[var(--paper-ink)] sm:text-lg">
+                                            {formatDateSafe(group.key, {
+                                                day: 'numeric',
+                                                month: 'long',
+                                                year: 'numeric',
+                                            })}
+                                        </h2>
+                                    </div>
+                                    <p className="shrink-0 pb-0.5 text-xs tabular-nums text-[var(--paper-muted)]">
+                                        {group.items.length}
+                                        {group.items.length === 1 ? ' item' : ' items'}
+                                    </p>
+                                </header>
+                                <ul>
+                                    {group.items.map((txn) => {
+                                        const signedAmount = signedAmountFor(txn)
+                                        const needsAi = !txn.category && !txn.user_corrected
+
+                                        return (
+                                            <li
+                                                key={txn.id}
+                                                className="border-b border-[var(--paper-line)] last:border-0"
+                                            >
+                                                <div
+                                                    role="button"
+                                                    tabIndex={0}
+                                                    className="flex cursor-pointer items-start gap-3 px-4 py-3.5 transition-colors duration-200 hover:bg-[var(--paper-canvas)]/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--paper-accent)]/20 sm:gap-4 sm:px-5"
+                                                    onClick={(e) => {
+                                                        if (e.target.closest('button, select')) return
+                                                        openDetails(txn)
+                                                    }}
+                                                    onKeyDown={(e) => {
+                                                        if (e.target.closest('button, select')) return
+                                                        if (e.key === 'Enter' || e.key === ' ') {
+                                                            e.preventDefault()
+                                                            openDetails(txn)
+                                                        }
+                                                    }}
+                                                >
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="flex items-start gap-2">
+                                                            {txn.status === 'PENDING' && (
+                                                                <span
+                                                                    className="mt-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--paper-accent)]"
+                                                                    title="Pending"
+                                                                />
+                                                            )}
+                                                            {txn.has_links && (
+                                                                <Link2
+                                                                    className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--paper-muted)]"
+                                                                    aria-hidden="true"
+                                                                />
+                                                            )}
+                                                            <p className="break-words text-sm text-[var(--paper-ink)]">
+                                                                {txn.description}
+                                                            </p>
+                                                        </div>
+                                                        <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                                                            <select
+                                                                aria-label={`Category for ${txn.description}`}
+                                                                value={txn.category || ''}
+                                                                onChange={(e) =>
+                                                                    handleCategoryChange(txn.id, e.target.value)
+                                                                }
+                                                                className="max-w-full cursor-pointer rounded-md border border-transparent bg-transparent py-0.5 pl-1 pr-6 text-xs text-[var(--paper-muted)] transition-colors hover:border-[var(--paper-line)] hover:bg-[var(--paper-canvas)] focus:border-[var(--paper-line)] focus:ring-2 focus:ring-[var(--paper-accent)]/20"
+                                                            >
+                                                                <option value="">Uncategorized</option>
+                                                                <CategoryOptions />
+                                                            </select>
+                                                            {needsAi && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleCategorizeWithAI(txn.id)}
+                                                                    disabled={categorizingId === txn.id}
+                                                                    className="inline-flex min-h-8 cursor-pointer items-center gap-1 rounded-md px-2 text-xs text-[var(--paper-muted)] transition-colors hover:bg-[var(--paper-canvas)] hover:text-[var(--paper-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--paper-accent)]/20 disabled:opacity-50"
+                                                                    aria-label="Auto-categorize with AI"
+                                                                >
+                                                                    <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+                                                                    {categorizingId === txn.id ? 'Working…' : 'AI'}
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    <BlurredValue>
+                                                        <p
+                                                            className={`shrink-0 pt-0.5 text-right text-sm ${paperMoney} ${paperMoneyTone(signedAmount)}`}
+                                                        >
+                                                            {signedAmount > 0 ? '+' : ''}
+                                                            {formatCurrency(signedAmount)}
+                                                        </p>
+                                                    </BlurredValue>
+                                                </div>
+                                            </li>
+                                        )
+                                    })}
+                                </ul>
+                            </section>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="px-5 py-14 text-center">
+                        {noAccountsConnected ? (
+                            <>
+                                <p className="text-sm text-[var(--paper-muted)]">
+                                    No Investec accounts connected yet.
+                                </p>
+                                <Link to="/settings" className={`${paperBtnPrimary} mt-4 inline-flex`}>
+                                    Connect in Settings
+                                </Link>
+                            </>
+                        ) : (
+                            <>
+                                <p className="text-sm text-[var(--paper-muted)]">
+                                    No transactions match your filters.
+                                </p>
+                                <p className="mt-2 text-sm text-[var(--paper-muted)]">
+                                    Sync to pull the latest from Investec, or try a different search.
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={handleSyncTransactions}
+                                    disabled={syncing}
+                                    className={`${paperBtnPrimary} mt-4`}
+                                >
+                                    <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} aria-hidden="true" />
+                                    Sync transactions
+                                </button>
+                            </>
+                        )}
                     </div>
                 )}
 
                 {hasMore && (
-                    <div className="p-4 text-center border-t border-gray-200 dark:border-gray-700">
-                        <button
-                            onClick={handleLoadMore}
-                            className="px-4 py-2.5 min-h-[44px] bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-                        >
-                            Load More
+                    <div className="border-t border-[var(--paper-line)] p-4 text-center">
+                        <button type="button" onClick={handleLoadMore} className={paperBtnGhost}>
+                            Load more
                         </button>
                     </div>
                 )}
-            </div>
+            </PaperCard>
 
-            {/* Transaction Details Modal */}
             <TransactionDetailsModal
                 isOpen={showDetailsModal}
-                onClose={() => { setShowDetailsModal(false); setSelectedTransaction(null) }}
+                onClose={() => {
+                    setShowDetailsModal(false)
+                    setSelectedTransaction(null)
+                }}
                 transaction={selectedTransaction}
-                account={accounts.find(a => a.id === selectedTransaction?.account_id)}
+                account={accounts.find((a) => a.id === selectedTransaction?.account_id)}
                 onDelete={(txn) => {
                     setShowDetailsModal(false)
                     setSelectedTransaction(null)
@@ -583,71 +962,74 @@ export default function BankTransactions() {
                 onTransactionUpdated={refreshSelectedTransaction}
             />
 
-            {/* Bulk Categorize Confirmation Modal */}
-            {showBulkCategorizeModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                    <div className="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-md w-full">
-                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-                            <Sparkles className="w-5 h-5 text-purple-600" />
-                            Categorize All with AI?
-                        </h3>
-                        <p className="text-gray-700 dark:text-gray-300 mb-6">
-                            This will use AI to categorize all uncategorized transactions. This action uses your OpenAI API key and may incur costs based on the number of transactions.
-                        </p>
-                        <div className="flex gap-3">
-                            <button
-                                onClick={handleBulkCategorize}
-                                disabled={bulkCategorizing}
-                                className="flex-1 px-4 py-2.5 min-h-[44px] bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
-                            >
-                                {bulkCategorizing ? 'Categorizing...' : 'Categorize All'}
-                            </button>
-                            <button
-                                onClick={() => setShowBulkCategorizeModal(false)}
-                                disabled={bulkCategorizing}
-                                className="flex-1 px-4 py-2.5 min-h-[44px] border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
-                            >
-                                Cancel
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <PaperDialog
+                open={showBulkCategorizeModal}
+                onClose={() => setShowBulkCategorizeModal(false)}
+                title="Categorize all with AI?"
+                description="This uses your OpenAI key on every uncategorized transaction and may incur costs."
+                disableClose={bulkCategorizing}
+                footer={
+                    <>
+                        <button
+                            type="button"
+                            onClick={() => setShowBulkCategorizeModal(false)}
+                            disabled={bulkCategorizing}
+                            className={paperBtnGhost}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleBulkCategorize}
+                            disabled={bulkCategorizing}
+                            className={paperBtnPrimary}
+                        >
+                            {bulkCategorizing ? 'Categorizing…' : 'Categorize all'}
+                        </button>
+                    </>
+                }
+            />
 
-            {/* Delete Confirmation Modal */}
-            {transactionToDelete && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                    <div className="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-md w-full">
-                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
-                            <Trash2 className="w-5 h-5 text-red-500" />
-                            Delete Transaction?
-                        </h3>
-                        <p className="text-gray-600 dark:text-gray-400 mb-2">
+            <PaperDialog
+                open={Boolean(transactionToDelete)}
+                onClose={() => setTransactionToDelete(null)}
+                title="Delete transaction?"
+                disableClose={Boolean(deletingId)}
+                footer={
+                    <>
+                        <button
+                            type="button"
+                            onClick={() => setTransactionToDelete(null)}
+                            disabled={Boolean(deletingId)}
+                            className={paperBtnGhost}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleDeleteTransaction}
+                            disabled={deletingId === transactionToDelete?.id}
+                            className={paperBtnDanger}
+                        >
+                            {deletingId === transactionToDelete?.id ? 'Deleting…' : 'Delete'}
+                        </button>
+                    </>
+                }
+            >
+                {transactionToDelete && (
+                    <div>
+                        <p className="break-words text-sm text-[var(--paper-ink)]">
                             {transactionToDelete.description}
                         </p>
-                        <p className={`text-lg font-semibold mb-6 ${transactionToDelete.transaction_type === 'CREDIT' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                        <p
+                            className={`mt-3 text-xl ${paperMoney} ${paperMoneyTone(signedAmountFor(transactionToDelete))}`}
+                        >
                             {transactionToDelete.transaction_type === 'CREDIT' ? '+' : '-'}
                             <BlurredValue>{formatCurrency(Math.abs(transactionToDelete.amount))}</BlurredValue>
                         </p>
-                        <div className="flex gap-3">
-                            <button
-                                onClick={handleDeleteTransaction}
-                                disabled={deletingId === transactionToDelete.id}
-                                className="flex-1 px-4 py-2.5 min-h-[44px] bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
-                            >
-                                {deletingId === transactionToDelete.id ? 'Deleting...' : 'Delete'}
-                            </button>
-                            <button
-                                onClick={() => setTransactionToDelete(null)}
-                                disabled={deletingId === transactionToDelete.id}
-                                className="flex-1 px-4 py-2.5 min-h-[44px] border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
-                            >
-                                Cancel
-                            </button>
-                        </div>
                     </div>
-                </div>
-            )}
+                )}
+            </PaperDialog>
 
             <TransactionExportModal
                 isOpen={showExportModal}
@@ -657,35 +1039,35 @@ export default function BankTransactions() {
                 initialToDate={filters.to_date}
             />
 
-            {/* Bulk Results Modal */}
-            {bulkResults && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                    <div className="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-md w-full">
-                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                            Categorization Complete
-                        </h3>
-                        <div className="space-y-2 mb-6">
-                            <p className="text-gray-700 dark:text-gray-300">
-                                <strong>Total transactions:</strong> {bulkResults.total}
-                            </p>
-                            <p className="text-green-600 dark:text-green-400">
-                                <strong>Categorized:</strong> {bulkResults.categorized}
-                            </p>
-                            {bulkResults.failed > 0 && (
-                                <p className="text-red-600 dark:text-red-400">
-                                    <strong>Failed:</strong> {bulkResults.failed}
-                                </p>
-                            )}
+            <PaperDialog
+                open={Boolean(bulkResults)}
+                onClose={() => setBulkResults(null)}
+                title="Categorization complete"
+                footer={
+                    <button type="button" onClick={() => setBulkResults(null)} className={`${paperBtnPrimary} w-full sm:w-auto`}>
+                        Close
+                    </button>
+                }
+            >
+                {bulkResults && (
+                    <dl className="space-y-3 text-sm">
+                        <div className="flex justify-between gap-4">
+                            <dt className="text-[var(--paper-muted)]">Total</dt>
+                            <dd className="tabular-nums text-[var(--paper-ink)]">{bulkResults.total}</dd>
                         </div>
-                        <button
-                            onClick={() => setBulkResults(null)}
-                            className="w-full px-4 py-2.5 min-h-[44px] bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                        >
-                            Close
-                        </button>
-                    </div>
-                </div>
-            )}
+                        <div className="flex justify-between gap-4">
+                            <dt className="text-[var(--paper-muted)]">Categorized</dt>
+                            <dd className="tabular-nums text-[var(--paper-olive)]">{bulkResults.categorized}</dd>
+                        </div>
+                        {bulkResults.failed > 0 && (
+                            <div className="flex justify-between gap-4">
+                                <dt className="text-[var(--paper-muted)]">Failed</dt>
+                                <dd className="tabular-nums text-[var(--paper-brick)]">{bulkResults.failed}</dd>
+                            </div>
+                        )}
+                    </dl>
+                )}
+            </PaperDialog>
         </div>
     )
 }
