@@ -13,12 +13,18 @@ const baseNumberFormat = (options = {}) =>
         ...options,
     })
 
+/** en-ZA often uses "," as the decimal mark; keep space grouping and force "." */
+const formatWithPeriodDecimal = (formatter, num) =>
+    formatter.formatToParts(num).map((part) => (
+        part.type === 'decimal' ? '.' : part.value
+    )).join('')
+
 export const formatNumber = (value, options) => {
     if (value === null || value === undefined || Number.isNaN(Number(value))) {
         return ''
     }
     const num = Number(value)
-    return baseNumberFormat(options).format(num)
+    return formatWithPeriodDecimal(baseNumberFormat(options), num)
 }
 
 export const formatCurrency = (value, options) => {
@@ -33,7 +39,7 @@ export const formatCurrency = (value, options) => {
         maximumFractionDigits: 2,
         ...options,
     })
-    return formatter.format(num)
+    return formatWithPeriodDecimal(formatter, num)
 }
 
 export const formatPercent = (value, options) => {
@@ -47,7 +53,7 @@ export const formatPercent = (value, options) => {
         maximumFractionDigits: 2,
         ...options,
     })
-    return formatter.format(num / 100)
+    return formatWithPeriodDecimal(formatter, num / 100)
 }
 
 /**

@@ -1,80 +1,96 @@
 import { AlertTriangle, X } from 'lucide-react'
+import { ModalPortal } from './appUi'
 
-export default function ConfirmModal({ 
-    isOpen, 
-    onClose, 
-    onConfirm, 
-    title = "Confirm Action",
-    message = "Are you sure?",
+const btnBase =
+    'inline-flex min-h-[40px] flex-1 cursor-pointer items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-colors duration-200 focus:ring-2 focus:ring-[var(--paper-accent)]/20 focus:ring-offset-2 focus:ring-offset-[var(--paper-card)]'
+const btnGhost = `${btnBase} border border-[var(--paper-line)] bg-[var(--paper-card)] text-[var(--paper-ink)] hover:bg-[var(--paper-canvas)]`
+const btnDanger = `${btnBase} bg-[var(--paper-brick)] text-[var(--paper-card)] hover:opacity-90`
+const btnWarning = `${btnBase} bg-[var(--paper-accent)] text-[var(--paper-card)] hover:opacity-90`
+const btnInfo = `${btnBase} bg-[var(--paper-ink)] text-[var(--paper-card)] hover:opacity-90`
+
+export default function ConfirmModal({
+    isOpen,
+    onClose,
+    onConfirm,
+    title = 'Confirm Action',
+    message = 'Are you sure?',
     details = [],
-    confirmText = "Confirm",
-    cancelText = "Cancel",
-    variant = "danger", // "danger" | "warning" | "info"
+    confirmText = 'Confirm',
+    cancelText = 'Cancel',
+    variant = 'danger',
     closeOnConfirm = true,
 }) {
     if (!isOpen) return null
 
+    const titleId = 'confirm-modal-title'
+
     const variants = {
         danger: {
-            icon: 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400',
-            button: 'bg-red-600 hover:bg-red-700 focus:ring-red-500'
+            icon: 'bg-[var(--paper-brick)]/10 text-[var(--paper-brick)]',
+            button: btnDanger,
         },
         warning: {
-            icon: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400',
-            button: 'bg-yellow-600 hover:bg-yellow-700 focus:ring-yellow-500'
+            icon: 'bg-[var(--paper-accent)]/10 text-[var(--paper-accent)]',
+            button: btnWarning,
         },
         info: {
-            icon: 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400',
-            button: 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500'
-        }
+            icon: 'bg-[var(--paper-line)] text-[var(--paper-ink)]',
+            button: btnInfo,
+        },
     }
 
     const style = variants[variant] || variants.danger
 
     return (
+        <ModalPortal>
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            {/* Backdrop */}
-            <div 
-                className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            <div
+                className="absolute inset-0 bg-black/50"
                 onClick={onClose}
+                aria-hidden="true"
             />
-            
-            {/* Modal */}
-            <div className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md mx-4 sm:mx-auto overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-                {/* Close button */}
+
+            <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby={titleId}
+                className="relative mx-4 w-full max-w-md overflow-hidden rounded-md border border-[var(--paper-line)] bg-[var(--paper-card)] sm:mx-auto"
+            >
                 <button
+                    type="button"
                     onClick={onClose}
-                    className="absolute top-4 right-4 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                    aria-label="Close"
+                    className="absolute right-4 top-4 inline-flex min-h-[40px] min-w-[40px] cursor-pointer items-center justify-center rounded-md text-[var(--paper-muted)] transition-colors hover:bg-[var(--paper-canvas)] hover:text-[var(--paper-ink)] focus:ring-2 focus:ring-[var(--paper-accent)]/20"
                 >
-                    <X className="w-5 h-5" />
+                    <X className="h-5 w-5" aria-hidden="true" />
                 </button>
 
                 <div className="p-6">
-                    {/* Icon */}
-                    <div className={`w-12 h-12 rounded-full ${style.icon} flex items-center justify-center mx-auto mb-4`}>
-                        <AlertTriangle className="w-6 h-6" />
+                    <div
+                        className={`mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full ${style.icon}`}
+                    >
+                        <AlertTriangle className="h-6 w-6" aria-hidden="true" />
                     </div>
 
-                    {/* Title */}
-                    <h3 className="text-lg font-semibold text-center text-gray-900 dark:text-white mb-2">
+                    <h3
+                        id={titleId}
+                        className="mb-2 text-center text-lg font-semibold text-[var(--paper-ink)]"
+                    >
                         {title}
                     </h3>
 
-                    {/* Message */}
-                    <p className="text-center text-gray-600 dark:text-gray-400 mb-4">
-                        {message}
-                    </p>
+                    <div className="mb-4 text-center text-[var(--paper-muted)]">{message}</div>
 
-                    {/* Details list */}
                     {details.length > 0 && (
-                        <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 mb-6">
-                            <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                This will:
-                            </p>
+                        <div className="mb-6 rounded-md border border-[var(--paper-line)] bg-[var(--paper-canvas)] p-4">
+                            <p className="mb-2 text-sm font-medium text-[var(--paper-ink)]">This will:</p>
                             <ul className="space-y-1">
                                 {details.map((detail, i) => (
-                                    <li key={i} className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-400">
-                                        <span className="text-gray-400 dark:text-gray-500">•</span>
+                                    <li
+                                        key={i}
+                                        className="flex items-start gap-2 text-sm text-[var(--paper-muted)]"
+                                    >
+                                        <span className="text-[var(--paper-line)]">•</span>
                                         {detail}
                                     </li>
                                 ))}
@@ -82,20 +98,17 @@ export default function ConfirmModal({
                         </div>
                     )}
 
-                    {/* Buttons */}
-                    <div className="flex flex-col-reverse sm:flex-row gap-3">
-                        <button
-                            onClick={onClose}
-                            className="flex-1 px-4 py-2.5 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-medium"
-                        >
+                    <div className="flex flex-col-reverse gap-3 sm:flex-row">
+                        <button type="button" onClick={onClose} className={btnGhost}>
                             {cancelText}
                         </button>
                         <button
+                            type="button"
                             onClick={() => {
                                 onConfirm()
                                 if (closeOnConfirm) onClose()
                             }}
-                            className={`flex-1 px-4 py-2.5 text-white rounded-lg transition-colors font-medium focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-800 ${style.button}`}
+                            className={style.button}
                         >
                             {confirmText}
                         </button>
@@ -103,6 +116,6 @@ export default function ConfirmModal({
                 </div>
             </div>
         </div>
+        </ModalPortal>
     )
 }
-

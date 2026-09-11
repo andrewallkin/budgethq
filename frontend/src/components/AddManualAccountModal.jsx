@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { X, AlertCircle } from 'lucide-react'
 import axios from 'axios'
+import { ModalPortal } from './appUi'
 
 export default function AddManualAccountModal({ isOpen, onClose, onSuccess }) {
     const [name, setName] = useState('')
@@ -59,6 +60,7 @@ export default function AddManualAccountModal({ isOpen, onClose, onSuccess }) {
     if (!isOpen) return null
 
     return (
+        <ModalPortal>
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full border border-gray-200 dark:border-gray-700">
                 <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
@@ -142,5 +144,6 @@ export default function AddManualAccountModal({ isOpen, onClose, onSuccess }) {
                 </form>
             </div>
         </div>
+        </ModalPortal>
     )
 }
