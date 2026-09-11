@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { RefreshCw, Clock, CheckCircle, AlertCircle } from 'lucide-react'
 import axios from 'axios'
+import { paperIconBtn } from './appUi'
 
 export default function PriceRefreshIndicator({ onRefresh, portfolioId = null }) {
     const [lastSync, setLastSync] = useState(null)
@@ -11,9 +12,7 @@ export default function PriceRefreshIndicator({ onRefresh, portfolioId = null })
     useEffect(() => {
         fetchLastSync()
 
-        // Poll every minute for time progression display
-        // This is still better than the original 60 seconds since backend updates every 5 minutes
-        intervalRef.current = setInterval(fetchLastSync, 60000) // 1 minute
+        intervalRef.current = setInterval(fetchLastSync, 60000)
 
         return () => {
             if (intervalRef.current) {
@@ -73,7 +72,7 @@ export default function PriceRefreshIndicator({ onRefresh, portfolioId = null })
 
     const getSyncStatus = () => {
         if (!lastSync) return 'unknown'
-        
+
         const date = new Date(lastSync)
         const now = new Date()
         const diffMs = now - date
@@ -86,54 +85,50 @@ export default function PriceRefreshIndicator({ onRefresh, portfolioId = null })
 
     const status = getSyncStatus()
 
+    const statusIcon =
+        status === 'fresh' ? (
+            <CheckCircle className="h-3.5 w-3.5 text-[var(--paper-olive)]" aria-hidden="true" />
+        ) : status === 'stale' ? (
+            <Clock className="h-3.5 w-3.5 text-[var(--paper-accent)]" aria-hidden="true" />
+        ) : (
+            <AlertCircle className="h-3.5 w-3.5 text-[var(--paper-muted)]" aria-hidden="true" />
+        )
+
+    const statusTextClass =
+        status === 'fresh'
+            ? 'text-[var(--paper-olive)]'
+            : status === 'stale'
+              ? 'text-[var(--paper-accent)]'
+              : 'text-[var(--paper-muted)]'
+
     return (
-        <div className="flex items-center gap-3">
-            {/* Status Indicator */}
-            <div className="flex items-center gap-2 text-sm">
-                {status === 'fresh' ? (
-                    <CheckCircle className="w-4 h-4 text-green-500" />
-                ) : status === 'stale' ? (
-                    <Clock className="w-4 h-4 text-yellow-500" />
-                ) : (
-                    <AlertCircle className="w-4 h-4 text-gray-400" />
-                )}
-                <span className={`${
-                    status === 'fresh'
-                        ? 'text-green-600 dark:text-green-400'
-                        : status === 'stale'
-                            ? 'text-yellow-600 dark:text-yellow-400'
-                            : 'text-gray-500 dark:text-gray-400'
-                }`}>
-                    {lastSync ? (
-                        <>Prices updated {getTimeAgo(lastSync)}</>
-                    ) : (
-                        'Prices not synced'
-                    )}
+        <div className="flex items-center gap-2">
+            <div
+                className={`hidden items-center gap-1.5 text-xs sm:flex ${statusTextClass}`}
+                title={lastSync ? `Last sync: ${new Date(lastSync).toLocaleString()}` : undefined}
+            >
+                {statusIcon}
+                <span className="whitespace-nowrap">
+                    {lastSync ? getTimeAgo(lastSync) : 'Not synced'}
                 </span>
             </div>
 
-            {/* Manual Refresh Button */}
             <button
+                type="button"
                 onClick={handleManualSync}
                 disabled={syncing}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg transition-colors ${
-                    syncing
-                        ? 'bg-gray-100 dark:bg-gray-700 text-gray-400 cursor-not-allowed'
-                        : 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50'
-                }`}
+                className={paperIconBtn}
                 title="Refresh prices from Google Sheets"
+                aria-label={syncing ? 'Syncing prices' : 'Refresh prices from Google Sheets'}
             >
-                <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
-                {syncing ? 'Syncing...' : 'Refresh'}
+                <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} aria-hidden="true" />
             </button>
 
-            {/* Error Toast */}
             {error && (
-                <span className="text-xs text-red-500 dark:text-red-400">
+                <span role="alert" className="max-w-[8rem] truncate text-xs text-[var(--paper-brick)] sm:max-w-none">
                     {error}
                 </span>
             )}
         </div>
     )
 }
-

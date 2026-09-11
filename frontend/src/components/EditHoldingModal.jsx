@@ -1,6 +1,15 @@
 import { useState, useEffect } from 'react'
 import { X, Save, AlertCircle } from 'lucide-react'
 import axios from 'axios'
+import { ModalPortal, paperEyebrow } from './appUi'
+
+const btnBase =
+    'inline-flex min-h-[40px] cursor-pointer items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-50 focus:ring-2 focus:ring-[var(--paper-accent)]/20'
+const btnPrimary = `${btnBase} bg-[var(--paper-ink)] text-[var(--paper-card)] hover:opacity-90`
+const btnGhost = `${btnBase} border border-[var(--paper-line)] bg-[var(--paper-card)] text-[var(--paper-ink)] hover:bg-[var(--paper-canvas)]`
+const fieldInput =
+    'w-full rounded-md border border-[var(--paper-line)] bg-[var(--paper-card)] px-3 py-2.5 text-sm text-[var(--paper-ink)] outline-none transition-colors focus:ring-2 focus:ring-[var(--paper-accent)]/20'
+const fieldLabel = 'block text-sm font-medium text-[var(--paper-ink)] mb-2'
 
 export default function EditHoldingModal({
     isOpen,
@@ -13,7 +22,6 @@ export default function EditHoldingModal({
     const [submitting, setSubmitting] = useState(false)
     const [error, setError] = useState('')
 
-    // Reset form when modal opens or holding changes
     useEffect(() => {
         if (isOpen && holding) {
             const tp = Number(holding.target_percentage)
@@ -27,7 +35,6 @@ export default function EditHoldingModal({
 
         const targetPct = parseFloat(targetPercentage)
 
-        // Validation
         if (isNaN(targetPct) || targetPct < 0 || targetPct > 100) {
             setError('Target percentage must be between 0 and 100')
             return
@@ -54,56 +61,61 @@ export default function EditHoldingModal({
 
     if (!isOpen || !holding) return null
 
+    const titleId = 'edit-holding-title'
+
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md mx-4 sm:mx-auto overflow-hidden">
-                {/* Header */}
-                <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-blue-500 to-indigo-600">
+        <ModalPortal>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby={titleId}
+                className="mx-4 flex w-full max-w-md flex-col overflow-hidden rounded-md border border-[var(--paper-line)] bg-[var(--paper-card)] sm:mx-auto"
+            >
+                <div className="flex items-center justify-between border-b border-[var(--paper-line)] px-5 py-4 sm:px-6">
                     <div>
-                        <h2 className="text-xl font-bold text-white">
+                        <h2 id={titleId} className="text-lg font-semibold text-[var(--paper-ink)]">
                             Edit Target Percentage
                         </h2>
-                        <p className="text-white/80 text-sm mt-1">{holding.etf_name}</p>
+                        <p className={`mt-1 ${paperEyebrow}`}>{holding.etf_name}</p>
                     </div>
                     <button
+                        type="button"
                         onClick={onClose}
-                        className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+                        aria-label="Close"
+                        className="inline-flex min-h-[40px] min-w-[40px] cursor-pointer items-center justify-center text-[var(--paper-muted)] transition-colors hover:text-[var(--paper-ink)] focus:ring-2 focus:ring-[var(--paper-accent)]/20"
                     >
-                        <X className="w-5 h-5 text-white" />
+                        <X className="h-5 w-5" aria-hidden="true" />
                     </button>
                 </div>
 
-                {/* Content */}
-                <div className="p-6 space-y-4">
-                    {/* Current Info */}
-                    <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                        <div className="flex justify-between text-sm mb-1">
-                            <span className="text-gray-500 dark:text-gray-400">Type</span>
-                            <span className="font-medium text-gray-900 dark:text-white">
+                <div className="space-y-4 p-5 sm:p-6">
+                    <div className="rounded-md border border-[var(--paper-line)] bg-[var(--paper-canvas)] p-3">
+                        <div className="mb-1 flex justify-between text-sm">
+                            <span className="text-[var(--paper-muted)]">Type</span>
+                            <span className="font-medium text-[var(--paper-ink)]">
                                 {(holding.instrument_type || 'etf') === 'stock' ? 'Stock' : 'ETF'}
                             </span>
                         </div>
-                        <div className="flex justify-between text-sm mb-1">
-                            <span className="text-gray-500 dark:text-gray-400">Region</span>
-                            <span className="font-medium text-gray-900 dark:text-white">
-                                {holding.region}
-                            </span>
+                        <div className="mb-1 flex justify-between text-sm">
+                            <span className="text-[var(--paper-muted)]">Region</span>
+                            <span className="font-medium text-[var(--paper-ink)]">{holding.region}</span>
                         </div>
                         <div className="flex justify-between text-sm">
-                            <span className="text-gray-500 dark:text-gray-400">Current Target</span>
-                            <span className="font-medium text-gray-900 dark:text-white">
+                            <span className="text-[var(--paper-muted)]">Current Target</span>
+                            <span className="font-medium text-[var(--paper-ink)]">
                                 {holding.target_percentage.toFixed(1)}%
                             </span>
                         </div>
                     </div>
 
-                    {/* Target Percentage Input */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        <label htmlFor="edit-target-pct" className={fieldLabel}>
                             New Target Percentage
                         </label>
                         <div className="flex items-center gap-2">
                             <input
+                                id="edit-target-pct"
                                 type="number"
                                 inputMode="decimal"
                                 step="0.1"
@@ -111,46 +123,40 @@ export default function EditHoldingModal({
                                 max="100"
                                 value={targetPercentage}
                                 onChange={(e) => setTargetPercentage(e.target.value)}
-                                className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-lg font-medium"
+                                className={`${fieldInput} flex-1 text-lg font-medium`}
                                 autoFocus
                             />
-                            <span className="text-xl font-medium text-gray-500 dark:text-gray-400">%</span>
+                            <span className="text-xl font-medium text-[var(--paper-muted)]">%</span>
                         </div>
-                        <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                        <p className="mt-2 text-xs text-[var(--paper-muted)]">
                             Set to 0 if you plan to sell this holding completely
                         </p>
                     </div>
 
-                    {/* Error Message */}
                     {error && (
-                        <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 rounded-lg text-sm">
-                            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                        <div
+                            role="alert"
+                            className="flex items-center gap-2 rounded-md border border-[var(--paper-brick)]/30 bg-[var(--paper-brick)]/10 p-3 text-sm text-[var(--paper-brick)]"
+                        >
+                            <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
                             {error}
                         </div>
                     )}
                 </div>
 
-                {/* Footer */}
-                <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200 dark:border-gray-700">
-                    <button
-                        onClick={onClose}
-                        className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                    >
+                <div className="flex items-center justify-end gap-3 border-t border-[var(--paper-line)] px-5 py-4 sm:px-6">
+                    <button type="button" onClick={onClose} className={btnGhost}>
                         Cancel
                     </button>
-                    <button
-                        onClick={handleSubmit}
-                        disabled={submitting}
-                        className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-                    >
+                    <button type="button" onClick={handleSubmit} disabled={submitting} className={btnPrimary}>
                         {submitting ? (
                             <>
-                                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                <div className="h-4 w-4 animate-spin rounded-full border-2 border-[var(--paper-card)]/30 border-t-[var(--paper-card)]" />
                                 Saving...
                             </>
                         ) : (
                             <>
-                                <Save className="w-4 h-4" />
+                                <Save className="h-4 w-4" aria-hidden="true" />
                                 Save Changes
                             </>
                         )}
@@ -158,6 +164,6 @@ export default function EditHoldingModal({
                 </div>
             </div>
         </div>
+        </ModalPortal>
     )
 }
-

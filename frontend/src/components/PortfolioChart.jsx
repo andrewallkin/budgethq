@@ -8,20 +8,33 @@ import {
     CartesianGrid,
     Tooltip,
     ResponsiveContainer,
-    Legend
 } from 'recharts'
-import { TrendingUp, TrendingDown, Calendar, RefreshCw, Layers } from 'lucide-react'
+import { TrendingUp, TrendingDown, RefreshCw, Layers } from 'lucide-react'
 import BlurredValue from './BlurredValue'
 import { useAuth } from '../context/AuthContext'
 import { formatCurrency as formatCurrencyUtil, formatDateSafe } from '../utils/numberFormatting'
+import {
+    PAPER_CHART,
+    PaperCard,
+    paperEyebrow,
+    paperMoney,
+    paperMoneyTone,
+    paperSegment,
+    paperIconBtn,
+} from './appUi'
 
 const TIME_RANGES = [
     { key: '1m', label: '1M' },
     { key: '3m', label: '3M' },
     { key: '6m', label: '6M' },
     { key: '1y', label: '1Y' },
-    { key: 'all', label: 'All' }
+    { key: 'all', label: 'All' },
 ]
+
+const btnBase =
+    'inline-flex min-h-[36px] cursor-pointer items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--paper-accent)]/20'
+const btnPrimary = `${btnBase} bg-[var(--paper-ink)] text-[var(--paper-card)] hover:opacity-90`
+const btnGhost = `${btnBase} text-[var(--paper-muted)] hover:bg-[var(--paper-card)] hover:text-[var(--paper-ink)]`
 
 export default function PortfolioChart({
     portfolioId = null,
@@ -86,68 +99,46 @@ export default function PortfolioChart({
         return formatDateSafe(dateStr, { day: 'numeric', month: 'short' })
     }
 
-    // Handle negative gains by adjusting the data
-    const processedData = chartData.map(d => ({
+    const processedData = chartData.map((d) => ({
         ...d,
-        // If gain is negative, show it as a negative area
         gain: d.gain,
-        // Contributions stay positive
         contributions: d.contributions,
-        // Total portfolio value
-        total: (d.contributions || 0) + (d.gain || 0)
+        total: (d.contributions || 0) + (d.gain || 0),
     }))
 
-    // Calculate dynamic y-axis domain with smart increments
-    const calculateYAxisDomain = (data, showContributions) => {
+    const calculateYAxisDomain = (data, showContributionsMode) => {
         if (!data || data.length === 0) {
             return { domain: [0, 'auto'], ticks: null }
         }
 
-        // Extract values based on view mode
         let values
-        if (showContributions) {
-            // When showing both, consider both contributions and total
-            values = [
-                ...data.map(d => d.contributions || 0),
-                ...data.map(d => d.total || 0)
-            ]
+        if (showContributionsMode) {
+            values = [...data.map((d) => d.contributions || 0), ...data.map((d) => d.total || 0)]
         } else {
-            // When showing only portfolio value
-            values = data.map(d => d.total || 0)
+            values = data.map((d) => d.total || 0)
         }
 
         const minValue = Math.min(...values)
         const maxValue = Math.max(...values)
         const range = maxValue - minValue
 
-        // Handle edge case: all values are the same
         if (minValue === maxValue) {
             const padding = Math.max(Math.abs(minValue) * 0.1, 1)
             const domainMin = minValue - padding
             const domainMax = maxValue + padding
-            // Generate a few ticks around the single value
             const increment = Math.max(padding / 2, Math.max(Math.abs(minValue) * 0.05, 0.01))
             const ticks = []
             for (let tick = domainMin; tick <= domainMax; tick += increment) {
                 ticks.push(tick)
             }
-            return {
-                domain: [domainMin, domainMax],
-                ticks: ticks
-            }
+            return { domain: [domainMin, domainMax], ticks }
         }
 
-        // Calculate padding (10% of the range)
         const padding = range * 0.1
         const paddedMin = minValue - padding
         const paddedMax = maxValue + padding
-
-        // Calculate appropriate increment based on range
-        // Target: 4-8 ticks on the y-axis
         const targetTicks = 6
         const rawInterval = range / targetTicks
-
-        // Round to nice increments: 1k, 2k, 5k, 10k, 20k, 50k, 100k, etc.
         const magnitude = Math.pow(10, Math.floor(Math.log10(rawInterval)))
         const normalized = rawInterval / magnitude
 
@@ -162,40 +153,29 @@ export default function PortfolioChart({
             increment = 10 * magnitude
         }
 
-        // Round min down and max up to nice numbers based on increment
         const domainMin = Math.floor(paddedMin / increment) * increment
         const domainMax = Math.ceil(paddedMax / increment) * increment
-
-        // Generate tick values
         const ticks = []
         for (let tick = domainMin; tick <= domainMax; tick += increment) {
             ticks.push(tick)
         }
 
-        return {
-            domain: [domainMin, domainMax],
-            ticks: ticks,
-            increment: increment
-        }
+        return { domain: [domainMin, domainMax], ticks, increment }
     }
 
-    // Calculate evenly spaced x-axis ticks based on selected range
     const computeXTicks = (data, rangeKey) => {
         if (!data || data.length === 0) return []
 
         const totalPoints = data.length
-
-        // Target number of ticks per range (including start and end)
         const rangeTickTargets = {
             '1m': 6,
             '3m': 8,
             '6m': 6,
             '1y': 6,
-            'all': 10
+            all: 10,
         }
 
         let targetTickCount = rangeTickTargets[rangeKey] || 6
-        // Don't ask for more ticks than we have points
         targetTickCount = Math.min(targetTickCount, totalPoints)
 
         if (targetTickCount <= 1) {
@@ -203,7 +183,6 @@ export default function PortfolioChart({
             return firstDate ? [firstDate] : []
         }
 
-        // Spread ticks roughly evenly across the data indices
         const step = Math.max(1, Math.floor((totalPoints - 1) / (targetTickCount - 1)))
         const ticks = []
 
@@ -214,7 +193,6 @@ export default function PortfolioChart({
             }
         }
 
-        // Ensure the last data point is always included
         const lastDate = data[totalPoints - 1]?.date
         if (lastDate && ticks[ticks.length - 1] !== lastDate) {
             ticks.push(lastDate)
@@ -267,110 +245,104 @@ export default function PortfolioChart({
         if (!active || !payload || payload.length === 0) return null
 
         if (showContributions) {
-            // Show both contributions and total
-            const contributions = payload.find(p => p.dataKey === 'contributions')?.value || 0
-            const total = payload.find(p => p.dataKey === 'total')?.value || 0
+            const contributions = payload.find((p) => p.dataKey === 'contributions')?.value || 0
+            const total = payload.find((p) => p.dataKey === 'total')?.value || 0
 
             return (
-                <div className="bg-gray-900 border border-gray-700 rounded-lg p-3 shadow-xl">
-                    <p className="text-gray-400 text-xs mb-2">{formatDate(label)}</p>
+                <div className="rounded-md border border-[var(--paper-line)] bg-[var(--paper-card)] p-3 shadow-sm">
+                    <p className="mb-2 text-xs text-[var(--paper-muted)]">{formatDate(label)}</p>
                     <div className="space-y-1">
-                        <div className="flex justify-between items-center gap-4">
-                            <span className="text-gray-300 text-sm">Portfolio Value</span>
-                            <BlurredValue><span className="text-white font-semibold">{formatCurrency(total)}</span></BlurredValue>
+                        <div className="flex items-center justify-between gap-4">
+                            <span className="text-sm text-[var(--paper-muted)]">Portfolio value</span>
+                            <BlurredValue>
+                                <span className={`${paperMoney} text-[var(--paper-ink)]`}>
+                                    {formatCurrency(total)}
+                                </span>
+                            </BlurredValue>
                         </div>
-                        <div className="flex justify-between items-center gap-4">
+                        <div className="flex items-center justify-between gap-4">
                             <div className="flex items-center gap-1.5">
-                                <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                                <span className="text-gray-400 text-xs">Contributions</span>
+                                <div
+                                    className="h-2 w-2 rounded-full"
+                                    style={{ backgroundColor: PAPER_CHART.umber }}
+                                />
+                                <span className="text-xs text-[var(--paper-muted)]">Contributions</span>
                             </div>
-                            <BlurredValue><span className="text-blue-400 text-sm">{formatCurrency(contributions)}</span></BlurredValue>
-                        </div>
-                    </div>
-                </div>
-            )
-        } else {
-            // Show only portfolio value
-            const total = payload.find(p => p.dataKey === 'total')?.value || 0
-
-            return (
-                <div className="bg-gray-900 border border-gray-700 rounded-lg p-3 shadow-xl">
-                    <p className="text-gray-400 text-xs mb-2">{formatDate(label)}</p>
-                    <div className="space-y-1">
-                        <div className="flex justify-between items-center gap-4">
-                            <span className="text-gray-300 text-sm">Portfolio Value</span>
-                            <BlurredValue><span className="text-white font-semibold">{formatCurrency(total)}</span></BlurredValue>
+                            <BlurredValue>
+                                <span className="text-sm text-[var(--paper-ink)]">
+                                    {formatCurrency(contributions)}
+                                </span>
+                            </BlurredValue>
                         </div>
                     </div>
                 </div>
             )
         }
-    }
 
-    if (chartData.length === 0 && !loading) {
+        const total = payload.find((p) => p.dataKey === 'total')?.value || 0
+
         return (
-            <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-600 transition-colors">
-                <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                        <TrendingUp className="w-5 h-5 text-emerald-500" />
-                        Portfolio Performance
-                    </h2>
-                </div>
-                <div className="text-center py-12 text-gray-500 dark:text-gray-400">
-                    <Calendar className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                    <p>No historical data available yet.</p>
-                    <p className="text-sm mt-1">
-                        Data builds from hourly snapshots once you hold positions in this portfolio.
-                    </p>
+            <div className="rounded-md border border-[var(--paper-line)] bg-[var(--paper-card)] p-3 shadow-sm">
+                <p className="mb-2 text-xs text-[var(--paper-muted)]">{formatDate(label)}</p>
+                <div className="flex items-center justify-between gap-4">
+                    <span className="text-sm text-[var(--paper-muted)]">Portfolio value</span>
+                    <BlurredValue>
+                        <span className={`${paperMoney} text-[var(--paper-ink)]`}>{formatCurrency(total)}</span>
+                    </BlurredValue>
                 </div>
             </div>
         )
     }
 
-    return (
-        <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-600 transition-colors">
-            {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                    <TrendingUp className="w-5 h-5 text-emerald-500" />
-                    Portfolio Performance
-                </h2>
+    if (chartData.length === 0 && !loading) {
+        return null
+    }
 
-                <div className="flex flex-wrap items-center gap-3">
-                    {/* Refresh button */}
+    return (
+        <PaperCard className="p-5 sm:p-6">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <p className={paperEyebrow}>Performance</p>
+
+                <div className="flex flex-wrap items-center gap-2">
                     <button
+                        type="button"
                         onClick={fetchHistory}
                         disabled={loading}
-                        className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                        title="Refresh"
+                        className={paperIconBtn}
+                        title="Refresh chart"
+                        aria-label="Refresh chart"
                     >
-                        <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                        <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
                     </button>
 
                     {isTfsa && (
-                    <button
-                        onClick={() => setShowContributions(!showContributions)}
-                        className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${showContributions
-                                ? 'bg-blue-500 text-white'
-                                : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-                            }`}
-                        title={showContributions ? 'Show portfolio value only' : 'Show contributions and portfolio value'}
-                    >
-                        <Layers className="w-4 h-4" />
-                        <span>{showContributions ? 'Both' : 'Value Only'}</span>
-                    </button>
+                        <button
+                            type="button"
+                            onClick={() => setShowContributions(!showContributions)}
+                            className={showContributions ? btnPrimary : btnGhost}
+                            title={
+                                showContributions
+                                    ? 'Show portfolio value only'
+                                    : 'Show contributions and portfolio value'
+                            }
+                        >
+                            <Layers className="h-3.5 w-3.5" aria-hidden="true" />
+                            <span>{showContributions ? 'Both' : 'Value'}</span>
+                        </button>
                     )}
 
-                    {/* Time range selector */}
-                    <div className="flex flex-wrap bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+                    <div className={paperSegment} role="group" aria-label="Time range">
                         {TIME_RANGES.map(({ key, label }) => (
                             <button
                                 key={key}
+                                type="button"
                                 onClick={() => setSelectedRange(key)}
-                                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${selectedRange === key
-                                    ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
-                                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-                                    }`}
+                                className={`min-h-[32px] cursor-pointer rounded-md px-2.5 py-1 text-xs font-medium transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--paper-accent)]/20 ${
+                                    selectedRange === key
+                                        ? 'bg-[var(--paper-ink)] text-[var(--paper-card)]'
+                                        : 'text-[var(--paper-muted)] hover:bg-[var(--paper-card)] hover:text-[var(--paper-ink)]'
+                                }`}
+                                aria-pressed={selectedRange === key}
                             >
                                 {label}
                             </button>
@@ -379,171 +351,156 @@ export default function PortfolioChart({
                 </div>
             </div>
 
-            {/* Summary cards */}
-            {summary && (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4 mb-6">
-                    <div className="p-2 sm:p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Period Start</p>
-                        <BlurredValue><p className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
-                            {formatCurrency(summary.period_start_value)}
-                        </p></BlurredValue>
+            {summary && !loading && (
+                <div className="mt-4 flex flex-wrap items-baseline gap-x-6 gap-y-2 border-b border-[var(--paper-line)] pb-4 text-sm">
+                    <div>
+                        <span className="text-xs text-[var(--paper-muted)]">Start </span>
+                        <BlurredValue>
+                            <span className={`${paperMoney} text-[var(--paper-ink)]`}>
+                                {formatCurrency(summary.period_start_value)}
+                            </span>
+                        </BlurredValue>
                     </div>
-                    <div className="p-2 sm:p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Period End</p>
-                        <BlurredValue><p className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
-                            {formatCurrency(summary.period_end_value)}
-                        </p></BlurredValue>
+                    <div>
+                        <span className="text-xs text-[var(--paper-muted)]">End </span>
+                        <BlurredValue>
+                            <span className={`${paperMoney} text-[var(--paper-ink)]`}>
+                                {formatCurrency(summary.period_end_value)}
+                            </span>
+                        </BlurredValue>
                     </div>
-                    <div className="p-2 sm:p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Change</p>
-                        <p className={`text-base sm:text-lg font-semibold flex items-center gap-1 ${summary.period_change >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
-                            }`}>
-                            {summary.period_change >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-                            {summary.period_change >= 0 ? '+' : ''}<BlurredValue>{formatCurrency(summary.period_change)}</BlurredValue>
-                        </p>
+                    <div className={`flex items-center gap-1 ${paperMoneyTone(summary.period_change)}`}>
+                        {summary.period_change >= 0 ? (
+                            <TrendingUp className="h-3.5 w-3.5" aria-hidden="true" />
+                        ) : (
+                            <TrendingDown className="h-3.5 w-3.5" aria-hidden="true" />
+                        )}
+                        <BlurredValue>
+                            <span className={paperMoney}>
+                                {summary.period_change >= 0 ? '+' : ''}
+                                {formatCurrency(summary.period_change)}
+                            </span>
+                        </BlurredValue>
                     </div>
-                    <div className="p-2 sm:p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Return</p>
-                        <p className={`text-base sm:text-lg font-semibold ${summary.period_change_percent >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
-                            }`}>
-                            {summary.period_change_percent >= 0 ? '+' : ''}<BlurredValue>{summary.period_change_percent.toFixed(2)}%</BlurredValue>
-                        </p>
+                    <div className={paperMoneyTone(summary.period_change_percent)}>
+                        <span className="text-xs text-[var(--paper-muted)]">Return </span>
+                        <BlurredValue>
+                            <span className={paperMoney}>
+                                {summary.period_change_percent >= 0 ? '+' : ''}
+                                {summary.period_change_percent.toFixed(2)}%
+                            </span>
+                        </BlurredValue>
                     </div>
                 </div>
             )}
 
-            {/* Error state */}
             {error && (
-                <div className="text-center py-8 text-red-500">
+                <div className="py-6 text-center text-sm text-[var(--paper-brick)]">
                     <p>{error}</p>
                     <button
+                        type="button"
                         onClick={fetchHistory}
-                        className="mt-2 text-sm text-blue-500 hover:text-blue-600"
+                        className="mt-2 cursor-pointer text-sm text-[var(--paper-accent)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--paper-accent)]/20"
                     >
                         Try again
                     </button>
                 </div>
             )}
 
-            {/* Loading state */}
             {loading && (
-                <div className="flex items-center justify-center py-16">
-                    <RefreshCw className="w-8 h-8 text-gray-400 animate-spin" />
+                <div className="flex items-center justify-center py-12">
+                    <RefreshCw className="h-6 w-6 animate-spin text-[var(--paper-muted)]" aria-hidden="true" />
                 </div>
             )}
 
-            {/* Chart */}
             {!loading && !error && chartData.length > 0 && (
-                <div className="h-64 sm:h-80 min-h-[200px]">
+                <div
+                    className={`mt-4 h-56 min-h-[180px] sm:h-72 ${blurSensitiveValues ? 'blur-[5px] select-none' : ''}`}
+                >
                     <ResponsiveContainer width="100%" height="100%">
                         <AreaChart
                             data={processedData}
-                            margin={{ top: 10, right: 8, left: 20, bottom: 4 }}
+                            margin={{ top: 8, right: 4, left: 0, bottom: 0 }}
                         >
                             <defs>
                                 <linearGradient id="colorContributions" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.8} />
-                                    <stop offset="95%" stopColor="#3B82F6" stopOpacity={0.1} />
+                                    <stop offset="5%" stopColor={PAPER_CHART.umber} stopOpacity={0.7} />
+                                    <stop offset="95%" stopColor={PAPER_CHART.umber} stopOpacity={0.05} />
                                 </linearGradient>
                                 <linearGradient id="colorGain" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#10B981" stopOpacity={0.8} />
-                                    <stop offset="95%" stopColor="#10B981" stopOpacity={0.1} />
-                                </linearGradient>
-                                <linearGradient id="colorLoss" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#EF4444" stopOpacity={0.8} />
-                                    <stop offset="95%" stopColor="#EF4444" stopOpacity={0.1} />
+                                    <stop offset="5%" stopColor={PAPER_CHART.olive} stopOpacity={0.7} />
+                                    <stop offset="95%" stopColor={PAPER_CHART.olive} stopOpacity={0.05} />
                                 </linearGradient>
                             </defs>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
+                            <CartesianGrid strokeDasharray="3 3" stroke="var(--paper-line)" vertical={false} />
                             <XAxis
                                 dataKey="date"
                                 tickFormatter={formatDate}
                                 ticks={xTicks}
-                                stroke="#9CA3AF"
-                                fontSize={12}
+                                stroke="var(--paper-muted)"
+                                tick={{ fill: 'var(--paper-muted)', fontSize: 11 }}
                                 tickLine={false}
                                 axisLine={false}
+                                dy={8}
                             />
                             <YAxis
                                 domain={yAxisConfig.domain}
                                 ticks={yAxisConfig.ticks}
                                 tickFormatter={formatAxisMoney}
-                                stroke="#9CA3AF"
-                                fontSize={12}
+                                stroke="var(--paper-muted)"
+                                tick={{ fill: 'var(--paper-muted)', fontSize: 11 }}
                                 tickLine={false}
                                 axisLine={false}
-                                width={84}
-                                tickMargin={8}
+                                width={72}
+                                tickMargin={4}
                             />
                             <Tooltip content={<CustomTooltip />} />
                             {showContributions ? (
                                 <>
-                                    <Legend
-                                        wrapperStyle={{ paddingTop: '20px' }}
-                                        formatter={(value) => (
-                                            <span className="text-gray-600 dark:text-gray-400 text-sm">
-                                                {value === 'contributions' ? 'Contributions' : 'Portfolio Value'}
-                                            </span>
-                                        )}
-                                    />
                                     <Area
                                         type="monotone"
                                         dataKey="contributions"
-                                        stroke="#3B82F6"
+                                        stroke={PAPER_CHART.umber}
                                         fill="url(#colorContributions)"
-                                        strokeWidth={2}
-                                        fillOpacity={0.3}
+                                        strokeWidth={1.5}
+                                        fillOpacity={1}
                                     />
                                     <Area
                                         type="monotone"
                                         dataKey="total"
-                                        stroke="#10B981"
+                                        stroke={PAPER_CHART.olive}
                                         fill="url(#colorGain)"
                                         strokeWidth={2}
-                                        fillOpacity={0.3}
+                                        fillOpacity={1}
                                     />
                                 </>
                             ) : (
-                                <>
-                                    <Legend
-                                        wrapperStyle={{ paddingTop: '20px' }}
-                                        formatter={() => (
-                                            <span className="text-gray-600 dark:text-gray-400 text-sm">
-                                                Portfolio Value
-                                            </span>
-                                        )}
-                                    />
-                                    <Area
-                                        type="monotone"
-                                        dataKey="total"
-                                        stroke="#10B981"
-                                        fill="url(#colorGain)"
-                                        strokeWidth={2}
-                                        fillOpacity={0.3}
-                                    />
-                                </>
+                                <Area
+                                    type="monotone"
+                                    dataKey="total"
+                                    stroke={PAPER_CHART.olive}
+                                    fill="url(#colorGain)"
+                                    strokeWidth={2}
+                                    fillOpacity={1}
+                                />
                             )}
                         </AreaChart>
                     </ResponsiveContainer>
                 </div>
             )}
 
-            {/* Legend explanation */}
-            {showContributions && isTfsa && (
-                <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                    <div className="flex flex-wrap gap-4 text-sm text-gray-600 dark:text-gray-400">
-                        <div className="flex items-center gap-2">
-                            <div className="w-3 h-3 rounded-sm bg-blue-500"></div>
-                            <span>Money you deposited (contributions)</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <div className="w-3 h-3 rounded-sm bg-emerald-500"></div>
-                            <span>Total portfolio value</span>
-                        </div>
+            {showContributions && isTfsa && !loading && chartData.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-4 text-xs text-[var(--paper-muted)]">
+                    <div className="flex items-center gap-1.5">
+                        <div className="h-2 w-2 rounded-full" style={{ backgroundColor: PAPER_CHART.umber }} />
+                        <span>Contributions</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                        <div className="h-2 w-2 rounded-full" style={{ backgroundColor: PAPER_CHART.olive }} />
+                        <span>Portfolio value</span>
                     </div>
                 </div>
             )}
-        </div>
+        </PaperCard>
     )
 }
-

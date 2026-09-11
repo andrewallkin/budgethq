@@ -1,7 +1,77 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import axios from 'axios'
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts'
-import { Plus, Trash2, Calculator, TrendingUp, TrendingDown, PiggyBank, Upload, Edit2, ArrowUpDown, ArrowUp, ArrowDown, Layers, AlertTriangle } from 'lucide-react'
+import { Plus, Trash2, TrendingUp, Upload, Edit2, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, Loader2, ChevronRight, PieChart } from 'lucide-react'
+import {
+    AllocationRow,
+    PaperCard,
+    PAPER_CHART,
+    paperBtnGhost,
+    paperBtnPrimary,
+    paperDivider,
+    paperEyebrow,
+    paperField,
+    paperIconBtn,
+    paperIconBtnDanger,
+    paperMoney,
+    paperMoneyTone,
+    paperSegment,
+    paperTitle,
+} from '../components/appUi'
+
+const PAPER_CHART_COLORS = [PAPER_CHART.umber, PAPER_CHART.khaki, PAPER_CHART.olive]
+
+function TargetActualRow({ name, target, actual, deviation, threshold }) {
+    const scaleMax = Math.max(target, actual, 1)
+    const withinThreshold = Math.abs(deviation) <= threshold
+
+    return (
+        <div className="py-3">
+            <div className="mb-2 flex items-baseline justify-between gap-3">
+                <p className="min-w-0 truncate text-sm font-medium text-[var(--paper-ink)]">{name}</p>
+                <span
+                    className={`shrink-0 text-xs tabular-nums ${
+                        withinThreshold ? 'text-[var(--paper-muted)]' : 'text-[var(--paper-brick)]'
+                    }`}
+                >
+                    {deviation > 0 ? '+' : ''}
+                    {deviation}%
+                </span>
+            </div>
+            <div className="space-y-1.5">
+                <div className="flex items-center gap-2">
+                    <span className="w-11 shrink-0 text-[11px] text-[var(--paper-muted)]">Target</span>
+                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[var(--paper-line)]">
+                        <div
+                            className="h-full rounded-full transition-all duration-300"
+                            style={{
+                                width: `${(target / scaleMax) * 100}%`,
+                                backgroundColor: PAPER_CHART.khaki,
+                            }}
+                        />
+                    </div>
+                    <span className="w-10 shrink-0 text-right text-xs tabular-nums text-[var(--paper-muted)]">
+                        {target}%
+                    </span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <span className="w-11 shrink-0 text-[11px] text-[var(--paper-muted)]">Actual</span>
+                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[var(--paper-line)]">
+                        <div
+                            className="h-full rounded-full transition-all duration-300"
+                            style={{
+                                width: `${(actual / scaleMax) * 100}%`,
+                                backgroundColor: PAPER_CHART.olive,
+                            }}
+                        />
+                    </div>
+                    <span className="w-10 shrink-0 text-right text-xs tabular-nums text-[var(--paper-ink)]">
+                        {actual}%
+                    </span>
+                </div>
+            </div>
+        </div>
+    )
+}
 
 // Import new components
 import CSVUploadModal from '../components/CSVUploadModal'
@@ -598,166 +668,212 @@ export default function TFSAPortfolio({
 
     const whatIfDistribution = calculateWhatIfDistribution()
 
-    const COLORS = [
-        '#C62828', '#2E7D32', '#1565C0', '#F9A825', '#6A1B9A',
-        '#EF6C00', '#00838F', '#AD1457', '#4E342E', '#455A64',
-        '#9E9D24', '#283593', '#00695C'
-    ]
+    const isEmpty = holdings.length === 0
+    const profitDelta = totalValue - totalInvested
+    const hasMeaningfulProfit = profitDelta !== 0 || totalValue > 0
+    const showSummary = !isEmpty || totalInvested > 0
+    const profitPct =
+        totalInvested > 0 ? (((totalValue - totalInvested) / totalInvested) * 100).toFixed(2) : null
 
-    if (loading) return <div className="p-8 text-center text-gray-500">Loading...</div>
+    if (loading) {
+        return (
+            <div className="mx-auto flex max-w-[1080px] items-center justify-center py-12 text-[var(--paper-muted)]">
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" aria-hidden />
+                Loading…
+            </div>
+        )
+    }
 
     return (
-        <div className="space-y-6 sm:space-y-8">
+        <div className="mx-auto max-w-[1080px] space-y-8">
             {portfolioId != null && hubBackLink?.to && hubBackLink?.label && (
                 <HubBackLink to={hubBackLink.to} label={hubBackLink.label} className="mb-1" />
             )}
 
             {inlineError && (
-                <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200 rounded-lg flex items-center gap-2">
-                    <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+                <PaperCard role="alert" className="flex items-center gap-2 px-5 py-4 text-sm text-[var(--paper-brick)]">
+                    <AlertTriangle className="h-5 w-5 shrink-0" aria-hidden />
                     <span>{inlineError}</span>
-                </div>
+                </PaperCard>
             )}
 
             {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div className="flex flex-col gap-2 min-w-0 flex-1">
-                    {editingPortfolioHeader && portfolioId ? (
-                        <div className="flex flex-wrap items-end gap-2">
-                            <input
-                                type="text"
-                                value={draftPortfolioName}
-                                onChange={(e) => setDraftPortfolioName(e.target.value)}
-                                className="text-xl sm:text-2xl font-bold px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white min-w-0 flex-1 max-w-md"
-                            />
-                            {!isTfsa && (
-                                <select
-                                    value={draftPortfolioCurrency}
-                                    onChange={(e) => setDraftPortfolioCurrency(e.target.value)}
-                                    className="text-sm px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                                    aria-label="Portfolio currency"
-                                >
-                                    {HEADER_EDIT_CURRENCIES.map((c) => (
-                                        <option key={c} value={c}>{c}</option>
-                                    ))}
-                                </select>
-                            )}
-                            <button
-                                type="button"
-                                onClick={savePortfolioHeader}
-                                className="px-3 py-2 text-sm bg-emerald-600 text-white rounded-lg hover:bg-emerald-700"
-                            >
-                                Save
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setDraftPortfolioName(portfolioName)
-                                    setDraftPortfolioCurrency(portfolioCurrency)
-                                    setEditingPortfolioHeader(false)
-                                    setInlineError('')
-                                }}
-                                className="px-3 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
-                            >
-                                Cancel
-                            </button>
-                        </div>
-                    ) : (
-                        <div className="flex items-center gap-2 min-w-0 flex-wrap">
-                            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white truncate">
-                                📈 {portfolioName}
-                            </h1>
-                            {!isTfsa && (
-                                <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 shrink-0">
-                                    {portfolioCurrency}
-                                </span>
-                            )}
-                            {portfolioId && (
-                                <button
-                                    type="button"
-                                    onClick={() => setEditingPortfolioHeader(true)}
-                                    className="p-2 text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg shrink-0"
-                                    title="Edit portfolio name and currency"
-                                >
-                                    <Edit2 className="w-5 h-5" />
-                                </button>
-                            )}
-                        </div>
-                    )}
-                    {!isTfsa && portfolioId && (
-                        <label className="mt-2 flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 cursor-pointer select-none max-w-md">
-                            <input
-                                type="checkbox"
-                                className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
-                                checked={showTargetAllocation}
-                                disabled={allocToggleSaving}
-                                onChange={(e) => persistTargetAllocationToggle(e.target.checked)}
-                            />
-                            <span>
-                                Track target allocation
-                            </span>
-                        </label>
-                    )}
-                </div>
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                    <PriceRefreshIndicator onRefresh={fetchHoldings} portfolioId={portfolioId} />
-                    <div className="flex flex-row flex-wrap gap-2 sm:gap-3 w-full sm:w-auto sm:justify-end">
-                        <button
-                            onClick={() => setShowCSVModal(true)}
-                            className="inline-flex shrink-0 items-center justify-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-                        >
-                            <Upload className="w-4 h-4 shrink-0" />
+            <header>
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0 flex-1">
+                        {editingPortfolioHeader && portfolioId ? (
+                            <div className="space-y-3">
+                                <div className="flex flex-wrap items-end gap-2">
+                                    <input
+                                        type="text"
+                                        value={draftPortfolioName}
+                                        onChange={(e) => setDraftPortfolioName(e.target.value)}
+                                        className={`${paperField} min-w-0 flex-1 max-w-md text-xl font-semibold sm:text-2xl`}
+                                    />
+                                    {!isTfsa && (
+                                        <select
+                                            value={draftPortfolioCurrency}
+                                            onChange={(e) => setDraftPortfolioCurrency(e.target.value)}
+                                            className={`${paperField} w-24 max-w-24 shrink-0`}
+                                            aria-label="Portfolio currency"
+                                        >
+                                            {HEADER_EDIT_CURRENCIES.map((c) => (
+                                                <option key={c} value={c}>{c}</option>
+                                            ))}
+                                        </select>
+                                    )}
+                                </div>
+                                {!isTfsa && (
+                                    <label
+                                        htmlFor="track-target-allocation"
+                                        className="inline-flex cursor-pointer select-none items-center gap-2 rounded-md border border-[var(--paper-line)] bg-[var(--paper-canvas)]/50 px-3 py-2 text-sm text-[var(--paper-muted)] transition-colors duration-200 hover:bg-[var(--paper-canvas)]"
+                                    >
+                                        <input
+                                            id="track-target-allocation"
+                                            type="checkbox"
+                                            className="cursor-pointer rounded border-[var(--paper-line)] text-[var(--paper-ink)] focus:ring-[var(--paper-accent)]/20"
+                                            checked={showTargetAllocation}
+                                            disabled={allocToggleSaving}
+                                            onChange={(e) => persistTargetAllocationToggle(e.target.checked)}
+                                        />
+                                        <span>Track target allocation</span>
+                                    </label>
+                                )}
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <button type="button" onClick={savePortfolioHeader} className={paperBtnPrimary}>
+                                        Save
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setDraftPortfolioName(portfolioName)
+                                            setDraftPortfolioCurrency(portfolioCurrency)
+                                            setEditingPortfolioHeader(false)
+                                            setInlineError('')
+                                        }}
+                                        className={paperBtnGhost}
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div>
+                                <p className={paperEyebrow}>{isTfsa ? 'TFSA' : 'Google Sheets'}</p>
+                                <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2">
+                                    <h1 className={`${paperTitle} truncate`}>{portfolioName}</h1>
+                                    <span className="shrink-0 rounded-md border border-[var(--paper-line)] bg-[var(--paper-canvas)] px-2 py-0.5 text-xs font-medium text-[var(--paper-muted)]">
+                                        {portfolioCurrency}
+                                    </span>
+                                    {portfolioId && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setEditingPortfolioHeader(true)}
+                                            className={paperIconBtn}
+                                            aria-label={isTfsa ? 'Edit portfolio name' : 'Edit portfolio name, currency, and allocation tracking'}
+                                            title={isTfsa ? 'Edit portfolio name' : 'Edit portfolio name, currency, and allocation tracking'}
+                                        >
+                                            <Edit2 className="h-4 w-4" />
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
+                        <PriceRefreshIndicator onRefresh={fetchHoldings} portfolioId={portfolioId} />
+                        <button type="button" onClick={() => setShowCSVModal(true)} className={paperBtnGhost}>
+                            <Upload className="h-4 w-4 shrink-0" aria-hidden />
                             <span className="whitespace-nowrap">Import</span>
                         </button>
-                        <button
-                            onClick={() => setShowAddETFModal(true)}
-                            className="inline-flex shrink-0 items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                        >
-                            <Plus className="w-4 h-4 shrink-0" />
+                        <button type="button" onClick={() => setShowAddETFModal(true)} className={paperBtnPrimary}>
+                            <Plus className="h-4 w-4 shrink-0" aria-hidden />
                             <span className="whitespace-nowrap">Add</span>
                         </button>
                     </div>
                 </div>
-            </div>
+            </header>
 
-            {/* Portfolio Total Value & Performance */}
-            <div className="bg-gradient-to-r from-emerald-500 to-teal-600 p-4 sm:p-6 rounded-xl shadow-lg">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div>
-                        <h2 className="text-sm font-medium text-emerald-100 uppercase tracking-wide">Portfolio Value</h2>
-                        <BlurredValue><p className="mt-2 text-4xl font-bold text-white">
-                            {fmtPortfolio(totalValue)}
-                        </p></BlurredValue>
-                        <p className="text-sm text-emerald-100 mt-1">{holdings.length} holding{holdings.length !== 1 ? 's' : ''} in portfolio</p>
-                    </div>
-
-                    <div>
-                        <h2 className="text-sm font-medium text-emerald-100 uppercase tracking-wide">Total Invested</h2>
-                        <BlurredValue><p className="mt-2 text-3xl font-bold text-white">
-                            {fmtPortfolio(totalInvested)}
-                        </p></BlurredValue>
-                        <p className="text-sm text-emerald-100 mt-1">{isTfsa ? 'Lifetime contributions' : 'Total cost basis'}</p>
-                    </div>
-
-                    <div>
-                        <h2 className="text-sm font-medium text-emerald-100 uppercase tracking-wide">
-                            {totalValue >= totalInvested ? 'Profit' : 'Loss'}
-                        </h2>
-                        <BlurredValue><p className={`mt-2 text-3xl font-bold ${totalValue >= totalInvested ? 'text-white' : 'text-red-200'}`}>
-                            {fmtPortfolio(totalValue - totalInvested, { signDisplay: 'always' })}
+            {isEmpty && (
+                <PaperCard className="px-6 py-10 text-center sm:py-12">
+                    <div className="mx-auto max-w-md">
+                        <PieChart className="mx-auto h-10 w-10 text-[var(--paper-muted)]" aria-hidden />
+                        <h2 className="mt-4 text-xl font-semibold text-[var(--paper-ink)]">No holdings yet</h2>
+                        <p className="mt-2 text-sm text-[var(--paper-muted)]">
+                            {isTfsa
+                                ? 'Import a CSV from EasyEquities or add ETFs manually to start tracking this portfolio.'
+                                : 'Import a CSV or add stocks and ETFs to connect this Google Sheets account.'}
                         </p>
-                        <p className={`text-sm mt-1 font-medium ${totalValue >= totalInvested ? 'text-emerald-100' : 'text-red-200'}`}>
-                            {totalInvested > 0
-                                ? `${totalValue >= totalInvested ? '+' : ''}${(((totalValue - totalInvested) / totalInvested) * 100).toFixed(2)}%`
-                                : '—'
-                            } return
-                        </p></BlurredValue>
+                        <div className="mt-6 flex flex-row flex-wrap justify-center gap-2">
+                            <button type="button" onClick={() => setShowCSVModal(true)} className={paperBtnGhost}>
+                                <Upload className="h-4 w-4 shrink-0" aria-hidden />
+                                Import CSV
+                            </button>
+                            <button type="button" onClick={() => setShowAddETFModal(true)} className={paperBtnPrimary}>
+                                <Plus className="h-4 w-4 shrink-0" aria-hidden />
+                                Add holding
+                            </button>
+                        </div>
                     </div>
-                </div>
-            </div>
+                </PaperCard>
+            )}
+
+            {/* Portfolio summary KPIs */}
+            {showSummary && (
+                <PaperCard className="p-5 sm:p-6">
+                    <p className={paperEyebrow}>Portfolio summary</p>
+                    <div className="mt-4 grid gap-6 sm:grid-cols-3 sm:gap-0 sm:divide-x sm:divide-[var(--paper-line)]">
+                        <div className="sm:px-5 sm:first:pl-0">
+                            <p className="text-xs text-[var(--paper-muted)]">Portfolio value</p>
+                            <p className={`mt-1 text-2xl sm:text-[1.75rem] ${paperMoney} text-[var(--paper-ink)]`}>
+                                <BlurredValue>{fmtPortfolio(totalValue)}</BlurredValue>
+                            </p>
+                            <p className="mt-1 text-xs text-[var(--paper-muted)]">
+                                {holdings.length} holding{holdings.length !== 1 ? 's' : ''}
+                            </p>
+                        </div>
+                        <div className="sm:px-5">
+                            <p className="text-xs text-[var(--paper-muted)]">Total invested</p>
+                            <p className={`mt-1 text-xl ${paperMoney} text-[var(--paper-ink)]`}>
+                                <BlurredValue>{fmtPortfolio(totalInvested)}</BlurredValue>
+                            </p>
+                            <p className="mt-1 text-xs text-[var(--paper-muted)]">
+                                {isTfsa ? 'Lifetime contributions' : 'Cost basis'}
+                            </p>
+                        </div>
+                        <div className="sm:px-5 sm:last:pr-0">
+                            <p className="text-xs text-[var(--paper-muted)]">
+                                {profitDelta >= 0 ? 'Profit' : 'Loss'}
+                            </p>
+                            {hasMeaningfulProfit ? (
+                                <>
+                                    <p
+                                        className={`mt-1 text-xl ${paperMoney} ${paperMoneyTone(profitDelta)}`}
+                                    >
+                                        <BlurredValue>
+                                            {fmtPortfolio(profitDelta, {
+                                                signDisplay: profitDelta === 0 ? 'auto' : 'always',
+                                            })}
+                                        </BlurredValue>
+                                    </p>
+                                    {profitPct != null && (
+                                        <p className={`mt-1 text-xs ${paperMoneyTone(profitDelta)}`}>
+                                            {profitDelta >= 0 ? '+' : ''}
+                                            {profitPct}% return
+                                        </p>
+                                    )}
+                                </>
+                            ) : (
+                                <p className={`mt-1 text-xl ${paperMoney} text-[var(--paper-muted)]`}>—</p>
+                            )}
+                        </div>
+                    </div>
+                </PaperCard>
+            )}
 
             {/* Portfolio Performance Chart (scoped to this portfolio) */}
-            {portfolioId != null && (
+            {portfolioId != null && !isEmpty && (
                 <div className={blurSensitiveValues ? 'blur-[5px] select-none' : ''}>
                     <PortfolioChart
                         portfolioId={portfolioId}
@@ -768,341 +884,335 @@ export default function TFSAPortfolio({
             )}
 
             {/* TFSA Contribution Tracking */}
-            {isTfsa && <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-600 transition-colors">
-                <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                        <PiggyBank className="w-5 h-5 text-blue-500" />
-                        TFSA Contributions{financialYearLabel ? ` (FY ${financialYearLabel})` : ''}
-                    </h2>
-                    <span className="text-sm text-gray-500 dark:text-gray-400">
-                        {isSaving ? 'Saving...' : 'Auto-saved'}
-                    </span>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Annual Contributions */}
-                    <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Annual Limit</h3>
-                            <BlurredValue><span className="text-sm font-bold text-gray-900 dark:text-white">
-                                {fmtZar(tfsaAnnualLimit, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                            </span></BlurredValue>
-                        </div>
-
-                        <div className="flex flex-col sm:flex-row gap-2 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                            <BlurredValue as="div" className="flex items-center flex-1">
-                                <span className="mr-1 text-gray-500 dark:text-gray-400 text-sm">R</span>
-                                <input
-                                    type="number"
-                                    inputMode="decimal"
-                                    value={newDepositAmount}
-                                    onChange={(e) => setNewDepositAmount(e.target.value)}
-                                    placeholder="Amount"
-                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                                />
-                            </BlurredValue>
-                            <input
-                                type="date"
-                                value={newDepositDate}
-                                onChange={(e) => setNewDepositDate(e.target.value)}
-                                className="px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                            />
-                            <button
-                                onClick={addDeposit}
-                                className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors flex items-center gap-1"
-                            >
-                                <Plus className="w-4 h-4" /> Add
-                            </button>
-                        </div>
-
-                        {deposits.length > 0 && (
-                            <div className="space-y-1.5">
-                                {deposits.sort((a, b) => new Date(a.date) - new Date(b.date)).map((deposit) => (
-                                    <div key={deposit.id} className="flex items-center justify-between p-2 bg-blue-50 dark:bg-blue-900/20 rounded text-sm">
-                                        <div className="flex items-center gap-2 min-w-0 flex-1">
-                                            <BlurredValue><span className="font-medium text-blue-700 dark:text-blue-400 shrink-0">
-                                                {fmtZar(deposit.amount, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                                            </span></BlurredValue>
-                                            <span className="text-gray-500 dark:text-gray-400 text-xs whitespace-nowrap shrink-0">
-                                                {formatDateSafe(deposit.date, { day: 'numeric', month: 'short', year: 'numeric' })}
-                                            </span>
-                                        </div>
-                                        <button
-                                            onClick={() => removeDeposit(deposit.id)}
-                                            className="text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
-                                        >
-                                            <Trash2 className="w-3.5 h-3.5" />
-                                        </button>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-
+            {isTfsa && (
+                <PaperCard className="p-5 sm:p-6">
+                    <div className="mb-5 flex items-center justify-between gap-3">
                         <div>
-                            <div className="flex justify-between text-sm mb-1">
-                                <BlurredValue><span className="text-gray-600 dark:text-gray-400">
-                                    {fmtZar(annualContributions, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                                </span></BlurredValue>
-                                <BlurredValue><span className={`font-bold ${contributionsRemaining < 0 ? 'text-red-500' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                                    {fmtZar(contributionsRemaining, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} left
-                                </span></BlurredValue>
-                            </div>
-                            <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden mb-1">
-                                <div
-                                    className={`h-full rounded-full transition-all duration-500 ${contributionPercentUsed >= 100 ? 'bg-red-500' :
-                                        contributionPercentUsed >= 80 ? 'bg-yellow-500' :
-                                            'bg-gradient-to-r from-blue-500 to-cyan-500'
-                                        }`}
-                                    style={{ width: `${Math.min(contributionPercentUsed, 100)}%` }}
-                                />
-                            </div>
-                            <div className="text-center text-sm text-gray-500 dark:text-gray-400">
-                                <BlurredValue>{formatNumber(contributionPercentUsed, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}% used</BlurredValue>
-                            </div>
+                            <p className={paperEyebrow}>
+                                TFSA contributions{financialYearLabel ? ` · FY ${financialYearLabel}` : ''}
+                            </p>
                         </div>
+                        <span className="text-xs text-[var(--paper-muted)]">
+                            {isSaving ? 'Saving…' : 'Auto-saved'}
+                        </span>
                     </div>
 
-                    {/* Lifetime Contributions */}
-                    <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Lifetime Limit</h3>
-                            <BlurredValue><span className="text-sm font-bold text-gray-900 dark:text-white">
-                                {fmtZar(TFSA_LIFETIME_LIMIT, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                            </span></BlurredValue>
-                        </div>
-
-                        <div className="flex flex-col sm:flex-row gap-2 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                            <input
-                                type="text"
-                                value={newHistoricalYear}
-                                onChange={(e) => setNewHistoricalYear(e.target.value)}
-                                placeholder="2018/19"
-                                className="w-24 px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-purple-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                            />
-                            <BlurredValue as="div" className="flex items-center flex-1">
-                                <span className="mr-1 text-gray-500 dark:text-gray-400 text-sm">R</span>
-                                <input
-                                    type="number"
-                                    inputMode="decimal"
-                                    value={newHistoricalAmount}
-                                    onChange={(e) => setNewHistoricalAmount(e.target.value)}
-                                    placeholder="Amount"
-                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-purple-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                                />
-                            </BlurredValue>
-                            <button
-                                onClick={addHistoricalContribution}
-                                className="px-3 py-1.5 bg-purple-600 text-white text-sm rounded hover:bg-purple-700 transition-colors flex items-center gap-1"
-                            >
-                                <Plus className="w-4 h-4" /> Add
-                            </button>
-                        </div>
-
-                        {historicalContributions.length > 0 && (
-                            <div className="space-y-1.5">
-                                {historicalContributions.sort((a, b) => a.financial_year.localeCompare(b.financial_year)).map((hist) => (
-                                    <div key={hist.id} className="flex items-center justify-between p-2 bg-purple-50 dark:bg-purple-900/20 rounded text-sm">
-                                        <div className="flex items-center gap-2">
-                                            <span className="font-medium text-purple-700 dark:text-purple-400">FY {hist.financial_year}</span>
-                                            <span className="text-gray-500 dark:text-gray-400 text-xs">→</span>
-                                            <BlurredValue><span className="font-medium text-gray-900 dark:text-white">
-                                                {fmtZar(hist.amount, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                                            </span></BlurredValue>
-                                        </div>
-                                        <button
-                                            onClick={() => removeHistoricalContribution(hist.id)}
-                                            className="text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
-                                        >
-                                            <Trash2 className="w-3.5 h-3.5" />
-                                        </button>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-
-                        <div className="p-4 bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 rounded-lg">
-                            <div className="text-center mb-3">
-                                <BlurredValue><p className="text-2xl font-bold text-purple-700 dark:text-purple-400">
-                                    {fmtZar(totalLifetimeContributions, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                                </p>
-                                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                                    Total ({fmtZar(historicalTotal, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} + {fmtZar(annualContributions, { minimumFractionDigits: 0, maximumFractionDigits: 0 })})
-                                </p></BlurredValue>
+                    <div className="grid grid-cols-1 gap-8 md:grid-cols-2 md:gap-6 md:divide-x md:divide-[var(--paper-line)]">
+                        {/* Annual Contributions */}
+                        <div className="md:pr-6">
+                            <div className="mb-3 flex items-baseline justify-between gap-2">
+                                <h3 className="text-sm font-medium text-[var(--paper-ink)]">This financial year</h3>
+                                <BlurredValue>
+                                    <span className={`text-xs ${paperMoney} text-[var(--paper-muted)]`}>
+                                        Limit {fmtZar(tfsaAnnualLimit, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                    </span>
+                                </BlurredValue>
                             </div>
 
-                            <div>
-                                <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden mb-2">
-                                    <div
-                                        className={`h-full rounded-full transition-all duration-500 ${lifetimePercentUsed >= 100 ? 'bg-red-500' :
-                                            lifetimePercentUsed >= 80 ? 'bg-yellow-500' :
-                                                'bg-gradient-to-r from-purple-500 to-indigo-500'
-                                            }`}
-                                        style={{ width: `${Math.min(lifetimePercentUsed, 100)}%` }}
+                            <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-stretch">
+                                <BlurredValue as="div" className="flex flex-1 items-center gap-1">
+                                    <span className="text-sm text-[var(--paper-muted)]">R</span>
+                                    <input
+                                        type="number"
+                                        inputMode="decimal"
+                                        value={newDepositAmount}
+                                        onChange={(e) => setNewDepositAmount(e.target.value)}
+                                        placeholder="Amount"
+                                        className={paperField}
                                     />
+                                </BlurredValue>
+                                <input
+                                    type="date"
+                                    value={newDepositDate}
+                                    onChange={(e) => setNewDepositDate(e.target.value)}
+                                    className={`${paperField} sm:w-36`}
+                                />
+                                <button type="button" onClick={addDeposit} className={`${paperBtnPrimary} shrink-0`}>
+                                    <Plus className="h-4 w-4" aria-hidden /> Add
+                                </button>
+                            </div>
+
+                            {deposits.length > 0 && (
+                                <div className={`mb-4 ${paperDivider}`}>
+                                    {deposits.sort((a, b) => new Date(a.date) - new Date(b.date)).map((deposit) => (
+                                        <div key={deposit.id} className="flex items-center justify-between py-2 text-sm">
+                                            <div className="flex min-w-0 flex-1 items-center gap-2">
+                                                <BlurredValue>
+                                                    <span className={`shrink-0 ${paperMoney} text-[var(--paper-ink)]`}>
+                                                        {fmtZar(deposit.amount, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                                    </span>
+                                                </BlurredValue>
+                                                <span className="truncate text-xs text-[var(--paper-muted)]">
+                                                    {formatDateSafe(deposit.date, { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                </span>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => removeDeposit(deposit.id)}
+                                                className={paperIconBtnDanger}
+                                                aria-label="Remove deposit"
+                                            >
+                                                <Trash2 className="h-4 w-4" aria-hidden />
+                                            </button>
+                                        </div>
+                                    ))}
                                 </div>
-                                <div className="flex justify-between items-baseline gap-2 text-sm">
-                                    <BlurredValue><span className="text-gray-600 dark:text-gray-400">
+                            )}
+
+                            <div className="h-1.5 overflow-hidden rounded-full bg-[var(--paper-line)]">
+                                <div
+                                    className="h-full rounded-full transition-all duration-300"
+                                    style={{
+                                        width: `${Math.min(contributionPercentUsed, 100)}%`,
+                                        background:
+                                            contributionPercentUsed >= 100
+                                                ? 'var(--paper-brick)'
+                                                : contributionPercentUsed >= 80
+                                                  ? PAPER_CHART.khaki
+                                                  : PAPER_CHART.olive,
+                                    }}
+                                />
+                            </div>
+                            <div className="mt-2 flex justify-between text-xs">
+                                <BlurredValue>
+                                    <span className="text-[var(--paper-muted)]">
+                                        {fmtZar(annualContributions, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} used
+                                        {' · '}
+                                        {formatNumber(contributionPercentUsed, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%
+                                    </span>
+                                </BlurredValue>
+                                <BlurredValue>
+                                    <span className={`${paperMoney} ${paperMoneyTone(contributionsRemaining)}`}>
+                                        {fmtZar(contributionsRemaining, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} left
+                                    </span>
+                                </BlurredValue>
+                            </div>
+                        </div>
+
+                        {/* Lifetime Contributions */}
+                        <div className="md:pl-6">
+                            <div className="mb-3 flex items-baseline justify-between gap-2">
+                                <h3 className="text-sm font-medium text-[var(--paper-ink)]">Lifetime</h3>
+                                <BlurredValue>
+                                    <span className={`text-xs ${paperMoney} text-[var(--paper-muted)]`}>
+                                        Limit {fmtZar(TFSA_LIFETIME_LIMIT, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                    </span>
+                                </BlurredValue>
+                            </div>
+
+                            <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-stretch">
+                                <input
+                                    type="text"
+                                    value={newHistoricalYear}
+                                    onChange={(e) => setNewHistoricalYear(e.target.value)}
+                                    placeholder="2018/19"
+                                    className={`${paperField} sm:w-24`}
+                                />
+                                <BlurredValue as="div" className="flex flex-1 items-center gap-1">
+                                    <span className="text-sm text-[var(--paper-muted)]">R</span>
+                                    <input
+                                        type="number"
+                                        inputMode="decimal"
+                                        value={newHistoricalAmount}
+                                        onChange={(e) => setNewHistoricalAmount(e.target.value)}
+                                        placeholder="Amount"
+                                        className={paperField}
+                                    />
+                                </BlurredValue>
+                                <button type="button" onClick={addHistoricalContribution} className={`${paperBtnPrimary} shrink-0`}>
+                                    <Plus className="h-4 w-4" aria-hidden /> Add
+                                </button>
+                            </div>
+
+                            {historicalContributions.length > 0 && (
+                                <div className={`mb-4 max-h-32 overflow-y-auto ${paperDivider}`}>
+                                    {historicalContributions
+                                        .sort((a, b) => a.financial_year.localeCompare(b.financial_year))
+                                        .map((hist) => (
+                                            <div key={hist.id} className="flex items-center justify-between py-2 text-sm">
+                                                <div className="flex min-w-0 items-center gap-2">
+                                                    <span className="shrink-0 text-[var(--paper-ink)]">FY {hist.financial_year}</span>
+                                                    <BlurredValue>
+                                                        <span className={`${paperMoney} text-[var(--paper-ink)]`}>
+                                                            {fmtZar(hist.amount, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                                        </span>
+                                                    </BlurredValue>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removeHistoricalContribution(hist.id)}
+                                                    className={paperIconBtnDanger}
+                                                    aria-label={`Remove FY ${hist.financial_year} contribution`}
+                                                >
+                                                    <Trash2 className="h-4 w-4" aria-hidden />
+                                                </button>
+                                            </div>
+                                        ))}
+                                </div>
+                            )}
+
+                            <BlurredValue>
+                                <p className={`mb-3 text-xl ${paperMoney} text-[var(--paper-ink)]`}>
+                                    {fmtZar(totalLifetimeContributions, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                    <span className="ml-2 text-xs font-normal text-[var(--paper-muted)]">total contributed</span>
+                                </p>
+                            </BlurredValue>
+
+                            <div className="h-1.5 overflow-hidden rounded-full bg-[var(--paper-line)]">
+                                <div
+                                    className="h-full rounded-full transition-all duration-300"
+                                    style={{
+                                        width: `${Math.min(lifetimePercentUsed, 100)}%`,
+                                        background:
+                                            lifetimePercentUsed >= 100
+                                                ? 'var(--paper-brick)'
+                                                : lifetimePercentUsed >= 80
+                                                  ? PAPER_CHART.khaki
+                                                  : PAPER_CHART.umber,
+                                    }}
+                                />
+                            </div>
+                            <div className="mt-2 flex justify-between text-xs">
+                                <BlurredValue>
+                                    <span className="text-[var(--paper-muted)]">
                                         {formatNumber(lifetimePercentUsed, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}% used
-                                    </span></BlurredValue>
-                                    <BlurredValue><span className={`font-bold ${lifetimeRemaining < 0 ? 'text-red-500' : 'text-purple-600 dark:text-purple-400'}`}>
+                                    </span>
+                                </BlurredValue>
+                                <BlurredValue>
+                                    <span className={`${paperMoney} ${paperMoneyTone(lifetimeRemaining)}`}>
                                         {fmtZar(lifetimeRemaining, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} left
-                                    </span></BlurredValue>
-                                </div>
+                                    </span>
+                                </BlurredValue>
                             </div>
                         </div>
                     </div>
-                </div>
-            </div>}
+                </PaperCard>
+            )}
 
-            {/* Holdings Table */}
+            {/* Holdings */}
             {holdings.length > 0 && (
-                <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-600 transition-colors">
-                    <h2 className="text-lg font-semibold mb-1 text-gray-900 dark:text-white flex items-center gap-2">
-                        <Layers className="w-5 h-5 text-blue-500" />
-                        Holdings
-                    </h2>
-                    <p className="text-xs text-gray-400 dark:text-gray-500 mb-3 sm:hidden">Swipe horizontally to see all columns</p>
-                    <div className="overflow-x-auto">
-                        <table className="w-full min-w-max">
-                            <thead>
-                                <tr className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider border-b border-gray-200 dark:border-gray-700">
-                                    <th
-                                        onClick={() => handleSort('name')}
-                                        className="text-left py-3 px-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                <PaperCard className="p-5 sm:p-6">
+                    <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <p className={paperEyebrow}>Holdings</p>
+                        <div className={`${paperSegment} self-start`} role="group" aria-label="Sort holdings">
+                            <span className="hidden px-2 py-1.5 text-xs text-[var(--paper-muted)] sm:inline">Sort</span>
+                            {[
+                                { key: 'name', label: 'Name' },
+                                { key: 'value', label: 'Value' },
+                                { key: 'gain_loss', label: 'Gain/Loss' },
+                            ].map(({ key, label }) => {
+                                const active = sortColumn === key
+                                return (
+                                    <button
+                                        key={key}
+                                        type="button"
+                                        onClick={() => handleSort(key)}
+                                        aria-pressed={active}
+                                        className={`inline-flex min-h-[36px] cursor-pointer items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors duration-200 ${
+                                            active
+                                                ? 'bg-[var(--paper-ink)] text-[var(--paper-card)]'
+                                                : 'text-[var(--paper-muted)] hover:bg-[var(--paper-card)] hover:text-[var(--paper-ink)]'
+                                        }`}
                                     >
-                                        <div className="flex items-center gap-1">
-                                            Name
-                                            <SortIcon column="name" />
-                                        </div>
-                                    </th>
-                                    {!isTfsa && (
-                                        <th className="text-center py-3 px-2 text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                                            Type
-                                        </th>
-                                    )}
-                                    <th
-                                        onClick={() => handleSort('value')}
-                                        className="text-right py-3 px-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-                                    >
-                                        <div className="flex items-center justify-end gap-1">
-                                            Value
-                                            <SortIcon column="value" />
-                                        </div>
-                                    </th>
-                                    <th
-                                        onClick={() => handleSort('gain_loss')}
-                                        className="text-center py-3 px-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-                                    >
-                                        <div className="flex items-center justify-center gap-1">
-                                            Gain/Loss
-                                            <SortIcon column="gain_loss" />
-                                        </div>
-                                    </th>
-                                    <th className="text-center py-3 px-2">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                                {getSortedHoldings().map((h) => {
-                                    return (
-                                        <tr
-                                            key={h.id}
-                                            className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer"
-                                            onClick={(e) => {
-                                                if (e.target.closest('button')) return
+                                        {label} <SortIcon column={key} />
+                                    </button>
+                                )
+                            })}
+                        </div>
+                    </div>
+                    <div className={paperDivider}>
+                        {getSortedHoldings().map((h) => {
+                            const typeLabel = !isTfsa
+                                ? `${(h.instrument_type || 'etf') === 'stock' ? 'Stock' : 'ETF'}`
+                                : null
+                            const holdingHint = [h.jse_ticker, typeLabel].filter(Boolean).join(' · ')
+                            return (
+                                <div
+                                    key={h.id}
+                                    className="group/holding relative -mx-2 rounded-md transition-colors duration-200 hover:bg-[var(--paper-canvas)]"
+                                >
+                                    <div className="flex items-center gap-0">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
                                                 setSelectedHolding(h)
                                                 setShowDetailsModal(true)
                                             }}
+                                            className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 px-2 py-3.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--paper-accent)]/30"
                                         >
-                                            <td className="py-3 px-2">
-                                                <div className="font-medium text-gray-900 dark:text-white truncate">
+                                            <div className="min-w-0 flex-1">
+                                                <p className="truncate text-sm font-medium text-[var(--paper-ink)]">
                                                     {h.etf_name}
-                                                </div>
-                                            </td>
-                                            {!isTfsa && (
-                                                <td className="py-3 px-2 text-center">
-                                                    <span className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300 inline-block">
-                                                        {(h.instrument_type || 'etf') === 'stock' ? 'Stock' : 'ETF'}
+                                                </p>
+                                                {holdingHint ? (
+                                                    <p className="mt-0.5 truncate font-mono text-xs text-[var(--paper-muted)]">
+                                                        {holdingHint}
+                                                    </p>
+                                                ) : null}
+                                            </div>
+                                            <div className="flex shrink-0 flex-col items-end gap-0.5">
+                                                <BlurredValue>
+                                                    <span className={`text-base sm:text-lg ${paperMoney} text-[var(--paper-ink)]`}>
+                                                        {fmtPortfolio(h.total_value || 0)}
                                                     </span>
-                                                </td>
-                                            )}
-                                            <td className="py-3 px-2 text-right font-semibold text-gray-900 dark:text-white">
-                                                <BlurredValue>{fmtPortfolio(h.total_value || 0)}</BlurredValue>
-                                            </td>
-                                            <td className="py-3 px-2 text-center">
+                                                </BlurredValue>
                                                 <GainLossIndicator
                                                     percentage={h.gain_loss_percentage}
                                                     amount={h.gain_loss_amount}
                                                     formatCurrencyOpts={portfolioFmtBase}
                                                 />
-                                            </td>
-                                            <td className="py-3 px-2" onClick={(e) => e.stopPropagation()}>
-                                                <div className="flex items-center justify-center gap-1">
-                                                    {showTargetAllocation && (
-                                                    <button
-                                                        onClick={() => handleEdit(h)}
-                                                        className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors"
-                                                        title="Edit Target %"
-                                                    >
-                                                        <Edit2 className="w-4 h-4" />
-                                                    </button>
-                                                    )}
-                                                    <button
-                                                        onClick={() => handleBuySell(h)}
-                                                        className="p-1.5 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/30 rounded transition-colors"
-                                                        title="Buy/Sell"
-                                                    >
-                                                        <TrendingUp className="w-4 h-4" />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleDeleteClick(h)}
-                                                        className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors"
-                                                        title="Delete"
-                                                    >
-                                                        <Trash2 className="w-4 h-4" />
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    )
-                                })}
-                            </tbody>
-                        </table>
+                                            </div>
+                                            <ChevronRight
+                                                className="h-4 w-4 shrink-0 text-[var(--paper-line)] transition-colors duration-200 group-hover/holding:text-[var(--paper-muted)]"
+                                                aria-hidden
+                                            />
+                                        </button>
+                                        <div className="flex shrink-0 items-center pr-1">
+                                            {showTargetAllocation && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleEdit(h)}
+                                                    className={paperIconBtn}
+                                                    aria-label={`Edit target for ${h.etf_name}`}
+                                                    title="Edit Target %"
+                                                >
+                                                    <Edit2 className="h-4 w-4" aria-hidden />
+                                                </button>
+                                            )}
+                                            <button
+                                                type="button"
+                                                onClick={() => handleBuySell(h)}
+                                                className={paperIconBtn}
+                                                aria-label={`Buy or sell ${h.etf_name}`}
+                                                title="Buy/Sell"
+                                            >
+                                                <TrendingUp className="h-4 w-4" aria-hidden />
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleDeleteClick(h)}
+                                                className={paperIconBtnDanger}
+                                                aria-label={`Delete ${h.etf_name}`}
+                                                title="Delete"
+                                            >
+                                                <Trash2 className="h-4 w-4" aria-hidden />
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )
+                        })}
                     </div>
 
                     {showTargetAllocation && Math.abs(totalTarget - 100) > 0.1 && (
-                        <div className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-200 rounded-lg text-sm">
-                            ⚠️ Target percentages sum to {totalTarget.toFixed(2)}% (should be 100%)
+                        <div
+                            role="alert"
+                            className="mt-4 rounded-md border border-[var(--paper-line)] bg-[var(--paper-canvas)]/50 px-3 py-3 text-sm text-[var(--paper-brick)]"
+                        >
+                            Target percentages sum to {totalTarget.toFixed(2)}% (should be 100%)
                         </div>
                     )}
-                </div>
-            )}
-
-            {holdings.length === 0 && (
-                <div className="bg-white dark:bg-gray-800 p-12 rounded-xl shadow-sm border border-gray-200 dark:border-gray-600 text-center">
-                    <div className="text-6xl mb-4">📊</div>
-                    <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">No Holdings Yet</h3>
-                    <p className="text-gray-500 dark:text-gray-400 mb-6">
-                        {isTfsa
-                            ? 'Get started by importing a CSV file or adding ETFs.'
-                            : 'Get started by importing a CSV file or adding stocks or ETFs.'}
-                    </p>
-                    <div className="flex flex-row flex-wrap gap-2 sm:gap-3 justify-center">
-                        <button
-                            onClick={() => setShowCSVModal(true)}
-                            className="inline-flex shrink-0 items-center justify-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-                        >
-                            <Upload className="w-4 h-4 shrink-0" />
-                            <span className="whitespace-nowrap">Import</span>
-                        </button>
-                        <button
-                            onClick={() => setShowAddETFModal(true)}
-                            className="inline-flex shrink-0 items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                        >
-                            <Plus className="w-4 h-4 shrink-0" />
-                            <span className="whitespace-nowrap">Add</span>
-                        </button>
-                    </div>
-                </div>
+                </PaperCard>
             )}
 
             {/* Transaction History */}
@@ -1117,247 +1227,181 @@ export default function TFSAPortfolio({
                 }}
             />
 
-            {/* Target vs Actual Bar Chart */}
+            {/* Target vs actual allocation */}
             {showTargetAllocation && holdings.length > 0 && (
-                <div className={`bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-600 transition-colors ${blurSensitiveValues ? 'blur-[5px] select-none' : ''}`}>
-                    <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Target vs Actual Allocation</h2>
-                    <div className="flex justify-center gap-6 mb-3 text-sm text-gray-500 dark:text-gray-400">
-                        <span className="flex items-center gap-2">
-                            <span className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: '#6366f1' }} />
-                            Target
-                        </span>
-                        <span className="flex items-center gap-2">
-                            <span className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: '#10b981' }} />
-                            Actual
-                        </span>
+                <PaperCard className={`p-5 sm:p-6 ${blurSensitiveValues ? 'blur-[5px] select-none' : ''}`}>
+                    <div className="mb-1 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <p className={paperEyebrow}>Target vs actual</p>
+                        <div className="flex items-center gap-4 text-xs text-[var(--paper-muted)]">
+                            <span className="flex items-center gap-1.5">
+                                <span className="h-2 w-4 shrink-0 rounded-full" style={{ backgroundColor: PAPER_CHART.khaki }} />
+                                Target
+                            </span>
+                            <span className="flex items-center gap-1.5">
+                                <span className="h-2 w-4 shrink-0 rounded-full" style={{ backgroundColor: PAPER_CHART.olive }} />
+                                Actual
+                            </span>
+                        </div>
                     </div>
-                    <div style={{ height: Math.max(300, holdings.length * 60) }}>
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={targetVsActualData} layout="horizontal" margin={{ left: 10, right: 20, top: 30, bottom: 80 }}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                                <XAxis type="category" dataKey="name" tick={{ fill: '#9ca3af', fontSize: 11 }} angle={-45} textAnchor="end" height={60} interval={0} />
-                                <YAxis type="number" domain={[0, 'dataMax']} unit="%" tick={{ fill: '#9ca3af', fontSize: 12 }} width={40} />
-                                <Tooltip
-                                    contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#f3f4f6' }}
-                                    formatter={(value, name) => [`${value}%`, name === 'Target' ? 'Target' : 'Actual']}
-                                />
-                                <Bar dataKey="target" name="Target" fill="#6366f1" radius={[0, 0, 4, 4]} />
-                                <Bar dataKey="actual" name="Actual" fill="#10b981" radius={[0, 0, 4, 4]} />
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </div>
-
-                    <div className="mt-4 flex flex-wrap gap-2">
-                        {targetVsActualData.map((etf, i) => (
-                            <div
-                                key={i}
-                                className={`px-3 py-1 rounded-full text-xs font-medium ${Math.abs(etf.deviation) <= threshold
-                                    ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                                    : etf.deviation > 0
-                                        ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
-                                        : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
-                                    }`}
-                            >
-                                {etf.name}: {etf.deviation > 0 ? '+' : ''}{etf.deviation}%
-                            </div>
+                    <div className={`mt-2 ${paperDivider}`}>
+                        {targetVsActualData.map((etf) => (
+                            <TargetActualRow
+                                key={etf.name}
+                                name={etf.name}
+                                target={etf.target}
+                                actual={etf.actual}
+                                deviation={etf.deviation}
+                                threshold={threshold}
+                            />
                         ))}
                     </div>
-                </div>
+                </PaperCard>
             )}
 
             {/* What If Calculator */}
             {showTargetAllocation && holdings.length > 0 && (
-                <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-600 transition-colors">
-                    <div className="flex items-center gap-2 mb-4">
-                        <Calculator className="w-5 h-5 text-purple-500" />
-                        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">"What If" Calculator</h2>
-                    </div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                <PaperCard className="p-5 sm:p-6">
+                    <p className={paperEyebrow}>&ldquo;What if&rdquo; calculator</p>
+                    <p className="mb-4 mt-2 text-sm text-[var(--paper-muted)]">
                         Split your investment according to your target allocation percentages
                     </p>
 
-                    <div className="flex items-center gap-4 mb-6">
-                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">If I invest:</label>
+                    <div className="mb-6 flex items-center gap-4">
+                        <label htmlFor="what-if-amount" className="text-sm font-medium text-[var(--paper-ink)]">If I invest:</label>
                         <BlurredValue as="div" className="flex items-center">
-                            <span className="mr-1 text-gray-500 dark:text-gray-400 font-mono text-sm">
+                            <span className="mr-1 font-mono text-sm text-[var(--paper-muted)]">
                                 {portfolioCurrency === 'ZAR' ? 'R' : portfolioCurrency}
                             </span>
                             <input
+                                id="what-if-amount"
                                 type="number"
                                 inputMode="decimal"
                                 value={whatIfAmount}
                                 onChange={(e) => setWhatIfAmount(e.target.value)}
                                 placeholder="Enter amount"
-                                className="w-40 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                className={`${paperField} w-40`}
                             />
                         </BlurredValue>
                     </div>
 
                     {(parseFloat(whatIfAmount) || 0) > 0 && whatIfDistribution.length > 0 ? (
-                        <div className="space-y-3">
+                        <div className={paperDivider}>
                             {whatIfDistribution.map((item, i) => (
-                                <div key={i} className="flex items-center justify-between p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-8 h-8 rounded-full bg-purple-500 text-white flex items-center justify-center text-sm font-bold">
-                                            {i + 1}
-                                        </div>
-                                        <span className="font-medium text-gray-900 dark:text-white">{item.etf}</span>
-                                    </div>
-                                    <div className="text-right">
-                                <BlurredValue><div className="font-semibold text-purple-700 dark:text-purple-400">
-                                    {fmtPortfolio(item.buyAmount)}
-                                </div></BlurredValue>
-                                        <div className="text-xs text-gray-500 dark:text-gray-400">
-                                            {item.targetPercentage.toFixed(1)}% of total
-                                        </div>
-                                    </div>
-                                </div>
+                                <AllocationRow
+                                    key={i}
+                                    label={item.etf}
+                                    hint={`${item.targetPercentage.toFixed(1)}% of total`}
+                                    amount={item.buyAmount}
+                                    total={parseFloat(whatIfAmount) || 0}
+                                    display={<BlurredValue>{fmtPortfolio(item.buyAmount)}</BlurredValue>}
+                                    color={PAPER_CHART_COLORS[i % PAPER_CHART_COLORS.length]}
+                                />
                             ))}
-                            <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg text-sm text-gray-600 dark:text-gray-400">
-                                💡 Total: <BlurredValue>{fmtPortfolio(whatIfDistribution.reduce((sum, item) => sum + item.buyAmount, 0))}</BlurredValue>
+                            <div className="py-3 text-right text-sm text-[var(--paper-muted)]">
+                                Total:{' '}
+                                <BlurredValue>
+                                    {fmtPortfolio(whatIfDistribution.reduce((sum, item) => sum + item.buyAmount, 0))}
+                                </BlurredValue>
                             </div>
                         </div>
                     ) : (
-                        <div className="text-center py-6 text-gray-500 dark:text-gray-400">
+                        <div className="py-6 text-center text-[var(--paper-muted)]">
                             <p>Enter an amount above to see how it should be split.</p>
                         </div>
                     )}
-                </div>
+                </PaperCard>
             )}
 
             {/* Rebalancing & target mix */}
             {showTargetAllocation && rebalanceData && holdings.length > 0 && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-600 transition-colors">
-                        <div className="flex justify-between items-center mb-4">
-                            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Rebalancing Plan</h2>
+                <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                    <PaperCard className="p-5 sm:p-6">
+                        <div className="mb-4 flex items-center justify-between">
+                            <p className={paperEyebrow}>Rebalancing plan</p>
                             <div className="flex items-center gap-2">
-                                <span className="text-sm text-gray-500 dark:text-gray-400">Threshold:</span>
+                                <span className="text-xs text-[var(--paper-muted)]">Threshold:</span>
                                 <input
                                     type="number"
                                     inputMode="decimal"
                                     value={threshold}
                                     onChange={(e) => setThreshold(parseFloat(e.target.value))}
-                                    className="w-16 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                    className={`${paperField} w-16 px-2 py-1`}
                                 />
-                                <span className="text-sm text-gray-500 dark:text-gray-400">%</span>
+                                <span className="text-xs text-[var(--paper-muted)]">%</span>
                             </div>
                         </div>
 
                         {rebalanceData.actions && rebalanceData.actions.length > 0 ? (
-                            <div className="space-y-3">
+                            <div className={paperDivider}>
                                 {rebalanceData.actions.map((action, i) => (
-                                    <div key={i} className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-sm transition-colors">
-                                        <div className="font-medium text-blue-900 dark:text-blue-300 mb-1">Step {action.action_num}</div>
-                                        <div className="sm:hidden flex flex-col gap-1 text-blue-800 dark:text-blue-200">
-                                            <div><span className="text-blue-600 dark:text-blue-400">Sell:</span> <b>{action.sell_etf}</b></div>
-                                            <div><span className="text-blue-600 dark:text-blue-400">Buy:</span> <b>{action.buy_etf}</b></div>
+                                    <div key={i} className="py-3 text-sm">
+                                        <div className="mb-1 font-medium text-[var(--paper-ink)]">Step {action.action_num}</div>
+                                        <div className="flex flex-col gap-1 text-[var(--paper-muted)] sm:hidden">
+                                            <div>
+                                                <span className="text-[var(--paper-muted)]">Sell:</span>{' '}
+                                                <b className="text-[var(--paper-ink)]">{action.sell_etf}</b>
+                                            </div>
+                                            <div>
+                                                <span className="text-[var(--paper-muted)]">Buy:</span>{' '}
+                                                <b className="text-[var(--paper-ink)]">{action.buy_etf}</b>
+                                            </div>
                                         </div>
-                                        <div className="hidden sm:flex justify-between items-center text-blue-800 dark:text-blue-200">
-                                            <span>Sell <b>{action.sell_etf}</b></span>
+                                        <div className="hidden items-center justify-between text-[var(--paper-muted)] sm:flex">
+                                            <span>
+                                                Sell <b className="text-[var(--paper-ink)]">{action.sell_etf}</b>
+                                            </span>
                                             <span>→</span>
-                                            <span>Buy <b>{action.buy_etf}</b></span>
+                                            <span>
+                                                Buy <b className="text-[var(--paper-ink)]">{action.buy_etf}</b>
+                                            </span>
                                         </div>
-                                        <div className="mt-1 text-right font-semibold text-blue-700 dark:text-blue-400">
+                                        <div className={`mt-1 text-right ${paperMoney} text-[var(--paper-ink)]`}>
                                             <BlurredValue>{fmtPortfolio(action.amount)}</BlurredValue>
                                         </div>
                                     </div>
                                 ))}
                             </div>
                         ) : (
-                            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                                <div className="mb-2">✅</div>
+                            <div className="py-8 text-center text-[var(--paper-muted)]">
                                 Portfolio is balanced within {threshold}% threshold
                             </div>
                         )}
-                    </div>
+                    </PaperCard>
 
-                    <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-600 transition-colors">
-                        <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Allocation Overview</h2>
-                        <div className="min-h-[280px] sm:h-64">
-                            <ResponsiveContainer width="100%" height={280}>
-                                <PieChart>
-                                    <Pie
-                                        data={currentAllocationData}
-                                        cx="50%"
-                                        cy="40%"
-                                        innerRadius={50}
-                                        outerRadius={70}
-                                        paddingAngle={2}
-                                        dataKey="value"
-                                    >
-                                        {currentAllocationData.map((entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" />
-                                        ))}
-                                    </Pie>
-                                    <Tooltip
-                                        formatter={(value) =>
-                                            fmtPortfolio(value)
-                                        }
-                                        contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#f3f4f6' }}
-                                        itemStyle={{ color: '#f3f4f6' }}
-                                    />
-                                </PieChart>
-                            </ResponsiveContainer>
-                        </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-4 flex-wrap">
+                    <PaperCard className="p-5 sm:p-6">
+                        <p className={paperEyebrow}>Allocation overview</p>
+                        <div className={`mt-4 ${paperDivider}`}>
                             {currentAllocationData.map((entry, index) => (
-                                <div key={index} className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                                    <div
-                                        className="w-3 h-3 rounded-full shrink-0"
-                                        style={{ backgroundColor: COLORS[index % COLORS.length] }}
-                                    />
-                                    <span className="truncate" title={entry.name}>{entry.name}</span>
-                                </div>
+                                <AllocationRow
+                                    key={index}
+                                    label={entry.name}
+                                    amount={entry.value}
+                                    total={totalValue}
+                                    display={<BlurredValue>{fmtPortfolio(entry.value)}</BlurredValue>}
+                                    color={PAPER_CHART_COLORS[index % PAPER_CHART_COLORS.length]}
+                                />
                             ))}
                         </div>
-                    </div>
+                    </PaperCard>
                 </div>
             )}
 
             {!showTargetAllocation && holdings.length > 0 && (
-                <div
-                    className={`bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-600 transition-colors ${
-                        blurSensitiveValues ? 'blur-[5px] select-none' : ''
-                    }`}
-                >
-                    <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Holdings mix</h2>
-                    <div className="min-h-[280px] sm:h-64">
-                        <ResponsiveContainer width="100%" height={280}>
-                            <PieChart>
-                                <Pie
-                                    data={currentAllocationData}
-                                    cx="50%"
-                                    cy="40%"
-                                    innerRadius={50}
-                                    outerRadius={70}
-                                    paddingAngle={2}
-                                    dataKey="value"
-                                >
-                                    {currentAllocationData.map((entry, index) => (
-                                        <Cell key={`mix-cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" />
-                                    ))}
-                                </Pie>
-                                <Tooltip
-                                    formatter={(value) => fmtPortfolio(value)}
-                                    contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#f3f4f6' }}
-                                    itemStyle={{ color: '#f3f4f6' }}
-                                />
-                            </PieChart>
-                        </ResponsiveContainer>
-                    </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-4 flex-wrap">
+                <PaperCard className={`p-5 sm:p-6 ${blurSensitiveValues ? 'blur-[5px] select-none' : ''}`}>
+                    <p className={paperEyebrow}>Holdings mix</p>
+                    <div className={`mt-4 ${paperDivider}`}>
                         {currentAllocationData.map((entry, index) => (
-                            <div key={index} className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                                <div
-                                    className="w-3 h-3 rounded-full shrink-0"
-                                    style={{ backgroundColor: COLORS[index % COLORS.length] }}
-                                />
-                                <span className="truncate" title={entry.name}>{entry.name}</span>
-                            </div>
+                            <AllocationRow
+                                key={index}
+                                label={entry.name}
+                                amount={entry.value}
+                                total={totalValue}
+                                display={<BlurredValue>{fmtPortfolio(entry.value)}</BlurredValue>}
+                                color={PAPER_CHART_COLORS[index % PAPER_CHART_COLORS.length]}
+                            />
                         ))}
                     </div>
-                </div>
+                </PaperCard>
             )}
 
             {/* Modals */}
@@ -1412,25 +1456,28 @@ export default function TFSAPortfolio({
             />
 
             {!isTfsa && portfolioId && (
-                <section className="rounded-xl border border-red-200 dark:border-red-900/60 bg-white dark:bg-gray-800 p-4 sm:p-5">
-                    <h2 className="text-sm font-semibold text-gray-900 dark:text-white">
-                        Delete account
-                    </h2>
-                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 max-w-xl">
-                        Remove this Google Sheets account from BudgetHQ. Delete is only allowed
-                        when the account has no holdings.
-                    </p>
-                    <button
-                        type="button"
-                        onClick={() => {
-                            setDeletePortfolioError('')
-                            setShowDeletePortfolioConfirm(true)
-                        }}
-                        className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 font-medium"
-                    >
-                        <Trash2 className="w-4 h-4 shrink-0" aria-hidden />
-                        Delete account
-                    </button>
+                <section className="border-t border-[var(--paper-line)] pt-6">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0">
+                            <h2 className="text-sm font-medium text-[var(--paper-muted)]">
+                                Remove from BudgetHQ
+                            </h2>
+                            <p className="mt-0.5 max-w-lg text-xs text-[var(--paper-muted)]">
+                                Delete is only allowed when this Google Sheets account has no holdings.
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setDeletePortfolioError('')
+                                setShowDeletePortfolioConfirm(true)
+                            }}
+                            className="inline-flex min-h-[40px] shrink-0 cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-[var(--paper-muted)] transition-colors duration-200 hover:bg-[var(--paper-brick)]/10 hover:text-[var(--paper-brick)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--paper-accent)]/20"
+                        >
+                            <Trash2 className="h-4 w-4 shrink-0" aria-hidden />
+                            Delete account
+                        </button>
+                    </div>
                 </section>
             )}
 
@@ -1448,7 +1495,7 @@ export default function TFSAPortfolio({
                     <>
                         Delete &ldquo;{portfolioName}&rdquo;? This cannot be undone.
                         {deletePortfolioError && (
-                            <span className="block mt-3 text-sm text-red-600 dark:text-red-400">
+                            <span className="mt-3 block text-sm text-[var(--paper-brick)]">
                                 {deletePortfolioError}
                             </span>
                         )}

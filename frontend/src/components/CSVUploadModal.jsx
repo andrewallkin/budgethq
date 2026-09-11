@@ -1,10 +1,15 @@
 import { useState, useRef } from 'react'
 import { X, Upload, FileText, AlertCircle, CheckCircle, Download } from 'lucide-react'
 import axios from 'axios'
+import { ModalPortal, paperEyebrow, paperDivider } from './appUi'
 
 const BASE_REQUIRED_COLUMNS = ['jse_ticker', 'etf_name', 'region', 'shares']
-
 const ROW_TICKER_OK = /^[A-Z0-9:.\-^]+$/
+
+const btnBase =
+    'inline-flex min-h-[40px] cursor-pointer items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-50 focus:ring-2 focus:ring-[var(--paper-accent)]/20'
+const btnPrimary = `${btnBase} bg-[var(--paper-ink)] text-[var(--paper-card)] hover:opacity-90`
+const btnGhost = `${btnBase} border border-[var(--paper-line)] bg-[var(--paper-card)] text-[var(--paper-ink)] hover:bg-[var(--paper-canvas)]`
 
 export default function CSVUploadModal({
     isOpen,
@@ -40,14 +45,14 @@ export default function CSVUploadModal({
             return { headers: [], rows: [], error: 'CSV must have a header row and at least one data row' }
         }
 
-        const headers = lines[0].split(',').map(h => {
+        const headers = lines[0].split(',').map((h) => {
             const t = h.trim().toLowerCase()
             return t === 'ticker' ? 'jse_ticker' : t
         })
         const rows = []
 
         for (let i = 1; i < lines.length; i++) {
-            const values = lines[i].split(',').map(v => v.trim())
+            const values = lines[i].split(',').map((v) => v.trim())
             if (values.length === headers.length) {
                 const row = {}
                 headers.forEach((h, idx) => {
@@ -67,22 +72,22 @@ export default function CSVUploadModal({
             ? BASE_REQUIRED_COLUMNS
             : [...BASE_REQUIRED_COLUMNS, 'target_percentage']
 
-        // Check required columns
-        const missingCols = requiredCols.filter(col => !headers.includes(col))
+        const missingCols = requiredCols.filter((col) => !headers.includes(col))
         if (missingCols.length > 0) {
             const labels = missingCols.map((col) => (col === 'jse_ticker' ? 'ticker' : col))
             validationErrors.push(`Missing required columns: ${labels.join(', ')}`)
         }
 
-        // Validate each row
         rows.forEach((row, idx) => {
-            const rowNum = idx + 2 // Account for header row and 0-index
+            const rowNum = idx + 2
 
             const tickerRaw = (row.jse_ticker || '').trim()
             if (!tickerRaw) {
                 validationErrors.push(`Row ${rowNum}: Ticker is required`)
             } else if (requireJsePrefix && !tickerRaw.startsWith('JSE:')) {
-                validationErrors.push(`Row ${rowNum}: Invalid ticker format. Must start with "JSE:" (e.g., JSE:STX40)`)
+                validationErrors.push(
+                    `Row ${rowNum}: Invalid ticker format. Must start with "JSE:" (e.g., JSE:STX40)`
+                )
             } else if (!requireJsePrefix) {
                 const u = tickerRaw.toUpperCase()
                 if (!ROW_TICKER_OK.test(u) || u.length > 64) {
@@ -95,7 +100,6 @@ export default function CSVUploadModal({
                 validationErrors.push(`Row ${rowNum}: ${nameLabel} is required`)
             }
 
-            // Allow empty shares (for ETFs you plan to buy) or 0+
             const sharesStr = row.shares?.trim()
             if (sharesStr && sharesStr !== '') {
                 const shares = parseFloat(sharesStr)
@@ -108,7 +112,12 @@ export default function CSVUploadModal({
             const targetRaw = hasTargetCol ? row.target_percentage : ''
 
             let targetPct
-            if (!hasTargetCol || targetRaw === undefined || targetRaw === null || String(targetRaw).trim() === '') {
+            if (
+                !hasTargetCol ||
+                targetRaw === undefined ||
+                targetRaw === null ||
+                String(targetRaw).trim() === ''
+            ) {
                 targetPct = allocationOptional ? 0 : NaN
             } else {
                 targetPct = parseFloat(targetRaw)
@@ -118,11 +127,12 @@ export default function CSVUploadModal({
             }
         })
 
-        // Check if target percentages sum to ~100% (allocation-tracking portfolios only)
         if (!allocationOptional) {
             const totalTarget = rows.reduce((sum, row) => sum + (parseFloat(row.target_percentage) || 0), 0)
             if (Math.abs(totalTarget - 100) > 0.5) {
-                validationErrors.push(`Warning: Target percentages sum to ${totalTarget.toFixed(1)}% (should be 100%)`)
+                validationErrors.push(
+                    `Warning: Target percentages sum to ${totalTarget.toFixed(1)}% (should be 100%)`
+                )
             }
         }
 
@@ -154,9 +164,8 @@ export default function CSVUploadModal({
             }
 
             const validationErrors = validateCSV(headers, rows)
-            setErrors(validationErrors.filter(e => !e.startsWith('Warning:')))
-            
-            // Show preview (first 5 rows)
+            setErrors(validationErrors.filter((e) => !e.startsWith('Warning:')))
+
             setPreview(rows.slice(0, 5))
         }
         reader.readAsText(selectedFile)
@@ -182,7 +191,7 @@ export default function CSVUploadModal({
         try {
             const response = await axios.post('/api/etf/bulk-import', formData, {
                 headers: { 'Content-Type': 'multipart/form-data' },
-                ...(portfolioId ? { params: { portfolio_id: portfolioId } } : {})
+                ...(portfolioId ? { params: { portfolio_id: portfolioId } } : {}),
             })
             setResult(response.data)
             if (response.data.created > 0 || response.data.updated > 0) {
@@ -193,7 +202,7 @@ export default function CSVUploadModal({
                 created: 0,
                 updated: 0,
                 failed: 0,
-                errors: [err.response?.data?.detail || 'Upload failed']
+                errors: [err.response?.data?.detail || 'Upload failed'],
             })
         } finally {
             setUploading(false)
@@ -233,47 +242,54 @@ NYSE:KO,Coca-Cola,USA,,0`
 
     if (!isOpen) return null
 
+    const titleId = 'csv-upload-modal-title'
+
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-2xl mx-4 sm:mx-auto max-h-[90vh] overflow-hidden flex flex-col">
-                {/* Header */}
-                <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+        <ModalPortal>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby={titleId}
+                className="mx-4 flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-md border border-[var(--paper-line)] bg-[var(--paper-card)] sm:mx-auto"
+            >
+                <div className="flex items-center justify-between border-b border-[var(--paper-line)] px-5 py-4 sm:px-6">
                     <div>
-                        <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                        <h2 id={titleId} className="text-lg font-semibold text-[var(--paper-ink)]">
                             {etfOnlyMode ? 'Import ETF Holdings' : 'Import holdings'}
                         </h2>
-                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                        <p className={`mt-1 ${paperEyebrow}`}>
                             Upload a CSV to create new holdings or update existing ones
                         </p>
                     </div>
                     <button
+                        type="button"
                         onClick={handleClose}
-                        className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                        aria-label="Close"
+                        className="inline-flex min-h-[40px] min-w-[40px] cursor-pointer items-center justify-center text-[var(--paper-muted)] transition-colors hover:text-[var(--paper-ink)] focus:ring-2 focus:ring-[var(--paper-accent)]/20"
                     >
-                        <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+                        <X className="h-5 w-5" aria-hidden="true" />
                     </button>
                 </div>
 
-                {/* Content */}
-                <div className="p-6 overflow-y-auto max-h-[60vh]">
-                    {/* Template Download */}
+                <div className="max-h-[60vh] overflow-y-auto p-5 sm:p-6">
                     <button
+                        type="button"
                         onClick={downloadTemplate}
-                        className="mb-4 flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400 hover:underline"
+                        className="mb-4 inline-flex cursor-pointer items-center gap-2 text-sm text-[var(--paper-accent)] hover:underline focus:ring-2 focus:ring-[var(--paper-accent)]/20"
                     >
-                        <Download className="w-4 h-4" />
+                        <Download className="h-4 w-4" aria-hidden="true" />
                         Download CSV template
                     </button>
 
-                    {/* Drop Zone */}
                     <div
                         onDrop={handleDrop}
                         onDragOver={(e) => e.preventDefault()}
                         onClick={() => fileInputRef.current?.click()}
-                        className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
+                        className={`cursor-pointer rounded-md border-2 border-dashed p-8 text-center transition-colors ${
                             file
-                                ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
-                                : 'border-gray-300 dark:border-gray-600 hover:border-blue-500 dark:hover:border-blue-400'
+                                ? 'border-[var(--paper-olive)] bg-[var(--paper-olive)]/10'
+                                : 'border-[var(--paper-line)] hover:border-[var(--paper-accent)]'
                         }`}
                     >
                         <input
@@ -283,24 +299,27 @@ NYSE:KO,Coca-Cola,USA,,0`
                             onChange={handleFileSelect}
                             className="hidden"
                         />
-                        
+
                         {file ? (
                             <div className="flex items-center justify-center gap-3">
-                                <FileText className="w-8 h-8 text-green-600 dark:text-green-400" />
+                                <FileText className="h-8 w-8 text-[var(--paper-olive)]" aria-hidden="true" />
                                 <div className="text-left">
-                                    <p className="font-medium text-gray-900 dark:text-white">{file.name}</p>
-                                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                                    <p className="font-medium text-[var(--paper-ink)]">{file.name}</p>
+                                    <p className="text-sm text-[var(--paper-muted)]">
                                         {(file.size / 1024).toFixed(1)} KB
                                     </p>
                                 </div>
                             </div>
                         ) : (
                             <>
-                                <Upload className="w-12 h-12 mx-auto text-gray-400 dark:text-gray-500 mb-3" />
-                                <p className="text-gray-600 dark:text-gray-300 font-medium">
+                                <Upload
+                                    className="mx-auto mb-3 h-12 w-12 text-[var(--paper-muted)]"
+                                    aria-hidden="true"
+                                />
+                                <p className="font-medium text-[var(--paper-ink)]">
                                     Drop your CSV file here or click to browse
                                 </p>
-                                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 space-y-1">
+                                <p className="mt-1 space-y-1 text-sm text-[var(--paper-muted)]">
                                     <span className="block">
                                         Required: ticker, etf_name, region, shares
                                         {!allocationOptional && '. Also target_percentage.'}
@@ -319,14 +338,16 @@ NYSE:KO,Coca-Cola,USA,,0`
                         )}
                     </div>
 
-                    {/* Validation Errors */}
                     {errors.length > 0 && (
-                        <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/20 rounded-lg">
-                            <div className="flex items-center gap-2 text-red-700 dark:text-red-400 font-medium mb-2">
-                                <AlertCircle className="w-5 h-5" />
+                        <div
+                            role="alert"
+                            className="mt-4 rounded-md border border-[var(--paper-brick)]/30 bg-[var(--paper-brick)]/10 p-4"
+                        >
+                            <div className="mb-2 flex items-center gap-2 font-medium text-[var(--paper-brick)]">
+                                <AlertCircle className="h-5 w-5" aria-hidden="true" />
                                 Validation Errors
                             </div>
-                            <ul className="text-sm text-red-600 dark:text-red-300 space-y-1">
+                            <ul className="space-y-1 text-sm text-[var(--paper-brick)]">
                                 {errors.map((err, i) => (
                                     <li key={i}>• {err}</li>
                                 ))}
@@ -334,39 +355,36 @@ NYSE:KO,Coca-Cola,USA,,0`
                         </div>
                     )}
 
-                    {/* Preview Table */}
                     {preview.length > 0 && errors.length === 0 && (
                         <div className="mt-4">
-                            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                            <h3 className="mb-2 text-sm font-semibold text-[var(--paper-ink)]">
                                 Preview (first {preview.length} rows)
                             </h3>
-                            <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+                            <div className="overflow-x-auto rounded-md border border-[var(--paper-line)]">
                                 <table className="w-full text-sm">
-                                    <thead className="bg-gray-50 dark:bg-gray-700">
-                                        <tr>
-                                            <th className="px-3 py-2 text-left text-gray-600 dark:text-gray-300">Ticker</th>
-                                            <th className="px-3 py-2 text-left text-gray-600 dark:text-gray-300">Name</th>
-                                            <th className="px-3 py-2 text-left text-gray-600 dark:text-gray-300">Region</th>
-                                            <th className="px-3 py-2 text-right text-gray-600 dark:text-gray-300">Shares</th>
-                                            <th className="px-3 py-2 text-right text-gray-600 dark:text-gray-300">Target %</th>
+                                    <thead>
+                                        <tr className="border-b border-[var(--paper-line)] bg-[var(--paper-canvas)]">
+                                            <th className="px-3 py-2 text-left text-[var(--paper-muted)]">Ticker</th>
+                                            <th className="px-3 py-2 text-left text-[var(--paper-muted)]">Name</th>
+                                            <th className="px-3 py-2 text-left text-[var(--paper-muted)]">Region</th>
+                                            <th className="px-3 py-2 text-right text-[var(--paper-muted)]">Shares</th>
+                                            <th className="px-3 py-2 text-right text-[var(--paper-muted)]">
+                                                Target %
+                                            </th>
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                                    <tbody className={paperDivider}>
                                         {preview.map((row, i) => (
-                                            <tr key={i} className="bg-white dark:bg-gray-800">
-                                                <td className="px-3 py-2 font-mono text-gray-900 dark:text-white">
+                                            <tr key={i}>
+                                                <td className="px-3 py-2 font-mono text-[var(--paper-ink)]">
                                                     {row.jse_ticker}
                                                 </td>
-                                                <td className="px-3 py-2 text-gray-900 dark:text-white">
-                                                    {row.etf_name}
-                                                </td>
-                                                <td className="px-3 py-2 text-gray-600 dark:text-gray-400">
-                                                    {row.region}
-                                                </td>
-                                                <td className="px-3 py-2 text-right text-gray-900 dark:text-white">
+                                                <td className="px-3 py-2 text-[var(--paper-ink)]">{row.etf_name}</td>
+                                                <td className="px-3 py-2 text-[var(--paper-muted)]">{row.region}</td>
+                                                <td className="px-3 py-2 text-right text-[var(--paper-ink)]">
                                                     {row.shares}
                                                 </td>
-                                                <td className="px-3 py-2 text-right text-gray-900 dark:text-white">
+                                                <td className="px-3 py-2 text-right text-[var(--paper-ink)]">
                                                     {allocationOptional &&
                                                     (!row.target_percentage ||
                                                         String(row.target_percentage).trim() === '')
@@ -381,47 +399,50 @@ NYSE:KO,Coca-Cola,USA,,0`
                         </div>
                     )}
 
-                    {/* Upload Result */}
                     {result && (
-                        <div className={`mt-4 p-4 rounded-lg ${
-                            (result.created > 0 || result.updated > 0) && result.failed === 0
-                                ? 'bg-green-50 dark:bg-green-900/20'
-                                : result.failed > 0
-                                    ? 'bg-yellow-50 dark:bg-yellow-900/20'
-                                    : 'bg-red-50 dark:bg-red-900/20'
-                        }`}>
-                            <div className="flex items-center gap-2 mb-2">
-                                {(result.created > 0 || result.updated > 0) ? (
-                                    <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
+                        <div
+                            className={`mt-4 rounded-md border p-4 ${
+                                (result.created > 0 || result.updated > 0) && result.failed === 0
+                                    ? 'border-[var(--paper-olive)]/30 bg-[var(--paper-olive)]/10'
+                                    : result.failed > 0
+                                      ? 'border-[var(--paper-accent)]/30 bg-[var(--paper-accent)]/10'
+                                      : 'border-[var(--paper-brick)]/30 bg-[var(--paper-brick)]/10'
+                            }`}
+                        >
+                            <div className="mb-2 flex items-center gap-2">
+                                {result.created > 0 || result.updated > 0 ? (
+                                    <CheckCircle className="h-5 w-5 text-[var(--paper-olive)]" aria-hidden="true" />
                                 ) : (
-                                    <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
+                                    <AlertCircle className="h-5 w-5 text-[var(--paper-brick)]" aria-hidden="true" />
                                 )}
-                                <span className="font-medium text-gray-900 dark:text-white">
-                                    Import Complete
-                                </span>
+                                <span className="font-medium text-[var(--paper-ink)]">Import Complete</span>
                             </div>
                             {result.created > 0 && (
-                                <p className="text-sm text-gray-700 dark:text-gray-300">
-                                    ✓ Created: <strong>{result.created}</strong> new holdings
+                                <p className="text-sm text-[var(--paper-muted)]">
+                                    ✓ Created: <strong className="text-[var(--paper-ink)]">{result.created}</strong>{' '}
+                                    new holdings
                                 </p>
                             )}
                             {result.updated > 0 && (
-                                <p className="text-sm text-gray-700 dark:text-gray-300">
-                                    ✓ Updated: <strong>{result.updated}</strong> existing holdings
+                                <p className="text-sm text-[var(--paper-muted)]">
+                                    ✓ Updated: <strong className="text-[var(--paper-ink)]">{result.updated}</strong>{' '}
+                                    existing holdings
                                 </p>
                             )}
                             {result.added_to_sheet > 0 && (
-                                <p className="text-sm text-gray-700 dark:text-gray-300">
-                                    ✓ Added to Google Sheet: <strong>{result.added_to_sheet}</strong> tickers
+                                <p className="text-sm text-[var(--paper-muted)]">
+                                    ✓ Added to Google Sheet:{' '}
+                                    <strong className="text-[var(--paper-ink)]">{result.added_to_sheet}</strong>{' '}
+                                    tickers
                                 </p>
                             )}
                             {result.failed > 0 && (
-                                <p className="text-sm text-gray-700 dark:text-gray-300">
-                                    ⚠ Failed: <strong>{result.failed}</strong> rows
+                                <p className="text-sm text-[var(--paper-muted)]">
+                                    ⚠ Failed: <strong className="text-[var(--paper-ink)]">{result.failed}</strong> rows
                                 </p>
                             )}
                             {result.errors?.length > 0 && (
-                                <ul className="mt-2 text-sm text-red-600 dark:text-red-300 space-y-1">
+                                <ul className="mt-2 space-y-1 text-sm text-[var(--paper-brick)]">
                                     {result.errors.map((err, i) => (
                                         <li key={i}>• {err}</li>
                                     ))}
@@ -431,28 +452,25 @@ NYSE:KO,Coca-Cola,USA,,0`
                     )}
                 </div>
 
-                {/* Footer */}
-                <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200 dark:border-gray-700">
-                    <button
-                        onClick={handleClose}
-                        className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                    >
+                <div className="flex items-center justify-end gap-3 border-t border-[var(--paper-line)] px-5 py-4 sm:px-6">
+                    <button type="button" onClick={handleClose} className={btnGhost}>
                         {result?.created > 0 || result?.updated > 0 ? 'Close' : 'Cancel'}
                     </button>
                     {!result && (
                         <button
+                            type="button"
                             onClick={handleUpload}
                             disabled={!file || errors.length > 0 || uploading}
-                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                            className={btnPrimary}
                         >
                             {uploading ? (
                                 <>
-                                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-[var(--paper-card)]/30 border-t-[var(--paper-card)]" />
                                     Importing...
                                 </>
                             ) : (
                                 <>
-                                    <Upload className="w-4 h-4" />
+                                    <Upload className="h-4 w-4" aria-hidden="true" />
                                     Import
                                 </>
                             )}
@@ -461,6 +479,6 @@ NYSE:KO,Coca-Cola,USA,,0`
                 </div>
             </div>
         </div>
+        </ModalPortal>
     )
 }
-

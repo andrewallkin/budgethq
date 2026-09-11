@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import axios from 'axios'
+import { Loader2 } from 'lucide-react'
 import { useInvestmentsV2Optional } from '../investments-v2/InvestmentsV2Provider'
 import { sheetsAccountId } from '../investments-v2/sheetsAccounts'
 import TFSAPortfolio from './TFSAPortfolio'
@@ -37,7 +38,12 @@ export default function InvestmentPortfolioPage({
     }, [portfolioSlug])
 
     if (loading) {
-        return <div className="p-8 text-center text-gray-500">Loading portfolio...</div>
+        return (
+            <div className="mx-auto flex max-w-[1080px] items-center justify-center py-12 text-[var(--paper-muted)]">
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" aria-hidden />
+                Loading portfolio…
+            </div>
+        )
     }
     if (notFound) {
         return <Navigate to={notFoundTo} replace />
