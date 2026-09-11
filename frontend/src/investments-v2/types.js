@@ -1,6 +1,6 @@
 /** @typedef {'google_sheets' | 'sygnia_playwright'} IntegrationSourceId */
 /** @typedef {'google_sheets' | 'playwright'} SourceKind */
-/** @typedef {'sygnia_full' | 'sheets_placeholder'} DetailMode */
+/** @typedef {'sygnia_full' | 'sheets_live'} DetailMode */
 
 /**
  * @typedef {Object} AccountSummary

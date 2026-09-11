@@ -1,5 +1,8 @@
 import { PRODUCT_TYPES } from '../../investments-v2/types'
 
+const fieldInput =
+    'min-h-[40px] w-full rounded-md border border-[var(--paper-line)] bg-[var(--paper-card)] px-3 py-2.5 text-sm text-[var(--paper-ink)] outline-none transition-colors focus:ring-2 focus:ring-[var(--paper-accent)]/20 disabled:cursor-not-allowed disabled:opacity-50'
+
 export default function AccountProductTypeSelect({ value, onChange, id, disabled }) {
     return (
         <select
@@ -7,7 +10,7 @@ export default function AccountProductTypeSelect({ value, onChange, id, disabled
             value={value ?? ''}
             onChange={(e) => onChange(e.target.value || null)}
             disabled={disabled}
-            className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+            className={fieldInput}
         >
             <option value="">Choose type</option>
             {PRODUCT_TYPES.map((type) => (

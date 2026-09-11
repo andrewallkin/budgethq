@@ -45,15 +45,15 @@ export default function DeleteSygniaAccountButton({
     }
 
     const buttonClass = compact
-        ? 'relative z-10 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed'
-        : 'inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 font-medium disabled:opacity-50 disabled:cursor-not-allowed'
+        ? 'relative z-10 inline-flex min-h-[36px] cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium text-[var(--paper-muted)] transition-colors duration-200 hover:bg-[var(--paper-brick)]/8 hover:text-[var(--paper-brick)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--paper-accent)]/20 disabled:cursor-not-allowed disabled:opacity-50'
+        : 'inline-flex min-h-[40px] shrink-0 cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-[var(--paper-muted)] transition-colors duration-200 hover:bg-[var(--paper-brick)]/8 hover:text-[var(--paper-brick)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--paper-accent)]/20 disabled:cursor-not-allowed disabled:opacity-50'
 
     const modalMessage = (
         <>
             Remove &ldquo;{accountName}&rdquo; from BudgetHQ? Synced holdings, history, and contributions
             for this account will be deleted. This does not close the account at Sygnia.
             {deleteError && (
-                <span className="block mt-3 text-sm text-red-600 dark:text-red-400">{deleteError}</span>
+                <span className="mt-3 block text-sm text-[var(--paper-brick)]">{deleteError}</span>
             )}
         </>
     )

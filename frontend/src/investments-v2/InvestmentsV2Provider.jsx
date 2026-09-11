@@ -7,6 +7,7 @@ import {
     getSygniaAccount,
     listInvestmentPortfolios,
     listSygniaAccounts,
+    syncSygniaAccount as syncSygniaAccountApi,
     updateSygniaAccount as updateSygniaAccountApi,
 } from './api'
 import { getAdapter } from './integrations/registry'
@@ -22,6 +23,7 @@ function accountIdsMatch(left, right) {
 export function InvestmentsV2Provider({ children }) {
     const [accounts, setAccounts] = useState([])
     const [fx, setFx] = useState(null)
+    const [baseCurrency, setBaseCurrency] = useState('ZAR')
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState(null)
 
@@ -30,6 +32,7 @@ export function InvestmentsV2Provider({ children }) {
         let sygnia = []
         let sheets = []
         let nextFx = null
+        let nextBase = 'ZAR'
 
         const results = await Promise.allSettled([
             listSygniaAccounts(),
@@ -50,6 +53,10 @@ export function InvestmentsV2Provider({ children }) {
         if (results[1].status === 'fulfilled') {
             sheets = results[1].value?.accounts || []
             nextFx = results[1].value?.fx || null
+            nextBase =
+                results[1].value?.baseCurrency ||
+                nextFx?.base_currency ||
+                'ZAR'
         } else {
             const err = results[1].reason
             const message =
@@ -64,6 +71,7 @@ export function InvestmentsV2Provider({ children }) {
         const next = [...sheets, ...sygnia]
         setAccounts(next)
         setFx(nextFx)
+        setBaseCurrency(String(nextBase || 'ZAR').toUpperCase())
         setError(errors.length ? errors.join(' ') : null)
         return next
     }, [])
@@ -138,13 +146,46 @@ export function InvestmentsV2Provider({ children }) {
                 throw new Error('Account not found')
             }
             if (account.sourceId === SOURCE_IDS.GOOGLE_SHEETS) {
-                throw new Error('Google Sheets accounts are not available yet')
+                throw new Error('Rename Google Sheets accounts from the portfolio page')
             }
             const detail = await updateSygniaAccountApi(accountId, { name, product_type })
             await refreshAccounts()
             return detail
         },
         [getAccount, refreshAccounts],
+    )
+
+    const syncPlaywrightAccounts = useCallback(
+        async (accountIds) => {
+            const ids = (accountIds || []).filter((id) => id != null)
+            const results = []
+            for (const accountId of ids) {
+                try {
+                    const detail = await syncSygniaAccountApi(accountId)
+                    const ok = Boolean(detail?.sync?.ok)
+                    results.push({
+                        id: accountId,
+                        ok,
+                        message:
+                            detail?.sync?.message ||
+                            (ok ? 'Sync completed.' : 'Sync failed.'),
+                        detail,
+                    })
+                } catch (err) {
+                    const message =
+                        err.response?.data?.detail || err.message || 'Failed to sync account'
+                    results.push({
+                        id: accountId,
+                        ok: false,
+                        message: typeof message === 'string' ? message : 'Failed to sync account',
+                        detail: null,
+                    })
+                }
+            }
+            await refreshAccounts()
+            return results
+        },
+        [refreshAccounts],
     )
 
     const deleteAccount = useCallback(
@@ -170,20 +211,17 @@ export function InvestmentsV2Provider({ children }) {
         [getAccount, refreshAccounts, removeAccount],
     )
 
-    /** @deprecated Task 7 — use createSygniaAccount with account_code + credentials. */
     const createAccount = useCallback(
-        async ({ sourceId, name, currencyCode }) => {
+        async ({ sourceId, name, currencyCode, targetAllocationEnabled }) => {
             if (sourceId === SOURCE_IDS.GOOGLE_SHEETS) {
-                throw new Error('Google Sheets accounts are not available yet')
+                return createSheetsAccount({ name, currencyCode, targetAllocationEnabled })
             }
             if (sourceId === SOURCE_IDS.SYGNIA_PLAYWRIGHT) {
-                throw new Error(
-                    'Sygnia connect requires account selection after login (Task 7 wizard flow)',
-                )
+                throw new Error('Sygnia accounts must be created from the Add account wizard')
             }
             throw new Error(`Unknown source: ${sourceId}`)
         },
-        [],
+        [createSheetsAccount],
     )
 
     const value = useMemo(() => {
@@ -198,17 +236,21 @@ export function InvestmentsV2Provider({ children }) {
             createSygniaAccount,
             createSheetsAccount,
             updateAccount,
+            syncPlaywrightAccounts,
             deleteAccount,
             getAccount,
             getDetail,
             fetchAccountDetail,
             totalHoldings: holdings.total,
+            baseCurrency,
+            fx,
             fxNote: holdings.fxNote,
             holdingsOmitted: holdings.omitted,
         }
     }, [
         accounts,
         fx,
+        baseCurrency,
         loading,
         error,
         refreshAccounts,
@@ -217,6 +259,7 @@ export function InvestmentsV2Provider({ children }) {
         createSygniaAccount,
         createSheetsAccount,
         updateAccount,
+        syncPlaywrightAccounts,
         deleteAccount,
         getAccount,
         getDetail,

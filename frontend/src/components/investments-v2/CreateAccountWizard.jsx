@@ -13,6 +13,24 @@ import {
     listPlaywrightAdapters,
 } from '../../investments-v2/integrations/registry'
 import { PORTFOLIO_CURRENCIES, SOURCE_IDS } from '../../investments-v2/types'
+import { ModalPortal } from '../appUi'
+
+const btnBase =
+    'inline-flex min-h-[40px] cursor-pointer items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-50'
+const btnPrimary = `${btnBase} bg-[var(--paper-ink)] text-[var(--paper-card)] hover:opacity-90`
+const btnGhost = `${btnBase} border border-[var(--paper-line)] bg-[var(--paper-card)] text-[var(--paper-ink)] hover:bg-[var(--paper-canvas)]`
+const fieldInput =
+    'min-h-[40px] w-full rounded-md border border-[var(--paper-line)] bg-[var(--paper-card)] px-3 py-2.5 text-sm text-[var(--paper-ink)] outline-none transition-colors focus:ring-2 focus:ring-[var(--paper-accent)]/20'
+const checkboxInput =
+    'mt-0.5 h-4 w-4 cursor-pointer rounded border-[var(--paper-line)] text-[var(--paper-ink)] accent-[var(--paper-ink)] focus:ring-2 focus:ring-[var(--paper-accent)]/20'
+
+function selectableCardClass(selected) {
+    return `w-full cursor-pointer text-left rounded-md border p-4 transition-colors ${
+        selected
+            ? 'border-[var(--paper-accent)] bg-[var(--paper-canvas)]'
+            : 'border-[var(--paper-line)] hover:border-[var(--paper-accent)]'
+    }`
+}
 
 const METHOD_STEPS = ['Method']
 const SHEETS_STEPS = ['Method', 'Details']
@@ -379,64 +397,68 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
                 : 'Choose how this account should sync.'
 
     return (
+        <ModalPortal>
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
             <div
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="create-account-title"
-                className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-xl w-full border border-gray-200 dark:border-gray-600 overflow-hidden"
+                className="flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden rounded-md border border-[var(--paper-line)] bg-[var(--paper-card)]"
             >
-                <div className="px-6 pt-5 pb-4 border-b border-gray-100 dark:border-gray-700">
+                <div className="shrink-0 border-b border-[var(--paper-line)] px-6 pt-5 pb-4">
                     <div className="flex items-start justify-between gap-3">
                         <div>
                             <h2
                                 id="create-account-title"
-                                className="text-lg font-semibold text-gray-900 dark:text-white"
+                                className="text-lg font-semibold text-[var(--paper-ink)]"
                             >
                                 {wizardTitle}
                             </h2>
-                            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                            <p className="mt-0.5 text-sm text-[var(--paper-muted)]">
                                 {wizardSubtitle}
                             </p>
                         </div>
                         <button
                             type="button"
                             onClick={handleClose}
-                            className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+                            className="inline-flex min-h-[40px] min-w-[40px] cursor-pointer items-center justify-center rounded-md text-[var(--paper-muted)] transition-colors hover:bg-[var(--paper-canvas)] hover:text-[var(--paper-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--paper-accent)]/20"
                             aria-label="Close"
                         >
-                            <X className="w-5 h-5" />
+                            <X className="h-5 w-5" />
                         </button>
                     </div>
 
-                    <ol className="mt-5 flex items-center gap-2">
+                    <p className="mt-4 text-xs font-medium text-[var(--paper-muted)]">
+                        Step {step + 1} of {wizardSteps.length}
+                    </p>
+                    <ol className="mt-2 flex items-center gap-2">
                         {wizardSteps.map((label, i) => {
                             const active = i === step
                             const done = i < step
                             return (
-                                <li key={label} className="flex items-center gap-2 flex-1 min-w-0">
+                                <li key={label} className="flex min-w-0 flex-1 items-center gap-2">
                                     <span
                                         className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
                                             done
-                                                ? 'bg-teal-600 text-white'
+                                                ? 'bg-[var(--paper-ink)] text-[var(--paper-card)]'
                                                 : active
-                                                  ? 'bg-teal-100 text-teal-800 dark:bg-teal-900/50 dark:text-teal-200 ring-2 ring-teal-500'
-                                                  : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+                                                  ? 'bg-[var(--paper-canvas)] text-[var(--paper-ink)] ring-2 ring-[var(--paper-accent)]/30'
+                                                  : 'bg-[var(--paper-canvas)] text-[var(--paper-muted)]'
                                         }`}
                                     >
-                                        {done ? <Check className="w-3.5 h-3.5" /> : i + 1}
+                                        {done ? <Check className="h-3.5 w-3.5" /> : i + 1}
                                     </span>
                                     <span
-                                        className={`text-xs font-medium truncate ${
+                                        className={`truncate text-xs font-medium ${
                                             active || done
-                                                ? 'text-gray-900 dark:text-white'
-                                                : 'text-gray-400 dark:text-gray-500'
+                                                ? 'text-[var(--paper-ink)]'
+                                                : 'text-[var(--paper-muted)]'
                                         }`}
                                     >
                                         {label}
                                     </span>
                                     {i < wizardSteps.length - 1 && (
-                                        <span className="hidden sm:block flex-1 h-px bg-gray-200 dark:bg-gray-600 ml-1" />
+                                        <span className="ml-1 hidden h-px flex-1 bg-[var(--paper-line)] sm:block" />
                                     )}
                                 </li>
                             )
@@ -444,10 +466,10 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
                     </ol>
                 </div>
 
-                <div className="px-6 py-5 min-h-[280px]">
+                <div className="min-h-[280px] flex-1 overflow-y-auto px-6 py-5 text-[var(--paper-ink)]">
                     {stepLabel === 'Method' && (
                         <div className="space-y-3">
-                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                            <p className="text-sm text-[var(--paper-muted)]">
                                 Accounts can sync through Playwright automation or a Google Sheet.
                             </p>
                             {WIZARD_SOURCE_KINDS.map((kind) => {
@@ -458,19 +480,15 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
                                         key={kind.id}
                                         type="button"
                                         onClick={() => handleSourceKindChange(kind.id)}
-                                        className={`w-full text-left rounded-xl border p-4 transition-colors ${
-                                            selected
-                                                ? 'border-teal-500 bg-teal-50/80 dark:bg-teal-900/20 dark:border-teal-400'
-                                                : 'border-gray-200 dark:border-gray-600 hover:border-teal-300 dark:hover:border-teal-600'
-                                        }`}
+                                        className={selectableCardClass(selected)}
                                     >
                                         <span className="flex items-start gap-3">
-                                            <Icon className="w-5 h-5 mt-0.5 shrink-0 text-teal-700 dark:text-teal-300" />
+                                            <Icon className="mt-0.5 h-5 w-5 shrink-0 text-[var(--paper-ink)]" />
                                             <span className="min-w-0 flex-1">
-                                                <span className="block font-semibold text-gray-900 dark:text-white">
+                                                <span className="block font-semibold text-[var(--paper-ink)]">
                                                     {kind.label}
                                                 </span>
-                                                <span className="block text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                                                <span className="mt-0.5 block text-sm text-[var(--paper-muted)]">
                                                     {kind.description}
                                                 </span>
                                             </span>
@@ -484,21 +502,25 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
                     {stepLabel === 'Details' && (
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                <label
+                                    htmlFor="wizard-sheets-name"
+                                    className="mb-1 block text-sm font-medium text-[var(--paper-ink)]"
+                                >
                                     Account name
                                 </label>
                                 <input
+                                    id="wizard-sheets-name"
                                     value={sheetsName}
                                     onChange={(e) => setSheetsName(e.target.value)}
                                     placeholder="e.g. USD brokerage"
-                                    className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                    className={fieldInput}
                                     autoFocus
                                 />
                             </div>
                             <div>
                                 <label
                                     htmlFor="wizard-sheets-currency"
-                                    className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                                    className="mb-1 block text-sm font-medium text-[var(--paper-ink)]"
                                 >
                                     Currency
                                 </label>
@@ -506,7 +528,7 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
                                     id="wizard-sheets-currency"
                                     value={sheetsCurrency}
                                     onChange={(e) => setSheetsCurrency(e.target.value)}
-                                    className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                    className={fieldInput}
                                 >
                                     <option value="" disabled>
                                         Select currency
@@ -517,22 +539,22 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
                                         </option>
                                     ))}
                                 </select>
-                                <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                                <p className="mt-1.5 text-xs text-[var(--paper-muted)]">
                                     A Google Sheet tab is created for this account when you save.
                                 </p>
                             </div>
-                            <label className="flex items-start gap-3 text-sm text-gray-700 dark:text-gray-300 cursor-pointer select-none">
+                            <label className="flex cursor-pointer select-none items-start gap-3 text-sm text-[var(--paper-ink)]">
                                 <input
                                     type="checkbox"
-                                    className="mt-0.5 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                                    className={checkboxInput}
                                     checked={sheetsTrackAllocation}
                                     onChange={(e) => setSheetsTrackAllocation(e.target.checked)}
                                 />
                                 <span>
-                                    <span className="font-medium text-gray-900 dark:text-white">
+                                    <span className="font-medium text-[var(--paper-ink)]">
                                         Track target allocation
                                     </span>
-                                    <span className="block text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                                    <span className="mt-0.5 block text-xs text-[var(--paper-muted)]">
                                         Show target weights and rebalance helpers on this account.
                                         You can change this later.
                                     </span>
@@ -543,7 +565,7 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
 
                     {stepLabel === 'Platform' && (
                         <div className="space-y-3">
-                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                            <p className="text-sm text-[var(--paper-muted)]">
                                 Select the broker or platform to connect. More options can be added
                                 later.
                             </p>
@@ -558,16 +580,12 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
                                             invalidateConnection()
                                             setError('')
                                         }}
-                                        className={`w-full text-left rounded-xl border p-4 transition-colors ${
-                                            selected
-                                                ? 'border-teal-500 bg-teal-50/80 dark:bg-teal-900/20 dark:border-teal-400'
-                                                : 'border-gray-200 dark:border-gray-600 hover:border-teal-300 dark:hover:border-teal-600'
-                                        }`}
+                                        className={selectableCardClass(selected)}
                                     >
-                                        <span className="block font-semibold text-gray-900 dark:text-white">
+                                        <span className="block font-semibold text-[var(--paper-ink)]">
                                             {adapter.label}
                                         </span>
-                                        <span className="block text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                                        <span className="mt-0.5 block text-sm text-[var(--paper-muted)]">
                                             {adapter.description}
                                         </span>
                                     </button>
@@ -579,19 +597,19 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
                     {stepLabel === 'Connect' && (
                         <div className="space-y-4">
                             {loadingLogins ? (
-                                <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                <div className="flex items-center gap-2 text-sm text-[var(--paper-muted)]">
+                                    <Loader2 className="h-4 w-4 animate-spin" />
                                     Loading saved logins…
                                 </div>
                             ) : savedLogins.length > 0 ? (
-                                <div className="flex rounded-lg border border-gray-200 dark:border-gray-600 p-0.5">
+                                <div className="flex gap-1 rounded-md bg-[var(--paper-canvas)] p-1">
                                     <button
                                         type="button"
                                         onClick={() => handleLoginModeChange('existing')}
-                                        className={`flex-1 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                                        className={`min-h-[40px] flex-1 cursor-pointer rounded-md px-3 py-2 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--paper-accent)]/20 ${
                                             loginMode === 'existing'
-                                                ? 'bg-teal-600 text-white'
-                                                : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                                                ? 'bg-[var(--paper-ink)] text-[var(--paper-card)]'
+                                                : 'text-[var(--paper-muted)] hover:text-[var(--paper-ink)]'
                                         }`}
                                     >
                                         Saved login
@@ -599,10 +617,10 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
                                     <button
                                         type="button"
                                         onClick={() => handleLoginModeChange('new')}
-                                        className={`flex-1 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                                        className={`min-h-[40px] flex-1 cursor-pointer rounded-md px-3 py-2 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--paper-accent)]/20 ${
                                             loginMode === 'new'
-                                                ? 'bg-teal-600 text-white'
-                                                : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                                                ? 'bg-[var(--paper-ink)] text-[var(--paper-card)]'
+                                                : 'text-[var(--paper-muted)] hover:text-[var(--paper-ink)]'
                                         }`}
                                     >
                                         New credentials
@@ -612,16 +630,20 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
 
                             {loginMode === 'existing' && savedLogins.length > 0 ? (
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    <label
+                                        htmlFor="wizard-saved-login"
+                                        className="mb-1 block text-sm font-medium text-[var(--paper-ink)]"
+                                    >
                                         Saved Sygnia login
                                     </label>
                                     <select
+                                        id="wizard-saved-login"
                                         value={selectedLoginId ?? ''}
                                         onChange={(e) => {
                                             setSelectedLoginId(Number(e.target.value))
                                             invalidateConnection()
                                         }}
-                                        className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                        className={fieldInput}
                                     >
                                         {savedLogins.map((login) => (
                                             <option key={login.id} value={login.id}>
@@ -633,24 +655,32 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
                             ) : (
                                 <>
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                        <label
+                                            htmlFor="wizard-username"
+                                            className="mb-1 block text-sm font-medium text-[var(--paper-ink)]"
+                                        >
                                             Username
                                         </label>
                                         <input
+                                            id="wizard-username"
                                             value={username}
                                             onChange={(e) => {
                                                 setUsername(e.target.value)
                                                 invalidateConnection()
                                             }}
                                             autoComplete="username"
-                                            className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                            className={fieldInput}
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                        <label
+                                            htmlFor="wizard-password"
+                                            className="mb-1 block text-sm font-medium text-[var(--paper-ink)]"
+                                        >
                                             Password
                                         </label>
                                         <input
+                                            id="wizard-password"
                                             type="password"
                                             value={password}
                                             onChange={(e) => {
@@ -658,7 +688,7 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
                                                 invalidateConnection()
                                             }}
                                             autoComplete="current-password"
-                                            className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                            className={fieldInput}
                                         />
                                     </div>
                                 </>
@@ -673,11 +703,11 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
                                         ? !selectedLoginId
                                         : !username.trim() || !password)
                                 }
-                                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-teal-600 text-teal-700 dark:text-teal-300 hover:bg-teal-50 dark:hover:bg-teal-900/30 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                                className={`${btnGhost} w-full`}
                             >
                                 {testingConnection ? (
                                     <>
-                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        <Loader2 className="h-4 w-4 animate-spin" />
                                         Testing connection…
                                     </>
                                 ) : (
@@ -686,17 +716,17 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
                             </button>
 
                             {testingConnection && (
-                                <div className="rounded-xl border border-teal-200 dark:border-teal-800 bg-teal-50/70 dark:bg-teal-900/20 px-4 py-3">
+                                <div className="rounded-md border border-[var(--paper-line)] bg-[var(--paper-canvas)] px-4 py-3">
                                     <div className="flex items-center gap-3">
                                         <div className="relative h-9 w-9 shrink-0">
-                                            <span className="absolute inset-0 rounded-full border-2 border-teal-200 dark:border-teal-800" />
-                                            <span className="absolute inset-0 rounded-full border-2 border-transparent border-t-teal-600 animate-spin" />
+                                            <span className="absolute inset-0 rounded-full border-2 border-[var(--paper-line)]" />
+                                            <span className="absolute inset-0 animate-spin rounded-full border-2 border-transparent border-t-[var(--paper-ink)]" />
                                         </div>
                                         <div>
-                                            <p className="text-sm font-medium text-teal-900 dark:text-teal-100">
+                                            <p className="text-sm font-medium text-[var(--paper-ink)]">
                                                 Signing in with Playwright
                                             </p>
-                                            <p className="text-xs text-teal-800/80 dark:text-teal-200/80 mt-0.5">
+                                            <p className="mt-0.5 text-xs text-[var(--paper-muted)]">
                                                 Running the Sygnia login flow. This can take up to a
                                                 minute.
                                             </p>
@@ -706,13 +736,13 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
                             )}
 
                             {connectionVerified && !testingConnection && (
-                                <div className="rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 px-4 py-3 flex items-start gap-3">
-                                    <ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                                <div className="flex items-start gap-3 rounded-md border border-[var(--paper-line)] bg-[var(--paper-canvas)] px-4 py-3">
+                                    <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-[var(--paper-olive)]" />
                                     <div>
-                                        <p className="text-sm font-medium text-emerald-900 dark:text-emerald-100">
+                                        <p className="text-sm font-medium text-[var(--paper-olive)]">
                                             Connection verified
                                         </p>
-                                        <p className="text-xs text-emerald-800/90 dark:text-emerald-200/80 mt-0.5">
+                                        <p className="mt-0.5 text-xs text-[var(--paper-muted)]">
                                             {testMessage ||
                                                 'Choose an account on the next step.'}{' '}
                                             {loginMode === 'new'
@@ -727,7 +757,7 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
 
                     {stepLabel === 'Account' && (
                         <div className="space-y-3">
-                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                            <p className="text-sm text-[var(--paper-muted)]">
                                 Select the Sygnia account to connect. Already-linked accounts are
                                 excluded.
                             </p>
@@ -745,16 +775,12 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
                                             setSelectedAccountCode(account.accountCode)
                                             setError('')
                                         }}
-                                        className={`w-full text-left rounded-xl border p-4 transition-colors ${
-                                            selected
-                                                ? 'border-teal-500 bg-teal-50/80 dark:bg-teal-900/20 dark:border-teal-400'
-                                                : 'border-gray-200 dark:border-gray-600 hover:border-teal-300 dark:hover:border-teal-600'
-                                        }`}
+                                        className={selectableCardClass(selected)}
                                     >
-                                        <span className="block font-semibold text-gray-900 dark:text-white tabular-nums">
+                                        <span className="block font-semibold tabular-nums text-[var(--paper-ink)]">
                                             {account.accountCode}
                                         </span>
-                                        <span className="block text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                                        <span className="mt-0.5 block text-sm text-[var(--paper-muted)]">
                                             {typeLabel}
                                             {account.accountTypeCode &&
                                             account.accountTypeName &&
@@ -771,16 +797,16 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
                     {stepLabel === 'Name' && (
                         <div className="space-y-4">
                             {selectedAccount && (
-                                <dl className="rounded-xl border border-gray-200 dark:border-gray-600 px-4 py-3 text-sm space-y-2">
+                                <dl className="space-y-2 rounded-md border border-[var(--paper-line)] bg-[var(--paper-canvas)] px-4 py-3 text-sm">
                                     <div className="flex justify-between gap-4">
-                                        <dt className="text-gray-500 dark:text-gray-400">Account code</dt>
-                                        <dd className="font-medium text-gray-900 dark:text-white tabular-nums">
+                                        <dt className="text-[var(--paper-muted)]">Account code</dt>
+                                        <dd className="font-medium tabular-nums text-[var(--paper-ink)]">
                                             {selectedAccount.accountCode}
                                         </dd>
                                     </div>
                                     <div className="flex justify-between gap-4">
-                                        <dt className="text-gray-500 dark:text-gray-400">Type</dt>
-                                        <dd className="font-medium text-gray-900 dark:text-white text-right">
+                                        <dt className="text-[var(--paper-muted)]">Type</dt>
+                                        <dd className="text-right font-medium text-[var(--paper-ink)]">
                                             {selectedAccount.accountTypeName ||
                                                 selectedAccount.accountTypeCode ||
                                                 '—'}
@@ -789,21 +815,25 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
                                 </dl>
                             )}
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                <label
+                                    htmlFor="wizard-display-name"
+                                    className="mb-1 block text-sm font-medium text-[var(--paper-ink)]"
+                                >
                                     Display name
                                 </label>
                                 <input
+                                    id="wizard-display-name"
                                     value={name}
                                     onChange={(e) => setName(e.target.value)}
                                     placeholder="e.g. Sygnia RA"
-                                    className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                    className={fieldInput}
                                     autoFocus
                                 />
                             </div>
                             <div>
                                 <label
                                     htmlFor="wizard-product-type"
-                                    className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                                    className="mb-1 block text-sm font-medium text-[var(--paper-ink)]"
                                 >
                                     Product type
                                 </label>
@@ -817,21 +847,21 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
                                     disabled={creating}
                                 />
                                 {selectedAccount?.accountTypeName && (
-                                    <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                                    <p className="mt-1.5 text-xs text-[var(--paper-muted)]">
                                         Suggested from Sygnia: {selectedAccount.accountTypeName}. You
                                         can change this before creating the account.
                                     </p>
                                 )}
                             </div>
                             {creating && (
-                                <div className="rounded-xl border border-teal-200 dark:border-teal-800 bg-teal-50/70 dark:bg-teal-900/20 px-4 py-3">
+                                <div className="rounded-md border border-[var(--paper-line)] bg-[var(--paper-canvas)] px-4 py-3">
                                     <div className="flex items-center gap-3">
-                                        <Loader2 className="w-5 h-5 text-teal-600 animate-spin shrink-0" />
+                                        <Loader2 className="h-5 w-5 shrink-0 animate-spin text-[var(--paper-ink)]" />
                                         <div>
-                                            <p className="text-sm font-medium text-teal-900 dark:text-teal-100">
+                                            <p className="text-sm font-medium text-[var(--paper-ink)]">
                                                 Initial sync…
                                             </p>
-                                            <p className="text-xs text-teal-800/80 dark:text-teal-200/80 mt-0.5">
+                                            <p className="mt-0.5 text-xs text-[var(--paper-muted)]">
                                                 Scraping holdings and portfolio value from Sygnia.
                                                 This can take up to a minute.
                                             </p>
@@ -842,17 +872,21 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
                         </div>
                     )}
 
-                    {error && <p className="mt-4 text-sm text-red-500">{error}</p>}
+                    {error && (
+                        <p role="alert" className="mt-4 text-sm text-[var(--paper-brick)]">
+                            {error}
+                        </p>
+                    )}
                 </div>
 
-                <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between gap-3">
+                <div className="flex shrink-0 items-center justify-between gap-3 border-t border-[var(--paper-line)] bg-[var(--paper-card)] px-6 py-4">
                     <button
                         type="button"
                         onClick={step === 0 ? handleClose : goBack}
                         disabled={testingConnection || creating}
-                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+                        className={btnGhost}
                     >
-                        {step > 0 && <ChevronLeft className="w-4 h-4" />}
+                        {step > 0 && <ChevronLeft className="h-4 w-4" />}
                         {step === 0 ? 'Cancel' : 'Back'}
                     </button>
                     {!isLastStep ? (
@@ -860,7 +894,7 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
                             type="button"
                             onClick={goNext}
                             disabled={continueDisabled}
-                            className="px-5 py-2 rounded-lg bg-teal-600 text-white hover:bg-teal-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                            className={btnPrimary}
                         >
                             Continue
                         </button>
@@ -869,11 +903,11 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
                             type="button"
                             onClick={handleCreate}
                             disabled={createDisabled}
-                            className="px-5 py-2 rounded-lg bg-teal-600 text-white hover:bg-teal-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+                            className={btnPrimary}
                         >
                             {creating ? (
                                 <>
-                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                    <Loader2 className="h-4 w-4 animate-spin" />
                                     Initial sync…
                                 </>
                             ) : (
@@ -884,5 +918,6 @@ export default function CreateAccountWizard({ isOpen, onClose, onCreated }) {
                 </div>
             </div>
         </div>
+        </ModalPortal>
     )
 }

@@ -5,8 +5,8 @@
  * - id: IntegrationSourceId
  * - sourceKind: 'google_sheets' | 'playwright'
  * - label, description: wizard copy
- * - detailMode: 'sygnia_full' | 'sheets_placeholder'
- * - createAccount({ name, currencyCode }): AccountSummary
+ * - detailMode: 'sygnia_full' | 'sheets_live'
+ * - createAccount({ name, currencyCode }): AccountSummary (Sygnia throws; Sheets is live via API)
  * - getDetail(account): detail payload for that adapter
  */
 

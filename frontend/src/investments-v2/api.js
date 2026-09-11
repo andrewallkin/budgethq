@@ -105,6 +105,13 @@ export async function getSygniaAccount(accountId) {
     return data
 }
 
+export async function syncSygniaAccount(accountId) {
+    const { data } = await axios.post(`${BASE}/sygnia/accounts/${accountId}/sync`, null, {
+        timeout: 180000,
+    })
+    return data
+}
+
 export async function deleteSygniaAccount(accountId) {
     const { data } = await axios.delete(`${BASE}/sygnia/accounts/${accountId}`)
     return data
