@@ -1,19 +1,44 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
-import { Plus, Trash2, ArrowLeft, ChevronLeft, ChevronRight, Upload, FileText, TrendingUp, DollarSign, Receipt, PenLine } from 'lucide-react'
+import { Trash2, ArrowLeft, ChevronLeft, ChevronRight, Upload, PenLine } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { formatCurrency } from '../utils/numberFormatting'
+import { formatCurrency, formatDateSafe } from '../utils/numberFormatting'
+import { hasAdditionalIncome, payslipMonthLabel } from '../utils/payslipBudget'
+import {
+    PAPER_CHART,
+    PaperCard,
+    paperDivider,
+    paperEyebrow,
+    paperMoney,
+    paperMoneyTone,
+    paperTitle,
+} from '../components/appUi'
 import BlurredValue from '../components/BlurredValue'
 import PayslipUploadModal from '../components/PayslipUploadModal'
 import ManualPayslipModal from '../components/ManualPayslipModal'
 import ConfirmDeleteModal from '../components/ConfirmDeleteModal'
-import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+
+const btnBase = 'inline-flex min-h-[40px] cursor-pointer items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-50'
+const btnPrimary = `${btnBase} bg-[var(--paper-ink)] text-[var(--paper-card)] hover:opacity-90`
+const btnGhost = `${btnBase} border border-[var(--paper-line)] bg-[var(--paper-card)] text-[var(--paper-ink)] hover:bg-[var(--paper-canvas)]`
+const fieldInput = 'w-full rounded-md border border-[var(--paper-line)] bg-[var(--paper-card)] px-3 py-2.5 text-sm text-[var(--paper-ink)] outline-none transition-colors focus:ring-2 focus:ring-[var(--paper-accent)]/20'
+const hideNumberSpinners = '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none'
+
+const amountKeyDown = (onEnter) => (e) => {
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') e.preventDefault()
+    if (e.key === 'Enter') onEnter?.(e)
+}
 
 export default function SalaryPage() {
     const { blurSensitiveValues } = useAuth()
-    const [loading, setLoading] = useState(true)
+    const [initialLoading, setInitialLoading] = useState(true)
+    const [payslipLoading, setPayslipLoading] = useState(false)
     const [payslipData, setPayslipData] = useState(null)
+    const [budgetSalary, setBudgetSalary] = useState(null)
+    const [salarySkippedAdditional, setSalarySkippedAdditional] = useState(false)
+    const [salaryPayslipLabel, setSalaryPayslipLabel] = useState(null)
     const [error, setError] = useState(null)
     const [saving, setSaving] = useState(false)
     const [uploadModalOpen, setUploadModalOpen] = useState(false)
@@ -28,13 +53,34 @@ export default function SalaryPage() {
     const [selectedYear, setSelectedYear] = useState(null)
     const [latestMonth, setLatestMonth] = useState(null)
     const [latestYear, setLatestYear] = useState(null)
+    const skipMonthFetchRef = useRef(false)
     
     const currentDate = new Date()
     const [fyYear, setFyYear] = useState(currentDate.getMonth() >= 3 ? currentDate.getFullYear() : currentDate.getFullYear() - 1)
 
-    // Load latest payslip and OpenAI key status on mount
+    const fetchBudgetIncome = async () => {
+        try {
+            const res = await axios.get('/api/budget/default_user')
+            if (res.data && Object.keys(res.data).length > 0) {
+                setBudgetSalary(res.data.salary ?? null)
+                setSalarySkippedAdditional(Boolean(res.data.salary_skipped_additional))
+                setSalaryPayslipLabel(
+                    payslipMonthLabel(
+                        res.data.salary_payslip_year,
+                        res.data.salary_payslip_month,
+                        formatDateSafe,
+                    ),
+                )
+            }
+        } catch (err) {
+            console.error('Failed to fetch budget income', err)
+        }
+    }
+
+    // Load latest payslip, budget income, and OpenAI key status on mount
     useEffect(() => {
         loadLatestPayslip()
+        fetchBudgetIncome()
         axios.get('/api/auth/user/settings/openai-key')
             .then(res => setHasOpenAIKey(res.data.has_key))
             .catch(() => {})
@@ -42,9 +88,12 @@ export default function SalaryPage() {
 
     // Load specific payslip when month/year changes (after initial load)
     useEffect(() => {
-        if (selectedMonth && selectedYear) {
-            loadPayslip(selectedYear, selectedMonth)
+        if (!selectedMonth || !selectedYear) return
+        if (skipMonthFetchRef.current) {
+            skipMonthFetchRef.current = false
+            return
         }
+        loadPayslip(selectedYear, selectedMonth)
     }, [selectedMonth, selectedYear])
 
     // Load financial year data
@@ -57,6 +106,7 @@ export default function SalaryPage() {
             const res = await axios.get('/api/payslip/latest')
             const payslip = res.data
             setPayslipData(payslip)
+            skipMonthFetchRef.current = true
             setSelectedMonth(payslip.month)
             setSelectedYear(payslip.year)
             setLatestMonth(payslip.month)
@@ -72,12 +122,12 @@ export default function SalaryPage() {
                 setError("Failed to load payslip data")
             }
         } finally {
-            setLoading(false)
+            setInitialLoading(false)
         }
     }
 
     const loadPayslip = async (year, month) => {
-        setLoading(true)
+        setPayslipLoading(true)
         try {
             const res = await axios.get(`/api/payslip/${year}/${month}`)
             setPayslipData(res.data)
@@ -91,7 +141,7 @@ export default function SalaryPage() {
                 setError("Failed to load payslip data")
             }
         } finally {
-            setLoading(false)
+            setPayslipLoading(false)
         }
     }
 
@@ -125,11 +175,13 @@ export default function SalaryPage() {
     const handleUploadSuccess = (uploadedPayslip) => {
         // Set the uploaded payslip as current
         setPayslipData(uploadedPayslip)
+        skipMonthFetchRef.current = true
         setSelectedMonth(uploadedPayslip.month)
         setSelectedYear(uploadedPayslip.year)
         setLatestMonth(uploadedPayslip.month)
         setLatestYear(uploadedPayslip.year)
         fetchFinancialYearData()
+        fetchBudgetIncome()
     }
 
     const handleUpdatePayslip = async (field, value) => {
@@ -224,8 +276,9 @@ export default function SalaryPage() {
             // After deletion, try to load latest payslip again
             await loadLatestPayslip()
             
-            // Refresh financial year data
+            // Refresh financial year data and budget income
             fetchFinancialYearData()
+            fetchBudgetIncome()
         } catch (err) {
             console.error("Failed to delete payslip", err)
             setDeletePayslipError(err.response?.data?.detail || 'Failed to delete payslip. Please try again.')
@@ -239,46 +292,58 @@ export default function SalaryPage() {
         'July', 'August', 'September', 'October', 'November', 'December'
     ]
 
-    if (loading) return <div className="p-8">Loading...</div>
-    if (error) return <div className="p-8 text-red-600">{error}</div>
+    const budgetIncomeHint = salarySkippedAdditional
+        ? `${salaryPayslipLabel || 'Last normal payslip'} · bonus excluded`
+        : salaryPayslipLabel || 'Latest payslip'
+    const hasBudgetIncomeSource = Boolean(salaryPayslipLabel)
+    const showBudgetIncomeColumn = (budgetSalary != null && budgetSalary > 0) || hasBudgetIncomeSource
+
+    // First visit — no month selected yet
+    if (initialLoading) {
+        return (
+            <div className="mx-auto max-w-[1080px] space-y-8">
+                <div>
+                    <h1 className={paperTitle}>Payslip</h1>
+                    <p className={`mt-1 ${paperEyebrow}`}>Upload a monthly PDF or enter the figures yourself.</p>
+                </div>
+                <PaperCard className="p-8 text-center sm:p-12" aria-busy="true">
+                    <p className="text-sm text-[var(--paper-muted)]">Loading…</p>
+                </PaperCard>
+            </div>
+        )
+    }
 
     // Empty state - no payslips
     if (!payslipData && !selectedMonth && !selectedYear) {
         return (
-            <div className="max-w-6xl mx-auto space-y-8 px-4 sm:px-6 lg:px-8 py-4 lg:py-8">
-                <div className="flex items-center gap-4 mb-6">
-                    <Link to="/budget" className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors">
-                        <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-                    </Link>
+            <div className="mx-auto max-w-[1080px] space-y-8">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Payslip Details</h1>
-                        <p className="text-sm text-gray-500">Upload your first payslip to get started</p>
+                        <h1 className={paperTitle}>Payslip</h1>
+                        <p className={`mt-1 ${paperEyebrow}`}>Upload a monthly PDF or enter the figures yourself.</p>
                     </div>
+                    <Link to="/budget" className={btnGhost}>
+                        <ArrowLeft className="h-4 w-4" />
+                        Budget
+                    </Link>
                 </div>
 
-                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-xl p-12 border border-blue-200 dark:border-blue-800 text-center">
-                    <FileText className="w-16 h-16 text-blue-500 mx-auto mb-4" />
-                    <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">No Payslips Yet</h2>
-                    <p className="text-gray-600 dark:text-gray-400 mb-6">
-                        Upload your monthly payslip PDF to automatically extract and track your salary information
+                <PaperCard className="p-8 text-center sm:p-12">
+                    <h2 className="text-xl font-semibold text-[var(--paper-ink)]">No payslips yet</h2>
+                    <p className="mx-auto mt-2 max-w-md text-sm text-[var(--paper-muted)]">
+                        Start with this month’s figures. You can edit every line after saving.
                     </p>
-                    <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-                        <button
-                            onClick={() => setUploadModalOpen(true)}
-                            className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium text-lg"
-                        >
-                            <Upload className="w-5 h-5" />
-                            Upload First Payslip
+                    <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+                        <button type="button" onClick={() => setUploadModalOpen(true)} className={btnPrimary}>
+                            <Upload className="h-4 w-4" />
+                            Upload payslip
                         </button>
-                        <button
-                            onClick={() => setManualModalOpen(true)}
-                            className="inline-flex items-center gap-2 px-6 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-medium text-lg"
-                        >
-                            <PenLine className="w-5 h-5" />
-                            Enter Manually
+                        <button type="button" onClick={() => setManualModalOpen(true)} className={btnGhost}>
+                            <PenLine className="h-4 w-4" />
+                            Enter manually
                         </button>
                     </div>
-                </div>
+                </PaperCard>
 
                 <PayslipUploadModal
                     isOpen={uploadModalOpen}
@@ -303,64 +368,47 @@ export default function SalaryPage() {
     // Empty state - viewing a month with no payslip
     if (!payslipData && selectedMonth && selectedYear) {
         return (
-            <div className="max-w-6xl mx-auto space-y-8 px-4 sm:px-6 lg:px-8 py-4 lg:py-8">
-                <div className="flex items-center gap-4 mb-6">
-                    <Link to="/budget" className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors">
-                        <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-                    </Link>
-                    <div>
-                        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Payslip Details</h1>
-                        <p className="text-sm text-gray-500">Upload and manage your monthly payslips</p>
-                    </div>
-                    {saving && <span className="ml-auto text-xs text-green-600 font-medium animate-pulse">Saving...</span>}
-                </div>
-
-                {/* Month Navigator */}
-                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-xl p-4 border border-blue-200 dark:border-blue-800">
-                    <div className="flex items-center justify-center gap-3">
-                        <button
-                            onClick={() => handleMonthChange(-1)}
-                            className="p-2 hover:bg-white dark:hover:bg-gray-800 rounded-lg transition-colors"
-                        >
-                            <ChevronLeft className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-                        </button>
-                        <div className="text-center">
-                            <div className="text-lg font-bold text-gray-900 dark:text-white">
-                                {monthNames[selectedMonth - 1]} {selectedYear}
-                            </div>
+            <div className="mx-auto max-w-[1080px] space-y-8">
+                <div className="flex flex-col gap-3">
+                    <div className="flex items-center justify-between gap-4">
+                        <p className={paperEyebrow}>Payslip</p>
+                        <div className="flex items-center gap-4 text-sm">
+                            <Link to="/budget" className="cursor-pointer text-[var(--paper-muted)] transition-colors hover:text-[var(--paper-ink)]">
+                                Budget
+                            </Link>
                         </div>
-                        <button
-                            onClick={() => handleMonthChange(1)}
-                            className="p-2 hover:bg-white dark:hover:bg-gray-800 rounded-lg transition-colors"
-                        >
-                            <ChevronRight className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-                        </button>
                     </div>
+                    <MonthHeader
+                        monthLabel={`${monthNames[selectedMonth - 1]} ${selectedYear}`}
+                        onPrev={() => handleMonthChange(-1)}
+                        onNext={() => handleMonthChange(1)}
+                    />
                 </div>
 
-                <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-12 border border-gray-200 dark:border-gray-700 text-center">
-                    <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                    <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">No Payslip for This Month</h2>
-                    <p className="text-gray-600 dark:text-gray-400 mb-6">
-                        Upload a payslip for {monthNames[selectedMonth - 1]} {selectedYear}
+                {error ? <p className="text-sm text-[var(--paper-brick)]">{error}</p> : null}
+
+                {payslipLoading ? (
+                    <PaperCard className="p-8 text-center sm:p-12" aria-busy="true">
+                        <p className="text-sm text-[var(--paper-muted)]">Loading…</p>
+                    </PaperCard>
+                ) : (
+                <PaperCard className="p-8 text-center sm:p-12">
+                    <h2 className="text-xl font-semibold text-[var(--paper-ink)]">No payslip this month</h2>
+                    <p className="mt-2 text-sm text-[var(--paper-muted)]">
+                        Add one for {monthNames[selectedMonth - 1]} {selectedYear}.
                     </p>
-                    <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-                        <button
-                            onClick={() => setUploadModalOpen(true)}
-                            className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium"
-                        >
-                            <Upload className="w-5 h-5" />
-                            Upload Payslip
+                    <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+                        <button type="button" onClick={() => setUploadModalOpen(true)} className={btnPrimary}>
+                            <Upload className="h-4 w-4" />
+                            Upload
                         </button>
-                        <button
-                            onClick={() => setManualModalOpen(true)}
-                            className="inline-flex items-center gap-2 px-6 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-medium"
-                        >
-                            <PenLine className="w-5 h-5" />
-                            Enter Manually
+                        <button type="button" onClick={() => setManualModalOpen(true)} className={btnGhost}>
+                            <PenLine className="h-4 w-4" />
+                            Enter manually
                         </button>
                     </div>
-                </div>
+                </PaperCard>
+                )}
 
                 <PayslipUploadModal
                     isOpen={uploadModalOpen}
@@ -395,65 +443,60 @@ export default function SalaryPage() {
     const totalPersonalDeduct = personalDeductions.reduce((sum, item) => sum + item.amount, 0)
     // Total income (display) = base gross + company contributions (benefits) + additional income
     const totalIncome = payslipData.gross_salary + totalCompanyContrib + totalAdditionalIncome
+    const totalDeductions =
+        (payslipData.paye || 0) +
+        (payslipData.uif_employee_portion || 0) +
+        totalPersonalDeduct +
+        totalCompanyContrib
+    const hasBonus = hasAdditionalIncome(payslipData)
+    const fyMonths = fyData?.months?.filter((month) => month.has_data) || []
 
     return (
-        <div className="max-w-6xl mx-auto space-y-8 px-4 sm:px-6 lg:px-8 py-4 lg:py-8">
-            {/* Header */}
-            <div className="flex items-center gap-4 mb-6">
-                <Link to="/budget" className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors">
-                    <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-                </Link>
-                <div>
-                    <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Payslip Details</h1>
-                    <p className="text-sm text-gray-500">View and edit your monthly payslip data</p>
-                </div>
-                {saving && <span className="ml-auto text-xs text-green-600 font-medium animate-pulse">Saving...</span>}
-            </div>
-
-            {/* Month Selector & Upload */}
-            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-xl p-4 border border-blue-200 dark:border-blue-800">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                    <div className="flex items-center justify-between sm:justify-start gap-3">
+        <div className="mx-auto max-w-[1080px] space-y-8">
+            <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between gap-4">
+                    <p className={paperEyebrow}>
+                        {payslipLoading
+                            ? 'Payslip'
+                            : `${payslipData.company_name || 'Payslip'}${payslipData.title ? ` · ${payslipData.title}` : ''}`}
+                    </p>
+                    <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-1 text-sm">
+                        {saving ? <span className="text-xs text-[var(--paper-olive)]">Saving…</span> : null}
                         <button
-                            onClick={() => handleMonthChange(-1)}
-                            className="p-2 hover:bg-white dark:hover:bg-gray-800 rounded-lg transition-colors"
+                            type="button"
+                            onClick={() => setUploadModalOpen(true)}
+                            className="cursor-pointer text-[var(--paper-muted)] transition-colors hover:text-[var(--paper-ink)]"
                         >
-                            <ChevronLeft className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                            Upload
                         </button>
-                        <div className="text-center">
-                            <div className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                                {monthNames[selectedMonth - 1]} {selectedYear}
-                                {isLatest && (
-                                    <span className="px-2 py-1 text-xs font-bold bg-green-500 text-white rounded">
-                                        LATEST
-                                    </span>
-                                )}
-                            </div>
-                            <div className="text-xs text-gray-500 dark:text-gray-400">
-                                {payslipData.company_name || 'Uploaded Payslip'}
-                            </div>
-                        </div>
                         <button
-                            onClick={() => handleMonthChange(1)}
-                            className="p-2 hover:bg-white dark:hover:bg-gray-800 rounded-lg transition-colors"
+                            type="button"
+                            onClick={() => setManualModalOpen(true)}
+                            className="cursor-pointer text-[var(--paper-muted)] transition-colors hover:text-[var(--paper-ink)]"
                         >
-                            <ChevronRight className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                            Enter manually
                         </button>
-                    </div>
-                    <div className="flex items-center gap-2">
+                        <Link to="/budget" className="cursor-pointer text-[var(--paper-muted)] transition-colors hover:text-[var(--paper-ink)]">
+                            Budget
+                        </Link>
                         <button
+                            type="button"
                             onClick={() => {
                                 setDeletePayslipError('')
                                 setDeleteModalOpen(true)
                             }}
-                            className="flex items-center justify-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors font-medium"
-                            title="Delete this payslip"
+                            className="cursor-pointer text-[var(--paper-muted)] transition-colors hover:text-[var(--paper-brick)]"
                         >
-                            <Trash2 className="w-4 h-4" />
                             Delete
                         </button>
                     </div>
                 </div>
+                <MonthHeader
+                    monthLabel={`${monthNames[selectedMonth - 1]} ${selectedYear}`}
+                    onPrev={() => handleMonthChange(-1)}
+                    onNext={() => handleMonthChange(1)}
+                    badge={isLatest ? 'Latest' : null}
+                />
             </div>
 
             {/* Delete Confirmation Modal */}
@@ -470,134 +513,176 @@ export default function SalaryPage() {
                 actionError={deletePayslipError}
             />
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
-                {/* LEFT COLUMN: INPUTS - order-2 on mobile so Summary appears first */}
-                <div className="order-2 lg:order-1 lg:col-span-2 space-y-8">
-                    {/* 1. GROSS INCOME */}
-                    <SectionContainer title="Gross Salary" color="blue">
-                        <div className="space-y-4">
-                            <EditableField
-                                label="Gross Salary"
-                                value={payslipData.gross_salary}
-                                onSave={(value) => handleUpdatePayslip('gross_salary', parseFloat(value))}
-                            />
-                            <EditableTextField
-                                label="Job Title"
-                                value={payslipData.title || ''}
-                                onSave={(value) => handleUpdatePayslip('title', value)}
-                            />
-                            <EditableTextField
-                                label="Company Name"
-                                value={payslipData.company_name || ''}
-                                onSave={(value) => handleUpdatePayslip('company_name', value)}
-                            />
+            <PayslipUploadModal
+                isOpen={uploadModalOpen}
+                onClose={() => setUploadModalOpen(false)}
+                onSuccess={handleUploadSuccess}
+                initialMonth={selectedMonth}
+                initialYear={selectedYear}
+                isUpdate={true}
+                hasOpenAIKey={hasOpenAIKey}
+            />
+            <ManualPayslipModal
+                isOpen={manualModalOpen}
+                onClose={() => setManualModalOpen(false)}
+                onSuccess={handleUploadSuccess}
+                initialMonth={selectedMonth}
+                initialYear={selectedYear}
+            />
+
+            {error ? <p className="text-sm text-[var(--paper-brick)]">{error}</p> : null}
+
+            {payslipLoading ? (
+                <PaperCard className="p-8 text-center sm:p-12" aria-busy="true">
+                    <p className="text-sm text-[var(--paper-muted)]">Loading…</p>
+                </PaperCard>
+            ) : (
+            <>
+            <PaperCard className="overflow-hidden p-5 sm:p-7">
+                <div className={`grid grid-cols-1 gap-6 ${showBudgetIncomeColumn ? 'sm:grid-cols-2' : ''}`}>
+                    <div>
+                        <p className={paperEyebrow}>Paid this month</p>
+                        <BlurredValue>
+                            <p className={`mt-2 text-4xl text-[var(--paper-ink)] ${paperMoney}`}>
+                                {formatCurrency(payslipData.net_pay)}
+                            </p>
+                        </BlurredValue>
+                        {hasBonus ? (
+                            <p className="mt-4 text-sm leading-relaxed text-[var(--paper-muted)]">
+                                This month includes additional income of {formatCurrency(totalAdditionalIncome)}.
+                                The monthly budget uses your last payslip that did not have a bonus.
+                            </p>
+                        ) : null}
+                    </div>
+                    {showBudgetIncomeColumn ? (
+                        <div>
+                            <p className={paperEyebrow}>Monthly budget income</p>
+                            <BlurredValue>
+                                <p className={`mt-2 text-4xl text-[var(--paper-ink)] ${paperMoney}`}>
+                                    {formatCurrency(budgetSalary ?? 0)}
+                                </p>
+                            </BlurredValue>
+                            <p className="mt-4 text-sm text-[var(--paper-muted)]">{budgetIncomeHint}</p>
                         </div>
-                    </SectionContainer>
-
-                    {/* 2. ADDITIONAL INCOME */}
-                    <SectionContainer title="Additional Income" color="green">
-                        <ItemList
-                            items={additionalIncome}
-                            onAdd={handleAddAdditionalIncome}
-                            color="green"
-                            placeholder="Bonus, commission..."
-                        />
-                    </SectionContainer>
-
-                    {/* 3. COMPANY CONTRIBUTIONS */}
-                    <SectionContainer title="Company Contributions" color="purple">
-                        <ItemList
-                            items={companyContributions}
-                            onDelete={handleDeleteItem}
-                            onUpdate={handleUpdateItem}
-                            onAdd={(desc, amt) => handleAddItem(desc, amt, 'company_contribution')}
-                            color="purple"
-                            placeholder="Pension, medical aid..."
-                        />
-                    </SectionContainer>
-
-                    {/* 4. PERSONAL DEDUCTIONS */}
-                    <SectionContainer title="Personal Deductions" color="indigo">
-                        <ItemList
-                            items={personalDeductions}
-                            onDelete={handleDeleteItem}
-                            onUpdate={handleUpdateItem}
-                            onAdd={(desc, amt) => handleAddItem(desc, amt, 'personal_deduction')}
-                            color="indigo"
-                            placeholder="Medical aid, union dues..."
-                        />
-                    </SectionContainer>
-
-                    {/* 5. TAX FIELDS */}
-                    <SectionContainer title="Tax & Statutory Deductions" color="red">
-                        <div className="space-y-4">
-                            <EditableField
-                                label="PAYE (Tax)"
-                                value={payslipData.paye}
-                                onSave={(value) => handleUpdatePayslip('paye', parseFloat(value))}
-                            />
-                            <EditableField
-                                label="UIF (Employee Portion)"
-                                value={payslipData.uif_employee_portion}
-                                onSave={(value) => handleUpdatePayslip('uif_employee_portion', parseFloat(value))}
-                            />
-                        </div>
-                    </SectionContainer>
+                    ) : null}
                 </div>
+                <div className="mt-6 space-y-5 border-t border-[var(--paper-line)] pt-5">
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">
+                        <Stat label="Gross" value={payslipData.gross_salary} tone={paperMoneyTone(1)} />
+                        <Stat label="Additional income" value={totalAdditionalIncome} tone={paperMoneyTone(1)} />
+                        {totalCompanyContrib > 0 ? (
+                            <Stat label="Company contributions" value={totalCompanyContrib} />
+                        ) : null}
+                        <Stat label="Cost to company" value={totalIncome} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">
+                        <Stat label="PAYE" value={payslipData.paye} tone={paperMoneyTone(-1)} />
+                        {(payslipData.uif_employee_portion || 0) > 0 ? (
+                            <Stat label="UIF" value={payslipData.uif_employee_portion} tone={paperMoneyTone(-1)} />
+                        ) : null}
+                        {totalPersonalDeduct > 0 ? (
+                            <Stat label="Personal deductions" value={totalPersonalDeduct} tone={paperMoneyTone(-1)} />
+                        ) : null}
+                        <Stat label="Deductions" value={totalDeductions} tone={paperMoneyTone(-1)} />
+                    </div>
+                </div>
+            </PaperCard>
 
-                {/* RIGHT COLUMN: SUMMARY - order-1 on mobile so it appears first after month block */}
-                <div className="order-1 lg:order-2 lg:col-span-1 w-full">
-                    <div className="lg:sticky lg:top-8 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-100 dark:border-gray-700 overflow-hidden">
-                        <div className="bg-gray-50 dark:bg-gray-900/50 p-4 border-b border-gray-100 dark:border-gray-700">
-                            <h2 className="font-bold text-gray-900 dark:text-white">Payslip Summary</h2>
-                        </div>
-
-                        <div className="p-4 sm:p-6 space-y-3 text-sm">
-                            <SummaryRow label="Gross Salary" value={payslipData.gross_salary} isGreen />
-                            {totalCompanyContrib > 0 && (
-                                <SummaryRow label="Company Contributions" value={totalCompanyContrib} isGreen />
-                            )}
-                            <SummaryRow label="Additional Income" value={totalAdditionalIncome} isGreen />
-                            
-                            <div className="border-t border-gray-200 dark:border-gray-700 mt-4 pt-3"></div>
-                            <div className="flex justify-between font-bold text-gray-900 dark:text-white py-1">
-                                <span>Total Income</span>
-                                <BlurredValue><span>{formatCurrency(totalIncome)}</span></BlurredValue>
+            <PaperCard className="p-5 sm:p-7">
+                <div className="grid grid-cols-1 gap-10 lg:grid-cols-2 lg:gap-12">
+                    <div className="space-y-10">
+                        <div>
+                            <h2 className="text-lg font-semibold text-[var(--paper-ink)]">Earnings</h2>
+                            <div className={`mt-3 ${paperDivider}`}>
+                                <EditableField
+                                    label="Gross salary"
+                                    value={payslipData.gross_salary}
+                                    onSave={(value) => handleUpdatePayslip('gross_salary', parseFloat(value))}
+                                />
+                                <EditableTextField
+                                    label="Job title"
+                                    value={payslipData.title || ''}
+                                    onSave={(value) => handleUpdatePayslip('title', value)}
+                                />
+                                <EditableTextField
+                                    label="Company"
+                                    value={payslipData.company_name || ''}
+                                    onSave={(value) => handleUpdatePayslip('company_name', value)}
+                                />
                             </div>
-                            <div className="border-t border-dashed border-gray-200 dark:border-gray-700 my-3"></div>
-
-                            <SummaryRow label="PAYE (Tax)" value={payslipData.paye} isMutedRed />
-                            <SummaryRow label="UIF" value={payslipData.uif_employee_portion} isMutedRed />
-                            <SummaryRow label="Company Contributions" value={totalCompanyContrib} isMutedRed />
-                            <SummaryRow label="Personal Deductions" value={totalPersonalDeduct} isMutedRed />
-
-                            <div className="border-t-2 border-gray-100 dark:border-gray-700 mt-4 pt-4"></div>
-
-                            <div className="flex justify-between items-end py-2">
-                                <span className="text-gray-500 font-medium">Net Pay</span>
-                                <BlurredValue><span className="text-xl sm:text-2xl font-bold text-blue-600 dark:text-blue-400">
-                                    {formatCurrency(payslipData.net_pay)}
-                                </span></BlurredValue>
+                        </div>
+                        <div>
+                            <h2 className="text-lg font-semibold text-[var(--paper-ink)]">Additional income</h2>
+                            <div className="mt-3">
+                                <ItemList
+                                    items={additionalIncome}
+                                    onAdd={handleAddAdditionalIncome}
+                                    placeholder="Bonus, commission..."
+                                />
                             </div>
                         </div>
-                        <div className="bg-blue-50 dark:bg-blue-900/20 p-3 text-center text-xs text-blue-700 dark:text-blue-300 font-medium">
-                            Synced to Dashboard
+                        <div>
+                            <h2 className="text-lg font-semibold text-[var(--paper-ink)]">Company contributions</h2>
+                            <p className="mt-1 text-sm text-[var(--paper-muted)]">Counted in cost to company, not take-home.</p>
+                            <div className="mt-3">
+                                <ItemList
+                                    items={companyContributions}
+                                    onDelete={handleDeleteItem}
+                                    onUpdate={handleUpdateItem}
+                                    onAdd={(desc, amt) => handleAddItem(desc, amt, 'company_contribution')}
+                                    placeholder="Pension, medical aid..."
+                                />
+                            </div>
+                        </div>
+                    </div>
+                    <div className="space-y-10 lg:border-l lg:border-[var(--paper-line)] lg:pl-12">
+                        <div>
+                            <h2 className="text-lg font-semibold text-[var(--paper-ink)]">Personal deductions</h2>
+                            <div className="mt-3">
+                                <ItemList
+                                    items={personalDeductions}
+                                    onDelete={handleDeleteItem}
+                                    onUpdate={handleUpdateItem}
+                                    onAdd={(desc, amt) => handleAddItem(desc, amt, 'personal_deduction')}
+                                    placeholder="Medical aid, union dues..."
+                                />
+                            </div>
+                        </div>
+                        <div>
+                            <h2 className="text-lg font-semibold text-[var(--paper-ink)]">Tax and statutory</h2>
+                            <div className={`mt-3 ${paperDivider}`}>
+                                <EditableField
+                                    label="PAYE (tax)"
+                                    value={payslipData.paye}
+                                    onSave={(value) => handleUpdatePayslip('paye', parseFloat(value))}
+                                />
+                                <EditableField
+                                    label="UIF (employee)"
+                                    value={payslipData.uif_employee_portion}
+                                    onSave={(value) => handleUpdatePayslip('uif_employee_portion', parseFloat(value))}
+                                />
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
+            </PaperCard>
 
             {/* Financial Year Summary */}
-            {fyData && fyData.months.some(m => m.has_data) && (
-                <div className="mt-12 space-y-6">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                        <h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">
-                            Financial Year Summary ({fyData.financial_year})
-                        </h2>
+            {fyData && fyMonths.length > 0 ? (
+                <div className="space-y-5">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                        <div>
+                            <h2 className="text-lg font-semibold text-[var(--paper-ink)]">
+                                Financial year {fyData.financial_year}
+                            </h2>
+                            <p className={`mt-1 ${paperEyebrow}`}>
+                                {fyMonths.length} month{fyMonths.length === 1 ? '' : 's'}
+                            </p>
+                        </div>
                         <select
                             value={fyYear}
                             onChange={(e) => setFyYear(parseInt(e.target.value))}
-                            className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                            className="cursor-pointer rounded-md border border-[var(--paper-line)] bg-[var(--paper-card)] px-3 py-2 text-sm text-[var(--paper-ink)]"
                         >
                             {Array.from({ length: 5 }, (_, i) => {
                                 const year = currentDate.getFullYear() - i
@@ -610,176 +695,105 @@ export default function SalaryPage() {
                         </select>
                     </div>
 
-                    {/* Metrics Cards */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                        <div className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 rounded-xl p-6 border border-green-200 dark:border-green-800">
-                            <div className="flex items-center gap-3 mb-2">
-                                <div className="p-2 bg-green-500 rounded-lg">
-                                    <DollarSign className="w-5 h-5 text-white" />
-                                </div>
-                                <h3 className="text-sm font-medium text-green-900 dark:text-green-100">Total Gross Income</h3>
+                    <PaperCard className="overflow-hidden">
+                        <dl className="grid grid-cols-1 divide-y divide-[var(--paper-line)] sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+                            <div className="p-5 sm:p-6">
+                                <dt className={paperEyebrow}>YTD gross</dt>
+                                <dd className={`mt-2 text-2xl text-[var(--paper-ink)] ${paperMoney}`}>
+                                    <BlurredValue>{formatCurrency(fyData.total_gross_income)}</BlurredValue>
+                                </dd>
                             </div>
-                            <BlurredValue><p className="text-3xl font-bold text-green-700 dark:text-green-300">
-                                {formatCurrency(fyData.total_gross_income)}
-                            </p></BlurredValue>
-                        </div>
-
-                        <div className="bg-gradient-to-br from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-800/20 rounded-xl p-6 border border-red-200 dark:border-red-800">
-                            <div className="flex items-center gap-3 mb-2">
-                                <div className="p-2 bg-red-500 rounded-lg">
-                                    <Receipt className="w-5 h-5 text-white" />
-                                </div>
-                                <h3 className="text-sm font-medium text-red-900 dark:text-red-100">Total Tax Paid (PAYE)</h3>
+                            <div className="p-5 sm:p-6">
+                                <dt className={paperEyebrow}>YTD PAYE</dt>
+                                <dd className={`mt-2 text-2xl ${paperMoney} ${paperMoneyTone(-1)}`}>
+                                    <BlurredValue>{formatCurrency(fyData.total_paye)}</BlurredValue>
+                                </dd>
                             </div>
-                            <BlurredValue><p className="text-3xl font-bold text-red-700 dark:text-red-300">
-                                {formatCurrency(fyData.total_paye)}
-                            </p></BlurredValue>
-                        </div>
-
-                        <div className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 rounded-xl p-6 border border-blue-200 dark:border-blue-800">
-                            <div className="flex items-center gap-3 mb-2">
-                                <div className="p-2 bg-blue-500 rounded-lg">
-                                    <TrendingUp className="w-5 h-5 text-white" />
-                                </div>
-                                <h3 className="text-sm font-medium text-blue-900 dark:text-blue-100">Total Net Pay</h3>
+                            <div className="p-5 sm:p-6">
+                                <dt className={paperEyebrow}>YTD take-home</dt>
+                                <dd className={`mt-2 text-2xl text-[var(--paper-ink)] ${paperMoney}`}>
+                                    <BlurredValue>{formatCurrency(fyData.total_net_pay)}</BlurredValue>
+                                </dd>
                             </div>
-                            <BlurredValue><p className="text-3xl font-bold text-blue-700 dark:text-blue-300">
-                                {formatCurrency(fyData.total_net_pay)}
-                            </p></BlurredValue>
-                        </div>
-                    </div>
+                        </dl>
+                    </PaperCard>
 
-                    {/* Charts */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {/* Monthly Salary Trend */}
-                        <div className={`bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700 ${blurSensitiveValues ? 'blur-[5px] select-none' : ''}`}>
-                            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Monthly Salary Trend</h3>
-                            <ResponsiveContainer width="100%" height={300}>
-                                <LineChart data={fyData.months.filter(m => m.has_data)}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
-                                    <XAxis 
-                                        dataKey="month_name" 
-                                        tick={{ fontSize: 12 }}
-                                        angle={-45}
-                                        textAnchor="end"
-                                        height={80}
-                                    />
-                                    <YAxis tick={{ fontSize: 12 }} />
-                                    <Tooltip 
-                                        contentStyle={{ 
-                                            backgroundColor: '#1f2937', 
-                                            border: '1px solid #374151',
-                                            borderRadius: '8px'
-                                        }}
-                                        formatter={(value) => formatCurrency(value)}
-                                    />
-                                    <Legend />
-                                    <Line 
-                                        type="monotone" 
-                                        dataKey="gross_salary" 
-                                        stroke="#10b981" 
-                                        strokeWidth={2}
-                                        name="Gross Salary"
-                                    />
-                                    <Line 
-                                        type="monotone" 
-                                        dataKey="net_pay" 
-                                        stroke="#3b82f6" 
-                                        strokeWidth={2}
-                                        name="Net Pay"
-                                    />
-                                    <Line 
-                                        type="monotone" 
-                                        dataKey="paye" 
-                                        stroke="#ef4444" 
-                                        strokeWidth={2}
-                                        name="PAYE"
-                                    />
-                                </LineChart>
-                            </ResponsiveContainer>
-                        </div>
-
-                        {/* Tax Analysis */}
-                        <div className={`bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700 ${blurSensitiveValues ? 'blur-[5px] select-none' : ''}`}>
-                            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Tax & Deductions</h3>
-                            <ResponsiveContainer width="100%" height={300}>
-                                <AreaChart data={fyData.months.filter(m => m.has_data)}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
-                                    <XAxis 
-                                        dataKey="month_name" 
-                                        tick={{ fontSize: 12 }}
-                                        angle={-45}
-                                        textAnchor="end"
-                                        height={80}
-                                    />
-                                    <YAxis tick={{ fontSize: 12 }} />
-                                    <Tooltip 
-                                        contentStyle={{ 
-                                            backgroundColor: '#1f2937', 
-                                            border: '1px solid #374151',
-                                            borderRadius: '8px'
-                                        }}
-                                        formatter={(value) => formatCurrency(value)}
-                                    />
-                                    <Legend />
-                                    <Area 
-                                        type="monotone" 
-                                        dataKey="paye" 
-                                        stackId="1"
-                                        stroke="#ef4444" 
-                                        fill="#ef4444"
-                                        fillOpacity={0.6}
-                                        name="PAYE"
-                                    />
-                                    <Area 
-                                        type="monotone" 
-                                        dataKey="uif" 
-                                        stackId="1"
-                                        stroke="#f59e0b" 
-                                        fill="#f59e0b"
-                                        fillOpacity={0.6}
-                                        name="UIF"
-                                    />
-                                    <Area 
-                                        type="monotone" 
-                                        dataKey="personal_deductions" 
-                                        stackId="1"
-                                        stroke="#8b5cf6" 
-                                        fill="#8b5cf6"
-                                        fillOpacity={0.6}
-                                        name="Personal Deductions"
-                                    />
-                                </AreaChart>
-                            </ResponsiveContainer>
-                        </div>
-                    </div>
+                    {fyMonths.length >= 2 ? (
+                        <PaperCard className={`p-5 sm:p-6 ${blurSensitiveValues ? 'blur-[5px] select-none' : ''}`}>
+                            <h3 className="text-base font-semibold text-[var(--paper-ink)]">Monthly trend</h3>
+                            <p className="mt-1 text-sm text-[var(--paper-muted)]">Take-home and PAYE</p>
+                            <div className="mt-4 h-[280px]">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <LineChart data={fyMonths}>
+                                        <CartesianGrid stroke="var(--paper-line)" vertical={false} />
+                                        <XAxis
+                                            dataKey="month_name"
+                                            tick={{ fontSize: 12, fill: 'var(--paper-muted)' }}
+                                            axisLine={false}
+                                            tickLine={false}
+                                        />
+                                        <YAxis tick={{ fontSize: 12, fill: 'var(--paper-muted)' }} axisLine={false} tickLine={false} width={72} />
+                                        <Tooltip content={<PaperChartTooltip />} />
+                                        <Legend wrapperStyle={{ color: 'var(--paper-muted)', fontSize: 12 }} />
+                                        <Line type="monotone" dataKey="net_pay" stroke={PAPER_CHART.olive} strokeWidth={2} name="Take-home" dot={false} />
+                                        <Line type="monotone" dataKey="paye" stroke={PAPER_CHART.khaki} strokeWidth={2} name="PAYE" strokeDasharray="4 4" dot={false} />
+                                    </LineChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </PaperCard>
+                    ) : null}
                 </div>
+            ) : null}
+            </>
             )}
         </div>
     )
 }
 
-// Sub-components
-
-function SectionContainer({ title, color, children }) {
-    const colors = {
-        blue: "border-l-blue-500",
-        green: "border-l-green-500",
-        purple: "border-l-purple-500",
-        indigo: "border-l-indigo-500",
-        red: "border-l-red-500"
-    }
-
+function MonthHeader({ monthLabel, onPrev, onNext, badge }) {
     return (
-        <div className={`w-full bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6 border-l-4 ${colors[color]}`}>
-            <h2 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white mb-4">{title}</h2>
-            {children}
+        <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={onPrev} className="cursor-pointer rounded-md p-1.5 text-[var(--paper-muted)] hover:text-[var(--paper-ink)]" aria-label="Previous month">
+                <ChevronLeft className="h-6 w-6" />
+            </button>
+            <h1 className={paperTitle}>{monthLabel}</h1>
+            <button type="button" onClick={onNext} className="cursor-pointer rounded-md p-1.5 text-[var(--paper-muted)] hover:text-[var(--paper-ink)]" aria-label="Next month">
+                <ChevronRight className="h-6 w-6" />
+            </button>
+            {badge ? <span className="text-sm text-[var(--paper-muted)]">{badge}</span> : null}
+        </div>
+    )
+}
+
+function Stat({ label, value, tone }) {
+    return (
+        <div>
+            <p className={paperEyebrow}>{label}</p>
+            <p className={`mt-1 text-sm font-medium tabular-nums ${tone || 'text-[var(--paper-ink)]'}`}>
+                <BlurredValue>{formatCurrency(value)}</BlurredValue>
+            </p>
+        </div>
+    )
+}
+
+function PaperChartTooltip({ active, payload, label }) {
+    if (!active || !payload?.length) return null
+    return (
+        <div className="rounded-md border border-[var(--paper-line)] bg-[var(--paper-card)] px-3 py-2.5 text-sm text-[var(--paper-ink)] shadow-none">
+            <p className="text-[var(--paper-muted)]">{label}</p>
+            <ul className="mt-2 space-y-1">
+                {payload.map((row) => (
+                    <li key={row.dataKey} className="flex items-center justify-between gap-6">
+                        <span className="text-[var(--paper-muted)]">{row.name}</span>
+                        <span className="tabular-nums">{formatCurrency(row.value)}</span>
+                    </li>
+                ))}
+            </ul>
         </div>
     )
 }
 
 function EditableField({ label, value, onSave }) {
-    const [editing, setEditing] = useState(false)
     const [tempValue, setTempValue] = useState(value)
 
     useEffect(() => {
@@ -788,23 +802,22 @@ function EditableField({ label, value, onSave }) {
 
     const handleSave = () => {
         onSave(tempValue)
-        setEditing(false)
     }
 
     return (
-        <div className="bg-gray-50 dark:bg-gray-700/30 p-4 rounded-lg">
-            <label className="block text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400 mb-1">
-                {label}
-            </label>
-            <BlurredValue as="div" className="relative flex items-center min-h-[44px]">
-                <span className="absolute left-3 text-gray-500">R</span>
+        <div className="flex items-center justify-between gap-2 py-3">
+            <label className="min-w-0 flex-1 text-sm text-[var(--paper-ink)]">{label}</label>
+            <BlurredValue as="div" className="flex w-24 shrink-0 items-center gap-1 rounded-md focus-within:ring-2 focus-within:ring-[var(--paper-accent)]/20 sm:w-28">
+                <span className="text-sm font-mono text-[var(--paper-muted)]">R</span>
                 <input
                     type="number"
+                    inputMode="decimal"
                     value={tempValue}
                     onChange={(e) => setTempValue(e.target.value)}
                     onBlur={handleSave}
-                    onKeyDown={(e) => e.key === 'Enter' && handleSave()}
-                    className="w-full pl-8 pr-4 py-3 min-h-[44px] text-base sm:text-lg font-bold bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                    onWheel={(e) => e.currentTarget.blur()}
+                    onKeyDown={amountKeyDown(() => handleSave())}
+                    className={`${hideNumberSpinners} w-full min-w-0 border-none bg-transparent py-1 pr-1 text-right font-mono text-sm tabular-nums text-[var(--paper-ink)] outline-none sm:text-base`}
                 />
             </BlurredValue>
         </div>
@@ -823,26 +836,24 @@ function EditableTextField({ label, value, onSave }) {
     }
 
     return (
-        <div className="bg-gray-50 dark:bg-gray-700/30 p-4 rounded-lg">
-            <label className="block text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400 mb-1">
-                {label}
-            </label>
-            <BlurredValue as="div">
-            <input
-                type="text"
-                value={tempValue}
-                onChange={(e) => setTempValue(e.target.value)}
-                onBlur={handleSave}
-                onKeyDown={(e) => e.key === 'Enter' && handleSave()}
-                className="w-full px-4 py-2 text-sm sm:text-base font-medium bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                placeholder={`Enter ${label.toLowerCase()}`}
-            />
+        <div className="flex items-center justify-between gap-4 py-3">
+            <label className="shrink-0 text-sm text-[var(--paper-ink)]">{label}</label>
+            <BlurredValue as="div" className="min-w-0 flex-1">
+                <input
+                    type="text"
+                    value={tempValue}
+                    onChange={(e) => setTempValue(e.target.value)}
+                    onBlur={handleSave}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+                    className="w-full rounded-md border-none bg-transparent px-2 py-1 text-right text-sm text-[var(--paper-ink)] outline-none transition-all focus:ring-2 focus:ring-[var(--paper-accent)]/20 sm:text-base"
+                    placeholder={`Enter ${label.toLowerCase()}`}
+                />
             </BlurredValue>
         </div>
     )
 }
 
-function ItemList({ items, onDelete, onUpdate, onAdd, color = 'blue', placeholder }) {
+function ItemList({ items, onDelete, onUpdate, onAdd, placeholder }) {
     const [newDescription, setNewDescription] = useState('')
     const [newAmount, setNewAmount] = useState('')
 
@@ -854,16 +865,8 @@ function ItemList({ items, onDelete, onUpdate, onAdd, color = 'blue', placeholde
         }
     }
 
-    const focusRingClasses = {
-        blue: "focus:ring-blue-500/20 focus-within:ring-blue-500/20",
-        green: "focus:ring-green-500/20 focus-within:ring-green-500/20",
-        purple: "focus:ring-purple-500/20 focus-within:ring-purple-500/20",
-        indigo: "focus:ring-indigo-500/20 focus-within:ring-indigo-500/20"
-    }
-    const ringClass = focusRingClasses[color]
-
     return (
-        <div className="space-y-3">
+        <div className={paperDivider}>
             {items.map(item => (
                 <EditableItem
                     key={item.id}
@@ -873,26 +876,31 @@ function ItemList({ items, onDelete, onUpdate, onAdd, color = 'blue', placeholde
                 />
             ))}
 
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2 pt-2 border-t border-gray-100 dark:border-gray-700/50 mt-2">
+            <div className="flex flex-col gap-2 pt-4 sm:flex-row sm:items-center">
                 <input
                     placeholder={placeholder || "Add item..."}
-                    className={`flex-1 w-full min-h-[44px] px-4 py-3 text-sm bg-gray-50/50 dark:bg-gray-900/20 border border-gray-200 dark:border-gray-700 rounded-xl outline-none transition-all placeholder:text-gray-400 font-medium focus:ring-4 ${ringClass}`}
+                    className={`${fieldInput} min-h-[40px] flex-1`}
                     value={newDescription}
                     onChange={e => setNewDescription(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && handleAdd()}
                 />
-                <BlurredValue as="div" className={`flex items-center gap-1 w-full sm:w-40 min-h-[44px] px-3 py-2 bg-gray-50/50 dark:bg-gray-900/20 border border-gray-200 dark:border-gray-700 rounded-xl focus-within:ring-4 focus-within:ring-offset-0 ${ringClass}`}>
-                    <span className="text-gray-500 text-sm font-mono">R</span>
+                <BlurredValue as="div" className="relative w-full sm:w-36">
+                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-neutral-400">R</span>
                     <input
                         type="number"
+                        inputMode="decimal"
                         placeholder="0.00"
-                        className="flex-1 min-w-0 py-2 text-sm bg-transparent border-none outline-none text-right placeholder:text-gray-400 font-mono"
+                        className={`${fieldInput} ${hideNumberSpinners} pl-7 text-right tabular-nums`}
                         value={newAmount}
                         onChange={e => setNewAmount(e.target.value)}
                         onBlur={handleAdd}
-                        onKeyDown={e => e.key === 'Enter' && handleAdd()}
+                        onWheel={(e) => e.currentTarget.blur()}
+                        onKeyDown={amountKeyDown(() => handleAdd())}
                     />
                 </BlurredValue>
+                <button type="button" onClick={handleAdd} className={btnPrimary}>
+                    Add
+                </button>
             </div>
         </div>
     )
@@ -908,49 +916,36 @@ function EditableItem({ item, onUpdate, onDelete }) {
     }, [item.description, item.amount])
 
     return (
-        <div className="group flex flex-row items-center gap-2 p-2 sm:p-2.5 bg-gray-50 dark:bg-gray-700/30 rounded-xl hover:bg-white dark:hover:bg-gray-700 hover:shadow-md transition-all border border-transparent hover:border-gray-100 dark:hover:border-gray-600">
-            <input
-                className="flex-1 min-w-0 bg-transparent border-none focus:ring-2 focus:ring-blue-500/20 rounded px-2 py-1 font-medium text-gray-700 dark:text-gray-200 outline-none transition-all text-sm sm:text-base"
+        <div className="group flex flex-row items-center gap-2 py-3">
+                <input
+                className="min-w-0 flex-1 rounded-md border-none bg-transparent px-2 py-1 text-sm text-[var(--paper-ink)] outline-none transition-all focus:ring-2 focus:ring-[var(--paper-accent)]/20 sm:text-base"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 onBlur={() => description !== item.description && onUpdate?.(item.id, 'description', description)}
                 onKeyDown={(e) => e.key === 'Enter' && e.target.blur()}
             />
-            <BlurredValue as="div" className="flex items-center gap-1 flex-shrink-0 w-24 sm:w-28 bg-transparent rounded focus-within:ring-2 focus-within:ring-blue-500/20">
-                <span className="text-gray-500 text-sm font-mono">R</span>
+            <BlurredValue as="div" className="flex w-24 shrink-0 items-center gap-1 rounded-md focus-within:ring-2 focus-within:ring-[var(--paper-accent)]/20 sm:w-28">
+                <span className="text-sm font-mono text-[var(--paper-muted)]">R</span>
                 <input
                     type="number"
-                    className="w-full min-w-0 py-1 pr-1 bg-transparent border-none focus:ring-0 font-mono text-gray-900 dark:text-white text-right outline-none text-sm sm:text-base"
+                    inputMode="decimal"
+                    className={`${hideNumberSpinners} w-full min-w-0 border-none bg-transparent py-1 pr-1 text-right font-mono text-sm tabular-nums text-[var(--paper-ink)] outline-none sm:text-base`}
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
                     onBlur={() => amount !== item.amount && onUpdate?.(item.id, 'amount', amount)}
-                    onKeyDown={(e) => e.key === 'Enter' && e.target.blur()}
+                    onWheel={(e) => e.currentTarget.blur()}
+                    onKeyDown={amountKeyDown((e) => e.target.blur())}
                 />
             </BlurredValue>
-            {onDelete && (
+            {onDelete ? (
                 <button
                     onClick={() => onDelete(item.id)}
-                    className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all sm:opacity-0 sm:group-hover:opacity-100"
+                    className="cursor-pointer rounded-md p-2 text-[var(--paper-muted)] transition-colors hover:text-[var(--paper-brick)] sm:opacity-0 sm:group-hover:opacity-100"
                     aria-label="Delete item"
                 >
-                    <Trash2 className="w-4 h-4" />
+                    <Trash2 className="h-4 w-4" />
                 </button>
-            )}
-        </div>
-    )
-}
-
-function SummaryRow({ label, value, isMutedRed, isGreen }) {
-    let textColorClass = ''
-    if (isMutedRed) textColorClass = 'text-red-500 font-medium'
-    else if (isGreen) textColorClass = 'text-green-600 dark:text-green-400 font-medium'
-
-    return (
-        <div className="flex justify-between items-center">
-            <span className={isMutedRed ? 'text-gray-500' : ''}>{label}</span>
-            <BlurredValue><span className={textColorClass}>
-                {isMutedRed ? '- ' : ''}{formatCurrency(value || 0)}
-            </span></BlurredValue>
+            ) : null}
         </div>
     )
 }

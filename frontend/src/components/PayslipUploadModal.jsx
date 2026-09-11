@@ -1,7 +1,13 @@
 import { useState, useRef } from 'react'
-import { X, Upload, FileText, AlertCircle, CheckCircle, Loader, KeyRound } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { X, Upload, FileText, AlertCircle, Loader, KeyRound } from 'lucide-react'
 import axios from 'axios'
 import PayslipReviewModal from './PayslipReviewModal'
+
+const btnBase = 'inline-flex min-h-[40px] cursor-pointer items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-50'
+const btnPrimary = `${btnBase} bg-[var(--paper-ink)] text-[var(--paper-card)] hover:opacity-90`
+const btnGhost = `${btnBase} border border-[var(--paper-line)] bg-[var(--paper-card)] text-[var(--paper-ink)] hover:bg-[var(--paper-canvas)]`
+const fieldInput = 'w-full rounded-md border border-[var(--paper-line)] bg-[var(--paper-card)] px-3 py-2.5 text-sm text-[var(--paper-ink)] outline-none transition-colors focus:ring-2 focus:ring-[var(--paper-accent)]/20'
 
 export default function PayslipUploadModal({ isOpen, onClose, onSuccess, initialMonth, initialYear, isUpdate = false, hasOpenAIKey = true }) {
     const [file, setFile] = useState(null)
@@ -91,14 +97,12 @@ export default function PayslipUploadModal({ isOpen, onClose, onSuccess, initial
             formData.append('year', year.toString())
             formData.append('month', month.toString())
 
-            // Call extract-preview endpoint instead of upload
             const response = await axios.post('/api/payslip/extract-preview', formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                 },
             })
 
-            // Store extracted data and show review modal
             setExtractedData(response.data)
             setShowReviewModal(true)
 
@@ -113,7 +117,6 @@ export default function PayslipUploadModal({ isOpen, onClose, onSuccess, initial
 
     const handleConfirmReview = async (confirmedData) => {
         try {
-            // Send confirmed data to backend
             const response = await axios.post('/api/payslip/confirm-upload', {
                 ...confirmedData,
                 year,
@@ -121,7 +124,6 @@ export default function PayslipUploadModal({ isOpen, onClose, onSuccess, initial
                 temp_file_id: extractedData.temp_file_id,
             })
 
-            // Close review modal and upload modal
             setShowReviewModal(false)
             
             if (onSuccess) {
@@ -148,36 +150,43 @@ export default function PayslipUploadModal({ isOpen, onClose, onSuccess, initial
     const currentYear = new Date().getFullYear()
     const years = Array.from({ length: 10 }, (_, i) => currentYear - i)
 
-    return (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-2xl w-full mx-4 sm:mx-auto max-h-[90vh] overflow-hidden flex flex-col">
+    return createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4">
+            <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="payslip-upload-title"
+                className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-md border border-[var(--paper-line)] bg-[var(--paper-card)]"
+            >
                 {/* Header */}
-                <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-                    <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                <div className="flex items-center justify-between border-b border-[var(--paper-line)] px-5 py-4 sm:px-6">
+                    <h2 id="payslip-upload-title" className="text-lg font-semibold text-[var(--paper-ink)]">
                         {isUpdate ? 'Update Payslip' : 'Upload Payslip'}
                     </h2>
                     <button
+                        type="button"
                         onClick={handleClose}
-                        className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                        aria-label="Close"
+                        className="inline-flex min-h-[40px] min-w-[40px] cursor-pointer items-center justify-center text-[var(--paper-muted)] transition-colors hover:text-[var(--paper-ink)] disabled:cursor-not-allowed disabled:opacity-50"
                         disabled={uploading}
                     >
-                        <X className="w-5 h-5" />
+                        <X className="h-5 w-5" aria-hidden="true" />
                     </button>
                 </div>
 
                 {/* Content */}
-                <div className="p-6 space-y-6 overflow-y-auto max-h-[calc(90vh-140px)]">
+                <div className="max-h-[calc(90vh-140px)] space-y-6 overflow-y-auto p-5 text-[var(--paper-ink)] sm:p-6">
                     {/* Month/Year Selection */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            <label className="mb-2 block text-sm text-[var(--paper-ink)]">
                                 Month
                             </label>
                             <select
                                 value={month}
                                 onChange={(e) => setMonth(parseInt(e.target.value))}
                                 disabled={uploading}
-                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                className={fieldInput}
                             >
                                 {monthNames.map((name, idx) => (
                                     <option key={idx + 1} value={idx + 1}>
@@ -187,14 +196,14 @@ export default function PayslipUploadModal({ isOpen, onClose, onSuccess, initial
                             </select>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            <label className="mb-2 block text-sm text-[var(--paper-ink)]">
                                 Year
                             </label>
                             <select
                                 value={year}
                                 onChange={(e) => setYear(parseInt(e.target.value))}
                                 disabled={uploading}
-                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                className={fieldInput}
                             >
                                 {years.map((y) => (
                                     <option key={y} value={y}>
@@ -205,33 +214,29 @@ export default function PayslipUploadModal({ isOpen, onClose, onSuccess, initial
                         </div>
                     </div>
 
-                        {!hasOpenAIKey ? (
-                        /* No OpenAI key configured */
-                        <div className="flex flex-col items-center text-center gap-4 py-6">
-                            <div className="p-4 bg-amber-100 dark:bg-amber-900/30 rounded-full">
-                                <KeyRound className="w-10 h-10 text-amber-600 dark:text-amber-400" />
+                    {!hasOpenAIKey ? (
+                        <div className="flex flex-col items-center gap-4 py-6 text-center">
+                            <div className="rounded-full border border-[var(--paper-line)] bg-[var(--paper-canvas)] p-4">
+                                <KeyRound className="h-10 w-10 text-[var(--paper-muted)]" aria-hidden="true" />
                             </div>
                             <div>
-                                <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-1">
+                                <h3 className="mb-1 text-base font-semibold text-[var(--paper-ink)]">
                                     OpenAI API Key Required
                                 </h3>
-                                <p className="text-sm text-gray-600 dark:text-gray-400 max-w-sm">
-                                    Automatic payslip extraction uses the <strong>OpenAI API</strong> to read and interpret your payslip PDF. You need to add your OpenAI API key before you can use this feature.
+                                <p className="max-w-sm text-sm text-[var(--paper-muted)]">
+                                    Automatic payslip extraction uses the <strong className="font-medium text-[var(--paper-ink)]">OpenAI API</strong> to read and interpret your payslip PDF. You need to add your OpenAI API key before you can use this feature.
                                 </p>
                             </div>
-                            <a
-                                href="/settings"
-                                className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
-                            >
+                            <a href="/settings" className={btnPrimary}>
                                 Go to Settings
                             </a>
-                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                            <p className="text-xs text-[var(--paper-muted)]">
                                 You can get an API key at{' '}
                                 <a
                                     href="https://platform.openai.com/api-keys"
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="text-blue-600 dark:text-blue-400 hover:underline"
+                                    className="text-[var(--paper-ink)] underline decoration-[var(--paper-line)] underline-offset-2 hover:decoration-[var(--paper-ink)]"
                                 >
                                     platform.openai.com/api-keys
                                 </a>
@@ -239,130 +244,137 @@ export default function PayslipUploadModal({ isOpen, onClose, onSuccess, initial
                         </div>
                     ) : (
                         <>
-                    {/* File Upload Area */}
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            Payslip PDF
-                        </label>
-                        <div
-                            className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-                                dragActive
-                                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                                    : 'border-gray-300 dark:border-gray-600'
-                            } ${uploading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:border-blue-400'}`}
-                            onDragEnter={handleDrag}
-                            onDragLeave={handleDrag}
-                            onDragOver={handleDrag}
-                            onDrop={handleDrop}
-                            onClick={() => !uploading && fileInputRef.current?.click()}
-                        >
-                            <input
-                                ref={fileInputRef}
-                                type="file"
-                                accept=".pdf"
-                                onChange={handleFileInputChange}
-                                className="hidden"
-                                disabled={uploading}
-                            />
+                            {/* File Upload Area */}
+                            <div>
+                                <label className="mb-2 block text-sm text-[var(--paper-ink)]">
+                                    Payslip PDF
+                                </label>
+                                <div
+                                    className={`rounded-md border-2 border-dashed p-8 text-center transition-colors ${
+                                        dragActive
+                                            ? 'border-[var(--paper-accent)] bg-[var(--paper-canvas)]'
+                                            : 'border-[var(--paper-line)]'
+                                    } ${uploading ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:border-[var(--paper-accent)]'}`}
+                                    onDragEnter={handleDrag}
+                                    onDragLeave={handleDrag}
+                                    onDragOver={handleDrag}
+                                    onDrop={handleDrop}
+                                    onClick={() => !uploading && fileInputRef.current?.click()}
+                                >
+                                    <input
+                                        ref={fileInputRef}
+                                        type="file"
+                                        accept=".pdf"
+                                        onChange={handleFileInputChange}
+                                        className="hidden"
+                                        disabled={uploading}
+                                    />
 
-                            <div className="flex flex-col items-center">
-                                {file ? (
-                                    <>
-                                        <FileText className="w-12 h-12 text-blue-500 mb-3" />
-                                        <p className="text-sm font-medium text-gray-900 dark:text-white">
-                                            {file.name}
-                                        </p>
-                                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                            {(file.size / 1024).toFixed(1)} KB
-                                        </p>
-                                        {!uploading && (
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation()
-                                                    setFile(null)
-                                                    setError('')
-                                                }}
-                                                className="mt-3 text-sm text-red-600 dark:text-red-400 hover:underline"
-                                            >
-                                                Remove
-                                            </button>
+                                    <div className="flex flex-col items-center">
+                                        {file ? (
+                                            <>
+                                                <FileText className="mb-3 h-12 w-12 text-[var(--paper-ink)]" aria-hidden="true" />
+                                                <p className="text-sm font-medium text-[var(--paper-ink)]">
+                                                    {file.name}
+                                                </p>
+                                                <p className="mt-1 text-xs text-[var(--paper-muted)]">
+                                                    {(file.size / 1024).toFixed(1)} KB
+                                                </p>
+                                                {!uploading && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation()
+                                                            setFile(null)
+                                                            setError('')
+                                                        }}
+                                                        className="mt-3 text-sm text-[var(--paper-brick)] hover:underline"
+                                                    >
+                                                        Remove
+                                                    </button>
+                                                )}
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Upload className="mb-3 h-12 w-12 text-[var(--paper-muted)]" aria-hidden="true" />
+                                                <p className="mb-1 text-sm font-medium text-[var(--paper-ink)]">
+                                                    Drop your payslip PDF here or click to browse
+                                                </p>
+                                                <p className="text-xs text-[var(--paper-muted)]">
+                                                    Maximum file size: 10MB
+                                                </p>
+                                            </>
                                         )}
-                                    </>
-                                ) : (
-                                    <>
-                                        <Upload className="w-12 h-12 text-gray-400 mb-3" />
-                                        <p className="text-sm font-medium text-gray-900 dark:text-white mb-1">
-                                            Drop your payslip PDF here or click to browse
-                                        </p>
-                                        <p className="text-xs text-gray-500 dark:text-gray-400">
-                                            Maximum file size: 10MB
-                                        </p>
-                                    </>
-                                )}
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-                    </div>
 
-                    {/* Error Message */}
-                    {error && (
-                        <div className="flex items-start gap-3 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-                            <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-                            <div className="flex-1">
-                                <p className="text-sm font-medium text-red-900 dark:text-red-200">
-                                    Error
-                                </p>
-                                <p className="text-sm text-red-700 dark:text-red-300 mt-1">
-                                    {error}
-                                </p>
-                            </div>
-                        </div>
-                    )}
+                            {/* Error Message */}
+                            {error && (
+                                <div
+                                    role="alert"
+                                    className="flex items-start gap-3 rounded-md border border-[var(--paper-line)] bg-[var(--paper-canvas)] p-4"
+                                >
+                                    <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-[var(--paper-brick)]" aria-hidden="true" />
+                                    <div className="flex-1">
+                                        <p className="text-sm font-medium text-[var(--paper-brick)]">
+                                            Error
+                                        </p>
+                                        <p className="mt-1 text-sm text-[var(--paper-brick)]">
+                                            {error}
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
 
-                    {/* Info Box */}
-                    {!uploading && !extractedData && (
-                        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-                            <p className="text-sm text-blue-900 dark:text-blue-200">
-                                <strong>How it works:</strong> Upload your PDF payslip and our AI will automatically extract:
-                            </p>
-                            <ul className="mt-2 space-y-1 text-sm text-blue-800 dark:text-blue-300 list-disc list-inside">
-                                <li>Job title and company name</li>
-                                <li>Gross salary and net pay</li>
-                                <li>PAYE and UIF deductions</li>
-                                <li>Company contributions and personal deductions</li>
-                                <li>Additional income (bonuses, claims)</li>
-                            </ul>
-                            <p className="mt-2 text-sm text-blue-900 dark:text-blue-200">
-                                You'll be able to review and edit the extracted data before saving.
-                            </p>
-                        </div>
-                    )}
+                            {/* Info Box */}
+                            {!uploading && !extractedData && (
+                                <div className="rounded-md border border-[var(--paper-line)] bg-[var(--paper-canvas)] p-4">
+                                    <p className="text-sm text-[var(--paper-ink)]">
+                                        <strong className="font-medium">How it works:</strong>{' '}
+                                        <span className="text-[var(--paper-muted)]">Upload your PDF payslip and our AI will automatically extract:</span>
+                                    </p>
+                                    <ul className="mt-2 list-inside list-disc space-y-1 text-sm text-[var(--paper-muted)]">
+                                        <li>Job title and company name</li>
+                                        <li>Gross salary and net pay</li>
+                                        <li>PAYE and UIF deductions</li>
+                                        <li>Company contributions and personal deductions</li>
+                                        <li>Additional income (bonuses, claims)</li>
+                                    </ul>
+                                    <p className="mt-2 text-sm text-[var(--paper-muted)]">
+                                        You'll be able to review and edit the extracted data before saving.
+                                    </p>
+                                </div>
+                            )}
                         </>
                     )}
                 </div>
 
                 {/* Footer */}
-                <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200 dark:border-gray-700">
+                <div className="flex items-center justify-end gap-3 border-t border-[var(--paper-line)] bg-[var(--paper-card)] px-5 py-4 sm:px-6">
                     <button
+                        type="button"
                         onClick={handleClose}
                         disabled={uploading}
-                        className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-50"
+                        className={btnGhost}
                     >
                         {hasOpenAIKey ? 'Cancel' : 'Close'}
                     </button>
                     {hasOpenAIKey && (
                         <button
+                            type="button"
                             onClick={handleUpload}
                             disabled={!file || uploading}
-                            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                            className={btnPrimary}
                         >
                             {uploading ? (
                                 <>
-                                    <Loader className="w-4 h-4 animate-spin" />
+                                    <Loader className="h-4 w-4 animate-spin" aria-hidden="true" />
                                     Extracting Data...
                                 </>
                             ) : (
                                 <>
-                                    <Upload className="w-4 h-4" />
+                                    <Upload className="h-4 w-4" aria-hidden="true" />
                                     Extract & Review
                                 </>
                             )}
@@ -379,6 +391,7 @@ export default function PayslipUploadModal({ isOpen, onClose, onSuccess, initial
                 extractedData={extractedData}
                 monthYear={`${monthNames[month - 1]} ${year}`}
             />
-        </div>
+        </div>,
+        document.body
     )
 }
