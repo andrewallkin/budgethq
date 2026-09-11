@@ -1,14 +1,17 @@
 import os
+import secrets
 from datetime import datetime, timedelta
 from typing import Literal, Optional
 from jose import JWTError, jwt
 import bcrypt
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer, OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from . import models, database
 
 AuthorizedContext = Literal["registration", "login", "username_change"]
+EXTERNAL_API_KEY_PREFIX = "bhq_"
+EXTERNAL_API_KEY_LOOKUP_LEN = 12
 
 _RESTRICTED_MESSAGES = {
     "registration": "Registration is currently restricted. Only authorized users can create accounts.",
@@ -54,6 +57,7 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login")
+external_api_bearer = HTTPBearer(auto_error=True)
 
 def verify_password(plain_password, hashed_password):
     return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
@@ -87,5 +91,38 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
     
     user = db.query(models.User).filter(models.User.username == username).first()
     if user is None:
+        raise credentials_exception
+    return user
+
+
+def create_external_api_key_material() -> tuple[str, str, str]:
+    """Return (full_key, lookup_prefix, bcrypt_hash) for a new external API key."""
+    secret = secrets.token_urlsafe(32)
+    full_key = f"{EXTERNAL_API_KEY_PREFIX}{secret}"
+    lookup_prefix = full_key[:EXTERNAL_API_KEY_LOOKUP_LEN]
+    key_hash = get_password_hash(full_key)
+    return full_key, lookup_prefix, key_hash
+
+
+async def get_user_from_external_api_key(
+    credentials: HTTPAuthorizationCredentials = Depends(external_api_bearer),
+    db: Session = Depends(database.get_db),
+):
+    """Authenticate machine clients via per-user BudgetHQ API keys (bhq_...)."""
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid or missing API key",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    token = (credentials.credentials or "").strip()
+    if not token.startswith(EXTERNAL_API_KEY_PREFIX) or len(token) < 20:
+        raise credentials_exception
+
+    lookup_prefix = token[:EXTERNAL_API_KEY_LOOKUP_LEN]
+    user = db.query(models.User).filter(
+        models.User.external_api_key_prefix == lookup_prefix,
+        models.User.external_api_key_hash.isnot(None),
+    ).first()
+    if user is None or not verify_password(token, user.external_api_key_hash):
         raise credentials_exception
     return user

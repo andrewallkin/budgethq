@@ -229,6 +229,17 @@ export default function Settings() {
     const [apiKeySuccess, setApiKeySuccess] = useAutoClearingMessage(8000)
     const [apiKeyLoading, setApiKeyLoading] = useState(false)
 
+    const [hasExternalApiKey, setHasExternalApiKey] = useState(false)
+    const [externalApiKeyPrefix, setExternalApiKeyPrefix] = useState('')
+    const [externalApiKeyCreatedAt, setExternalApiKeyCreatedAt] = useState('')
+    const [generatedExternalApiKey, setGeneratedExternalApiKey] = useState('')
+    const [externalApiKeyError, setExternalApiKeyError] = useState('')
+    const [externalApiKeySuccess, setExternalApiKeySuccess] = useAutoClearingMessage(8000)
+    const [externalApiKeyLoading, setExternalApiKeyLoading] = useState(false)
+    const [showRevokeExternalApiKeyConfirm, setShowRevokeExternalApiKeyConfirm] = useState(false)
+    const [showRegenerateExternalApiKeyConfirm, setShowRegenerateExternalApiKeyConfirm] = useState(false)
+    const [externalApiKeyCopied, setExternalApiKeyCopied] = useState(false)
+
     const [connectionStatus, setConnectionStatus] = useState(null)
     const [credentials, setCredentials] = useState({
         client_id: '',
@@ -254,6 +265,8 @@ export default function Settings() {
     const usernameHintId = useId()
     const passwordConfirmErrorId = useId()
     const apiKeyHintId = useId()
+    const externalApiHintId = useId()
+    const generatedKeyFieldId = useId()
     const periodHintId = useId()
 
     useEffect(() => {
@@ -278,6 +291,20 @@ export default function Settings() {
             }
         }
         checkApiKey()
+    }, [])
+
+    useEffect(() => {
+        const fetchExternalApiKeyStatus = async () => {
+            try {
+                const response = await axios.get('/api/auth/user/settings/external-api-key')
+                setHasExternalApiKey(response.data.has_key)
+                setExternalApiKeyPrefix(response.data.prefix || '')
+                setExternalApiKeyCreatedAt(response.data.created_at || '')
+            } catch (err) {
+                console.error('Failed to check external API key status', err)
+            }
+        }
+        fetchExternalApiKeyStatus()
     }, [])
 
     const fetchConnectionStatus = async () => {
@@ -492,6 +519,58 @@ export default function Settings() {
         }
     }
 
+    const doGenerateExternalApiKey = async () => {
+        setExternalApiKeyError('')
+        setExternalApiKeySuccess('')
+        setGeneratedExternalApiKey('')
+        setExternalApiKeyCopied(false)
+        setExternalApiKeyLoading(true)
+
+        try {
+            const response = await axios.post('/api/auth/user/settings/external-api-key')
+            setGeneratedExternalApiKey(response.data.api_key)
+            setHasExternalApiKey(true)
+            setExternalApiKeyPrefix(response.data.prefix || '')
+            setExternalApiKeyCreatedAt(response.data.created_at || '')
+            setExternalApiKeySuccess(response.data.message || 'API key generated. Copy it now.')
+        } catch (err) {
+            setExternalApiKeyError(err.response?.data?.detail || 'Failed to generate API key')
+        } finally {
+            setExternalApiKeyLoading(false)
+        }
+    }
+
+    const doRevokeExternalApiKey = async () => {
+        setExternalApiKeyError('')
+        setExternalApiKeySuccess('')
+        setExternalApiKeyLoading(true)
+
+        try {
+            await axios.delete('/api/auth/user/settings/external-api-key')
+            setHasExternalApiKey(false)
+            setExternalApiKeyPrefix('')
+            setExternalApiKeyCreatedAt('')
+            setGeneratedExternalApiKey('')
+            setExternalApiKeyCopied(false)
+            setExternalApiKeySuccess('External API key revoked')
+        } catch (err) {
+            setExternalApiKeyError(err.response?.data?.detail || 'Failed to revoke API key')
+        } finally {
+            setExternalApiKeyLoading(false)
+        }
+    }
+
+    const handleCopyExternalApiKey = async () => {
+        if (!generatedExternalApiKey) return
+        try {
+            await navigator.clipboard.writeText(generatedExternalApiKey)
+            setExternalApiKeyCopied(true)
+            window.setTimeout(() => setExternalApiKeyCopied(false), 2000)
+        } catch {
+            setExternalApiKeyError('Failed to copy to clipboard')
+        }
+    }
+
     const handleUsernameChange = async (e) => {
         e.preventDefault()
         setUsernameError('')
@@ -547,6 +626,7 @@ export default function Settings() {
                         label={investecConnected ? 'Banking connected' : showInvestecNav ? 'Banking not connected' : 'Banking hidden'}
                     />
                     <StatusPill ok={hasApiKey} label={hasApiKey ? 'Payslip AI ready' : 'Payslip AI needs a key'} />
+                    <StatusPill ok={hasExternalApiKey} label={hasExternalApiKey ? 'Investment API key active' : 'No investment API key'} />
                 </div>
                 <SectionNav active={section} onChange={goToSection} />
             </header>
@@ -984,6 +1064,103 @@ export default function Settings() {
                             ) : null}
                         </div>
                     </PaperCard>
+
+                    <PaperCard className="p-5 sm:p-6">
+                        <p className={paperEyebrow}>Investment API key</p>
+                        <p id={externalApiHintId} className="mt-2 text-sm leading-relaxed text-[var(--paper-muted)]">
+                            Read-only key for external tools to fetch Sheets and Playwright investment totals.{' '}
+                            <a
+                                href="/api/external/investments/docs"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[var(--paper-ink)] underline decoration-[var(--paper-line)] underline-offset-2 hover:decoration-[var(--paper-ink)]"
+                            >
+                                View API docs
+                            </a>
+                            .
+                        </p>
+
+                        <div className="mt-5 space-y-4">
+                            <AlertBanner>{externalApiKeyError}</AlertBanner>
+                            <AlertBanner tone="success">{externalApiKeySuccess}</AlertBanner>
+
+                            {hasExternalApiKey ? (
+                                <ConnectionStatusPanel
+                                    ok
+                                    title="API key is active"
+                                    detail={
+                                        [
+                                            externalApiKeyPrefix ? `Prefix ${externalApiKeyPrefix}` : null,
+                                            externalApiKeyCreatedAt
+                                                ? `created ${formatDateSafe(externalApiKeyCreatedAt)}`
+                                                : null,
+                                        ]
+                                            .filter(Boolean)
+                                            .join(' · ') || 'A key is stored on this account. The full value is shown only when you generate it.'
+                                    }
+                                    actions={
+                                        <>
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowRegenerateExternalApiKeyConfirm(true)}
+                                                disabled={externalApiKeyLoading}
+                                                className={paperBtnGhost}
+                                            >
+                                                {externalApiKeyLoading ? 'Working…' : 'Regenerate key'}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowRevokeExternalApiKeyConfirm(true)}
+                                                disabled={externalApiKeyLoading}
+                                                className={paperBtnDanger}
+                                            >
+                                                Revoke key
+                                            </button>
+                                        </>
+                                    }
+                                />
+                            ) : (
+                                <ConnectionStatusPanel
+                                    title="No investment API key"
+                                    detail="Generate a key to let Grok or other tools call the read-only investments API."
+                                    actions={
+                                        <button
+                                            type="button"
+                                            onClick={doGenerateExternalApiKey}
+                                            disabled={externalApiKeyLoading}
+                                            className={paperBtnPrimary}
+                                        >
+                                            {externalApiKeyLoading ? 'Generating…' : 'Generate key'}
+                                        </button>
+                                    }
+                                />
+                            )}
+
+                            {generatedExternalApiKey ? (
+                                <div className="space-y-2">
+                                    <label htmlFor={generatedKeyFieldId} className="block text-sm font-medium text-[var(--paper-ink)]">
+                                        Copy this key now. It will not be shown again.
+                                    </label>
+                                    <div className="flex flex-col gap-2 sm:flex-row">
+                                        <input
+                                            id={generatedKeyFieldId}
+                                            type="text"
+                                            readOnly
+                                            autoComplete="off"
+                                            spellCheck={false}
+                                            value={generatedExternalApiKey}
+                                            aria-describedby={externalApiHintId}
+                                            className={`${paperField} flex-1 font-mono text-sm`}
+                                            onFocus={(e) => e.target.select()}
+                                        />
+                                        <button type="button" onClick={handleCopyExternalApiKey} className={paperBtnGhost}>
+                                            {externalApiKeyCopied ? 'Copied' : 'Copy'}
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : null}
+                        </div>
+                    </PaperCard>
                 </div>
             ) : null}
 
@@ -1016,12 +1193,23 @@ export default function Settings() {
             />
 
             <ConfirmModal
-                isOpen={showChangePasswordConfirm}
-                onClose={() => setShowChangePasswordConfirm(false)}
-                onConfirm={doChangePassword}
-                title="Change Password?"
-                message="Are you sure you want to change your password? You will need to use the new password on your next login."
-                confirmText="Change Password"
+                isOpen={showRevokeExternalApiKeyConfirm}
+                onClose={() => setShowRevokeExternalApiKeyConfirm(false)}
+                onConfirm={doRevokeExternalApiKey}
+                title="Revoke investment API key?"
+                message="External tools using this key will stop working immediately. You can generate a new key afterwards."
+                confirmText="Revoke key"
+                cancelText="Cancel"
+                variant="danger"
+            />
+
+            <ConfirmModal
+                isOpen={showRegenerateExternalApiKeyConfirm}
+                onClose={() => setShowRegenerateExternalApiKeyConfirm(false)}
+                onConfirm={doGenerateExternalApiKey}
+                title="Regenerate investment API key?"
+                message="The current key stops working immediately. Copy the new key when it appears — it is shown only once."
+                confirmText="Regenerate"
                 cancelText="Cancel"
                 variant="warning"
             />
