@@ -1,54 +1,36 @@
 import { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
-
-function useIsMobile(breakpoint = 640) {
-    const [isMobile, setIsMobile] = useState(false)
-    useEffect(() => {
-        const mq = window.matchMedia(`(min-width: ${breakpoint}px)`)
-        const handler = () => setIsMobile(!mq.matches)
-        handler()
-        mq.addEventListener('change', handler)
-        return () => mq.removeEventListener('change', handler)
-    }, [breakpoint])
-    return isMobile
-}
-
-import { Plus, Trash2, Calculator, BarChart2 } from 'lucide-react'
+import { Trash2, BarChart2, ChevronDown } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import SavingsCalculator from '../components/SavingsCalculator'
-import ChartLegend from '../components/ChartLegend'
 import { useAuth } from '../context/AuthContext'
-import { formatCurrency, formatNumber } from '../utils/numberFormatting'
+import { formatCurrency, formatDateSafe, formatNumber, formatPercent } from '../utils/numberFormatting'
 import BlurredValue from '../components/BlurredValue'
-import { BUDGET_TRANSACTION_CATEGORIES, CATEGORY_LABELS, BUDGET_CADENCES, CADENCE_LABELS } from '../utils/transactionCategories'
+import { BUDGET_TRANSACTION_CATEGORIES, CATEGORY_LABELS, CATEGORY_COLORS } from '../utils/transactionCategories'
+import { additionalIncomeTotal, hasAdditionalIncome, payslipMonthLabel } from '../utils/payslipBudget'
+import {
+    AllocationRow,
+    PAPER_BUDGET_COLORS,
+    PaperCard,
+    paperDivider,
+    paperEyebrow,
+    paperMoney,
+    paperMoneyTone,
+    paperTitle,
+} from '../components/appUi'
 
-const COLORS = {
-    Needs: '#B91C1C', // red-700
-    Wants: '#1D4ED8', // blue-700
-    Savings: '#15803D', // green-700
-    Unallocated: '#B45309' // amber-700
+const btnBase = 'inline-flex min-h-[40px] cursor-pointer items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors duration-200'
+const btnPrimary = `${btnBase} bg-[var(--paper-ink)] text-[var(--paper-card)] hover:opacity-90`
+const fieldInput = 'min-h-[40px] w-full rounded-md border border-[var(--paper-line)] bg-[var(--paper-card)] px-3 py-2 text-sm text-[var(--paper-ink)] outline-none transition-colors focus:ring-2 focus:ring-[var(--paper-accent)]/20'
+
+const sanitizeAmount = (value) => value.replace(/,/g, '').replace(/[^\d.]/g, '')
+
+const amountKeyDown = (onEnter) => (e) => {
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') e.preventDefault()
+    if (e.key === 'Enter') onEnter?.(e)
 }
-
-const CATEGORY_COLORS = [
-    '#C62828', // Red
-    '#2E7D32', // Green
-    '#1565C0', // Blue
-    '#F9A825', // Yellow/Gold
-    '#6A1B9A', // Purple
-    '#EF6C00', // Orange
-    '#00838F', // Cyan
-    '#AD1457', // Pink
-    '#4E342E', // Brown
-    '#455A64', // Blue Grey
-    '#9E9D24', // Olive
-    '#283593', // Indigo
-    '#00695C'  // Teal
-]
 
 export default function BudgetDashboard() {
     const { blurSensitiveValues } = useAuth()
-    const isMobile = useIsMobile(640)
     const [loading, setLoading] = useState(true)
     const [salary, setSalary] = useState(0)
     const [needs, setNeeds] = useState([])
@@ -56,6 +38,8 @@ export default function BudgetDashboard() {
     const [savings, setSavings] = useState([])
 
     const [latestPayslip, setLatestPayslip] = useState(null)
+    const [salaryPayslipLabel, setSalaryPayslipLabel] = useState(null)
+    const [salarySkippedAdditional, setSalarySkippedAdditional] = useState(false)
     const [activeTab, setActiveTab] = useState('needs')
 
     const [isSaving, setIsSaving] = useState(false)
@@ -65,9 +49,6 @@ export default function BudgetDashboard() {
     // TFSA Portfolio data
     const [portfolioTotal, setPortfolioTotal] = useState(0)
     const [portfolioEtfCount, setPortfolioEtfCount] = useState(0)
-
-    // Savings Calculator
-    const [showSavingsCalculator, setShowSavingsCalculator] = useState(false)
 
     // Budget period (for non-calendar periods)
     const [currentPeriodLabel, setCurrentPeriodLabel] = useState(null)
@@ -115,9 +96,17 @@ export default function BudgetDashboard() {
             if (budgetRes.data && Object.keys(budgetRes.data).length > 0) {
                 // Only set salary if it exists and is not null
                 setSalary(budgetRes.data.salary ?? 0)
-                setNeeds((budgetRes.data.needs || []).map(item => ({ ...item, transaction_category: item.transaction_category || 'uncategorized', excluded: item.excluded ?? false, cadence: item.cadence || 'monthly' })))
-                setWants((budgetRes.data.wants || []).map(item => ({ ...item, transaction_category: item.transaction_category || 'uncategorized', excluded: item.excluded ?? false, cadence: item.cadence || 'monthly' })))
-                setSavings((budgetRes.data.savings || []).map(item => ({ ...item, transaction_category: item.transaction_category || 'uncategorized', excluded: item.excluded ?? false, cadence: item.cadence || 'monthly' })))
+                setSalarySkippedAdditional(Boolean(budgetRes.data.salary_skipped_additional))
+                setSalaryPayslipLabel(
+                    payslipMonthLabel(
+                        budgetRes.data.salary_payslip_year,
+                        budgetRes.data.salary_payslip_month,
+                        formatDateSafe,
+                    )
+                )
+                setNeeds((budgetRes.data.needs || []).map(item => ({ ...item, transaction_category: item.transaction_category || 'uncategorized', excluded: item.excluded ?? false })))
+                setWants((budgetRes.data.wants || []).map(item => ({ ...item, transaction_category: item.transaction_category || 'uncategorized', excluded: item.excluded ?? false })))
+                setSavings((budgetRes.data.savings || []).map(item => ({ ...item, transaction_category: item.transaction_category || 'uncategorized', excluded: item.excluded ?? false })))
 
                 hasLoadedData.current = true
             } else {
@@ -168,9 +157,9 @@ export default function BudgetDashboard() {
         }
     }
 
-    const addCategory = (type, name, amount = 0, transactionCategory = 'uncategorized', cadence = 'monthly') => {
+    const addCategory = (type, name, amount = 0, transactionCategory = 'uncategorized') => {
         setHasUserEdited(true)
-        const newItem = { name, amount, transaction_category: transactionCategory, excluded: false, cadence }
+        const newItem = { name, amount, transaction_category: transactionCategory, excluded: false }
         if (type === 'needs') setNeeds([...needs, newItem])
         else if (type === 'wants') setWants([...wants, newItem])
         else setSavings([...savings, newItem])
@@ -198,21 +187,16 @@ export default function BudgetDashboard() {
     }
 
     // Calculations (excluded entries still count on dashboard; they are only excluded from Budget Analysis)
-    // Monthly summary/percent-of-income only counts monthly-cadence items. Annual and
-    // tracking line items are surfaced separately so they don't distort the monthly view.
-    const isMonthly = (item) => (item.cadence || 'monthly') === 'monthly'
-    const totalNeeds = needs.filter(isMonthly).reduce((sum, item) => sum + item.amount, 0)
-    const totalWants = wants.filter(isMonthly).reduce((sum, item) => sum + item.amount, 0)
-    const totalSavings = savings.filter(isMonthly).reduce((sum, item) => sum + item.amount, 0)
-
-    const allItems = [...needs, ...wants, ...savings]
-    const annualItems = allItems.filter(item => (item.cadence || 'monthly') === 'annual')
-    const trackingItems = allItems.filter(item => (item.cadence || 'monthly') === 'tracking')
-    const totalAnnual = annualItems.reduce((sum, item) => sum + item.amount, 0)
+    const totalNeeds = needs.reduce((sum, item) => sum + item.amount, 0)
+    const totalWants = wants.reduce((sum, item) => sum + item.amount, 0)
+    const totalSavings = savings.reduce((sum, item) => sum + item.amount, 0)
 
     const netIncome = salary // salary is now already the net income
+    const hasAdditional = hasAdditionalIncome(latestPayslip)
+    const additionalIncome = additionalIncomeTotal(latestPayslip)
     const totalSpent = totalNeeds + totalWants + totalSavings
     const remaining = netIncome - totalSpent
+    const isOverBudget = remaining < 0
 
     // Percentage calculation helper
     const calculatePercentage = (amount, total = netIncome) => {
@@ -220,362 +204,319 @@ export default function BudgetDashboard() {
         return (amount / total) * 100
     }
 
-    const chartData = [
-        { name: 'Needs', value: totalNeeds, percentage: calculatePercentage(totalNeeds) },
-        { name: 'Wants', value: totalWants, percentage: calculatePercentage(totalWants) },
-        { name: 'Savings', value: totalSavings, percentage: calculatePercentage(totalSavings) },
-        { name: 'Unallocated', value: Math.max(0, remaining), percentage: calculatePercentage(Math.max(0, remaining)) }
-    ].filter(d => d.value > 0)
+    const periodTitle = currentPeriodLabel || new Date().toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' })
+    const remainingPct = netIncome > 0 ? (remaining / netIncome) * 100 : 0
+    const pct = (value) =>
+        formatPercent(Math.abs(value), { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+    const incomeRows = latestPayslip
+        ? [
+              { label: 'Gross', value: formatCurrency(latestPayslip.gross_salary) },
+              ...(hasAdditional
+                  ? [{ label: 'Additional income', value: formatCurrency(additionalIncome) }]
+                  : []),
+              { label: 'PAYE', value: formatCurrency(latestPayslip.paye) },
+              { label: 'UIF', value: formatCurrency(latestPayslip.uif_employee_portion) },
+          ]
+        : []
+    const allocatedRows = [
+        { label: 'Needs', value: formatCurrency(totalNeeds) },
+        { label: 'Wants', value: formatCurrency(totalWants) },
+        { label: 'Savings', value: formatCurrency(totalSavings) },
+    ]
+    const remainingRows =
+        netIncome > 0
+            ? [
+                  { label: 'Share', value: pct(remainingPct) },
+                  { label: 'Of', value: 'Net income' },
+                  {
+                      label: 'Status',
+                      value: isOverBudget ? 'Over budget' : remaining === 0 ? 'Fully allocated' : 'Still to allocate',
+                  },
+              ]
+            : []
+    const paidThisMonth =
+        latestPayslip && Math.abs((latestPayslip.net_pay || 0) - netIncome) > 0.005
+            ? latestPayslip.net_pay
+            : null
 
+    const allocation = [
+        { name: 'Needs', amount: totalNeeds, color: PAPER_BUDGET_COLORS.Needs },
+        { name: 'Wants', amount: totalWants, color: PAPER_BUDGET_COLORS.Wants },
+        { name: 'Savings', amount: totalSavings, color: PAPER_BUDGET_COLORS.Savings },
+        {
+            name: isOverBudget ? 'Over budget' : 'Unallocated',
+            amount: Math.abs(remaining),
+            color: isOverBudget ? 'var(--paper-brick)' : PAPER_BUDGET_COLORS.Unallocated,
+        },
+    ]
 
-    if (loading) return <div>Loading...</div>
+    if (loading) {
+        return (
+            <div className="mx-auto max-w-[1080px] space-y-8">
+                <header>
+                    <h1 className={paperTitle}>Budget</h1>
+                    <p className={`mt-1 ${paperEyebrow}`}>Loading…</p>
+                </header>
+            </div>
+        )
+    }
 
     return (
-        <div className="space-y-6 sm:space-y-8">
-            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+        <div className="mx-auto max-w-[1080px] space-y-8">
+            <header className="flex items-end justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">💰 Budget Dashboard</h1>
-                    {currentPeriodLabel && (
-                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Current period: {currentPeriodLabel}</p>
-                    )}
+                    <h1 className={paperTitle}>Budget</h1>
+                    <p className={`mt-1 ${paperEyebrow}`}>
+                        {periodTitle}
+                        {latestPayslip?.company_name ? ` · ${latestPayslip.company_name}` : ''}
+                        {latestPayslip?.title ? ` · ${latestPayslip.title}` : ''}
+                    </p>
                 </div>
-                <div className="flex items-center gap-4 shrink-0">
-                    <button
-                        onClick={() => setShowSavingsCalculator(true)}
-                        className="flex items-center gap-2 px-4 py-2.5 min-h-[44px] bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                <div className="flex shrink-0 items-center gap-4 text-sm">
+                    {isSaving ? (
+                        <span className="text-xs text-[var(--paper-muted)]">Saving…</span>
+                    ) : null}
+                    <Link
+                        to="/salary"
+                        className="cursor-pointer text-[var(--paper-muted)] transition-colors hover:text-[var(--paper-ink)]"
                     >
-                        <Calculator className="w-4 h-4" />
-                        Savings Calculator
-                    </button>
-                    <div className="text-sm text-gray-500 dark:text-gray-400">
-                        {isSaving ? 'Saving...' : 'All changes saved'}
-                    </div>
+                        Payslip
+                    </Link>
                 </div>
-            </div>
+            </header>
 
-            {/* Summary bar (mobile only) - non-sticky to avoid overlap with charts */}
-            <div className="lg:hidden -mx-4 px-4 py-2 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 shadow-sm">
-                <div className="flex justify-between items-center text-sm">
-                    <span className="text-gray-600 dark:text-gray-400">Remaining</span>
-                    <BlurredValue><span className={`font-semibold ${remaining >= 0 ? 'text-gray-900 dark:text-white' : 'text-red-600 dark:text-red-400'}`}>
-                        {formatCurrency(remaining, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span></BlurredValue>
-                </div>
-                <div className="flex justify-between items-center text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                    <span>Allocated: <BlurredValue>{formatCurrency(totalSpent, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</BlurredValue></span>
-                    <span>Income: <BlurredValue>{formatCurrency(netIncome, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</BlurredValue></span>
-                </div>
-            </div>
-
-            <div className="grid md:grid-cols-3 gap-6">
-                {/* Column 1: Income, Summary, and Budget Breakdown */}
-                <div className="md:col-span-1 space-y-6">
-                    {/* Income Card */}
-                    <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
-                        <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Income Details</h2>
-                        <div className="space-y-4">
-                            <div>
-                                <div className="flex justify-between items-center mb-1">
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Net Monthly Income (R)</label>
-                                    <Link to="/salary" className="text-xs text-blue-600 hover:text-blue-700 font-medium">
-                                        Edit Salary Details →
-                                    </Link>
-                                </div>
-                                {salary > 0 ? (
-                                    <BlurredValue as="div">
-                                    <input
-                                        type="text"
-                                        value={formatCurrency(salary, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                        readOnly
-                                        className="w-full px-3 py-3 min-h-[44px] border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white cursor-not-allowed"
-                                    />
-                                    </BlurredValue>
-                                ) : (
-                                    <div className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 italic">
-                                        No income data available
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Payslip & Tax Info Card */}
-                    {latestPayslip && (
-                        <div className="bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 p-4 sm:p-6 rounded-xl shadow-sm border border-purple-200 dark:border-purple-800 transition-colors">
-                            <div className="flex justify-between items-center mb-4">
-                                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">💰 Payslip Info</h2>
-                                <Link to="/salary" className="text-xs text-purple-600 dark:text-purple-400 hover:underline font-medium">
-                                    View Details →
-                                </Link>
-                            </div>
-                            <div className="space-y-3 text-sm">
-                                <div className="flex justify-between">
-                                    <span className="text-gray-600 dark:text-gray-300">Gross Salary</span>
-                                    <BlurredValue><span className="font-semibold text-green-600 dark:text-green-400">
-                                        {formatCurrency(latestPayslip.gross_salary)}
-                                    </span></BlurredValue>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-gray-600 dark:text-gray-300">PAYE (Tax)</span>
-                                    <BlurredValue><span className="font-semibold text-red-600 dark:text-red-400">
-                                        - {formatCurrency(latestPayslip.paye)}
-                                    </span></BlurredValue>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-gray-600 dark:text-gray-300">UIF</span>
-                                    <BlurredValue><span className="font-semibold text-red-600 dark:text-red-400">
-                                        - {formatCurrency(latestPayslip.uif_employee_portion)}
-                                    </span></BlurredValue>
-                                </div>
-                                <div className="pt-2 border-t border-purple-200 dark:border-purple-700">
-                                    <div className="flex justify-between">
-                                        <span className="text-gray-700 dark:text-gray-200 font-medium">Net Pay</span>
-                                        <BlurredValue><span className="font-bold text-blue-600 dark:text-blue-400">
-                                            {formatCurrency(latestPayslip.net_pay)}
-                                        </span></BlurredValue>
-                                    </div>
-                                </div>
-                                {latestPayslip.company_name && (
-                                    <div className="pt-2 text-xs text-gray-500 dark:text-gray-400 italic">
-                                        {latestPayslip.company_name}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Summary Stats Card */}
-                    <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
-                        <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Summary</h2>
-                        <div className="space-y-4">
-                            <SummaryItem label="Total Needs" value={totalNeeds} color="text-red-600 dark:text-red-400" percentage={calculatePercentage(totalNeeds)} />
-                            <SummaryItem label="Total Wants" value={totalWants} color="text-blue-600 dark:text-blue-400" percentage={calculatePercentage(totalWants)} />
-                            <SummaryItem label="Total Savings" value={totalSavings} color="text-green-600 dark:text-green-400" percentage={calculatePercentage(totalSavings)} />
-                            {!isMobile && (
-                                <div className="pt-4 border-t border-gray-100 dark:border-gray-700">
-                                    <SummaryItem
-                                        label="Remaining"
-                                        value={remaining}
-                                        color={remaining >= 0 ? "text-gray-900 dark:text-white" : "text-red-600 dark:text-red-400"}
-                                        percentage={calculatePercentage(Math.max(0, remaining))}
-                                    />
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Annual & Tracking Card */}
-                    {(annualItems.length > 0 || trackingItems.length > 0) && (
-                        <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
-                            <h2 className="text-lg font-semibold mb-1 text-gray-900 dark:text-white">Annual & Tracking</h2>
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
-                                Excluded from the monthly summary. Annual budgets track a yearly pool; tracking items have no target.
+            <PaperCard className="overflow-hidden">
+                <div className="grid grid-cols-1 divide-y divide-[var(--paper-line)] md:grid-cols-3 md:divide-x md:divide-y-0">
+                    <div className="flex flex-col p-5 sm:p-6">
+                        <p className={paperEyebrow}>Net income</p>
+                        <BlurredValue>
+                            <p className={`mt-3 text-3xl text-[var(--paper-ink)] ${paperMoney}`}>
+                                {formatCurrency(netIncome)}
                             </p>
-                            {annualItems.length > 0 && (
-                                <div className="space-y-2 mb-4">
-                                    <div className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">Annual budgets</div>
-                                    {annualItems.map((item, i) => (
-                                        <div key={`annual-${i}`} className="flex justify-between items-center text-sm">
-                                            <span className="text-gray-600 dark:text-gray-300 truncate mr-2">{item.name || '—'}</span>
-                                            <BlurredValue><span className="font-medium text-gray-900 dark:text-white whitespace-nowrap">
-                                                {formatCurrency(item.amount, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}/yr
-                                            </span></BlurredValue>
-                                        </div>
-                                    ))}
-                                    <div className="flex justify-between items-center text-sm pt-2 border-t border-gray-100 dark:border-gray-700">
-                                        <span className="text-gray-600 dark:text-gray-400">Total annual</span>
-                                        <BlurredValue><span className="font-semibold text-gray-900 dark:text-white">
-                                            {formatCurrency(totalAnnual, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}/yr
-                                        </span></BlurredValue>
-                                    </div>
-                                </div>
-                            )}
-                            {trackingItems.length > 0 && (
-                                <div className="space-y-2">
-                                    <div className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">Tracking only</div>
-                                    {trackingItems.map((item, i) => (
-                                        <div key={`tracking-${i}`} className="flex justify-between items-center text-sm">
-                                            <span className="text-gray-600 dark:text-gray-300 truncate mr-2">{item.name || '—'}</span>
-                                            <span className="text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap">No target</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {/* Overall Budget Breakdown Chart */}
-                    {salary > 0 && (
-                        <div className={`bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors scroll-mt-32 lg:scroll-mt-0 ${blurSensitiveValues ? 'blur-[5px] select-none' : ''}`}>
-                            <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Budget Breakdown</h2>
-                            <div>
-                                <ResponsiveContainer width="100%" height={isMobile ? 180 : 220}>
-                                    <PieChart>
-                                        <Pie
-                                            data={chartData}
-                                            cx="50%"
-                                            cy="50%"
-                                            innerRadius={isMobile ? 35 : 60}
-                                            outerRadius={isMobile ? 50 : 80}
-                                            paddingAngle={5}
-                                            dataKey="value"
-                                        >
-                                            {chartData.map((entry, index) => (
-                                                <Cell key={`cell-${index}`} fill={COLORS[entry.name]} stroke="none" />
-                                            ))}
-                                        </Pie>
-                                        <Tooltip
-                                            formatter={(value, name, props) => {
-                                                const percentage = props.payload.percentage || 0
-                                                return [`R ${value.toFixed(2)} (${percentage.toFixed(1)}%)`, name]
-                                            }}
-                                            contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#f3f4f6' }}
-                                            itemStyle={{ color: '#f3f4f6' }}
-                                        />
-                                    </PieChart>
-                                </ResponsiveContainer>
-                                <ChartLegend
-                                    payload={chartData.map((d, i) => ({
-                                        value: d.name,
-                                        color: COLORS[d.name],
-                                    }))}
-                                    formatter={(value) => {
-                                        const data = chartData.find(d => d.name === value)
-                                        return data ? `${value} (${data.percentage.toFixed(1)}%)` : value
-                                    }}
-                                />
-                            </div>
-                        </div>
-                    )}
+                        </BlurredValue>
+                        <SummaryMeta rows={incomeRows} />
+                        {salarySkippedAdditional && salaryPayslipLabel ? (
+                            <p className="mt-1 text-xs text-[var(--paper-muted)]">{salaryPayslipLabel}</p>
+                        ) : null}
+                    </div>
+                    <div className="flex flex-col p-5 sm:p-6">
+                        <p className={paperEyebrow}>Allocated</p>
+                        <BlurredValue>
+                            <p className={`mt-3 text-3xl text-[var(--paper-ink)] ${paperMoney}`}>
+                                {formatCurrency(totalSpent)}
+                            </p>
+                        </BlurredValue>
+                        <SummaryMeta rows={allocatedRows} />
+                    </div>
+                    <div className="flex flex-col p-5 sm:p-6">
+                        <p className={paperEyebrow}>{isOverBudget ? 'Over budget' : 'Remaining'}</p>
+                        <BlurredValue>
+                            <p className={`mt-3 text-3xl ${paperMoney} ${isOverBudget ? paperMoneyTone(-1) : 'text-[var(--paper-ink)]'}`}>
+                                {formatCurrency(Math.abs(remaining))}
+                            </p>
+                        </BlurredValue>
+                        <SummaryMeta rows={remainingRows} />
+                    </div>
                 </div>
+            </PaperCard>
 
-                {/* Column 2 & 3: Categories and Insights */}
-                <div className="md:col-span-2 space-y-6">
-                    {/* Tabs & Category List */}
-                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden transition-colors">
-                        <div className="flex border-b border-gray-100 dark:border-gray-700">
-                            {['needs', 'wants', 'savings'].map((tab) => (
-                                <button
-                                    key={tab}
-                                    onClick={() => setActiveTab(tab)}
-                                    className={`flex-1 py-4 text-sm font-medium capitalize transition-colors rounded-t-lg ${activeTab === tab
-                                        ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
-                                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'
-                                        }`}
-                                >
-                                    {tab}
-                                </button>
-                            ))}
-                        </div>
-
-                        <div className="p-4 sm:p-6">
-                            <CategoryList
-                                type={activeTab}
-                                items={activeTab === 'needs' ? needs : activeTab === 'wants' ? wants : savings}
-                                netIncome={netIncome}
-                                onAdd={(name, amount, transactionCategory, cadence) => addCategory(activeTab, name, amount, transactionCategory, cadence)}
-                                onUpdate={(index, field, val) => updateCategory(activeTab, index, field, val)}
-                                onRemove={(index) => removeCategory(activeTab, index)}
+            {latestPayslip ? (
+                <PaperCard className="p-5 sm:p-6">
+                    <h2 className="text-lg font-semibold text-[var(--paper-ink)]">Income breakdown</h2>
+                    <div className={`mt-2 ${paperDivider}`}>
+                        <MetaRow
+                            label="Gross salary"
+                            tone={paperMoneyTone(1)}
+                            value={<BlurredValue>{formatCurrency(latestPayslip.gross_salary)}</BlurredValue>}
+                        />
+                        {hasAdditional ? (
+                            <MetaRow
+                                label="Additional income"
+                                tone={paperMoneyTone(1)}
+                                value={<BlurredValue>{formatCurrency(additionalIncome)}</BlurredValue>}
                             />
-                        </div>
+                        ) : null}
+                        <MetaRow
+                            label="PAYE"
+                            tone={paperMoneyTone(-1)}
+                            value={<BlurredValue>{formatCurrency(latestPayslip.paye)}</BlurredValue>}
+                        />
+                        <MetaRow
+                            label="UIF"
+                            tone={paperMoneyTone(-1)}
+                            value={<BlurredValue>{formatCurrency(latestPayslip.uif_employee_portion)}</BlurredValue>}
+                        />
+                        {paidThisMonth != null ? (
+                            <MetaRow
+                                label="Paid this month"
+                                value={<BlurredValue>{formatCurrency(paidThisMonth)}</BlurredValue>}
+                            />
+                        ) : null}
+                        <MetaRow
+                            label="Net income"
+                            hint={salarySkippedAdditional ? salaryPayslipLabel : null}
+                            value={<BlurredValue>{formatCurrency(netIncome)}</BlurredValue>}
+                        />
                     </div>
+                </PaperCard>
+            ) : null}
 
-                    {/* Category Specific Chart */}
-                    <div className={`bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors scroll-mt-32 lg:scroll-mt-0 ${blurSensitiveValues ? 'blur-[5px] select-none' : ''}`}>
-                        <h2 className="text-lg font-semibold mb-4 capitalize text-gray-900 dark:text-white">{activeTab} Breakdown</h2>
-                        <div>
-                            {(() => {
-                                const tabItems = activeTab === 'needs' ? needs : activeTab === 'wants' ? wants : savings
-                                // Monthly items only so annual (yearly) amounts don't distort the breakdown
-                                const categoryItems = tabItems.filter(item => (item.cadence || 'monthly') === 'monthly')
-                                const categoryTotal = categoryItems.reduce((sum, item) => sum + item.amount, 0)
-                                const categoryChartData = categoryItems
-                                    .map(item => ({
-                                        name: item.name,
-                                        value: item.amount,
-                                        percentage: categoryTotal > 0 ? (item.amount / categoryTotal) * 100 : 0
-                                    }))
-                                    .filter(d => d.value > 0)
-                                return (
-                                    <>
-                                        <ResponsiveContainer width="100%" height={isMobile ? 180 : 250}>
-                                            <PieChart>
-                                                <Pie
-                                                    data={categoryChartData}
-                                                    cx="50%"
-                                                    cy="50%"
-                                                    innerRadius={isMobile ? 35 : 60}
-                                                    outerRadius={isMobile ? 50 : 80}
-                                                    paddingAngle={5}
-                                                    dataKey="value"
-                                                >
-                                                    {categoryChartData.map((entry, index) => (
-                                                        <Cell key={`cell-${index}`} fill={CATEGORY_COLORS[index % CATEGORY_COLORS.length]} stroke="none" />
-                                                    ))}
-                                                </Pie>
-                                                <Tooltip
-                                                    formatter={(value, name, props) => {
-                                                        const percentage = props.payload.percentage || 0
-                                                        return [`R ${value.toFixed(2)} (${percentage.toFixed(1)}%)`, name]
-                                                    }}
-                                                    contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#f3f4f6' }}
-                                                    itemStyle={{ color: '#f3f4f6' }}
-                                                />
-                                            </PieChart>
-                                        </ResponsiveContainer>
-                                        <ChartLegend
-                                            payload={categoryChartData.map((d, i) => ({
-                                                value: d.name,
-                                                color: CATEGORY_COLORS[i % CATEGORY_COLORS.length],
-                                            }))}
-                                            formatter={(value) => {
-                                                const item = categoryItems.find(i => i.name === value)
-                                                if (item && categoryTotal > 0) {
-                                                    const percentage = (item.amount / categoryTotal) * 100
-                                                    return `${value} (${percentage.toFixed(1)}%)`
-                                                }
-                                                return value
-                                            }}
-                                        />
-                                    </>
-                                )
-                            })()}
-                        </div>
+            {netIncome > 0 || totalSpent > 0 ? (
+                <PaperCard className={`p-5 sm:p-6 ${blurSensitiveValues ? 'blur-[5px] select-none' : ''}`}>
+                    <h2 className="text-lg font-semibold text-[var(--paper-ink)]">Budget split</h2>
+                    <p className="mt-1 text-sm text-[var(--paper-muted)]">Share of net income</p>
+                    <div className={`mt-2 ${paperDivider}`}>
+                        {allocation.map((row) => (
+                            <AllocationRow
+                                key={row.name}
+                                label={row.name}
+                                amount={row.amount}
+                                total={Math.max(netIncome, totalSpent)}
+                                color={row.color}
+                                hint={
+                                    netIncome > 0
+                                        ? formatPercent(calculatePercentage(row.amount), {
+                                              minimumFractionDigits: 0,
+                                              maximumFractionDigits: 0,
+                                          })
+                                        : null
+                                }
+                                display={<BlurredValue>{formatCurrency(row.amount)}</BlurredValue>}
+                            />
+                        ))}
                     </div>
+                </PaperCard>
+            ) : null}
 
+            <PaperCard className="p-5 sm:p-6">
+                <div className="flex gap-1 rounded-md bg-[var(--paper-canvas)] p-1">
+                    {[
+                        { id: 'needs', label: 'Needs', total: totalNeeds, color: PAPER_BUDGET_COLORS.Needs },
+                        { id: 'wants', label: 'Wants', total: totalWants, color: PAPER_BUDGET_COLORS.Wants },
+                        { id: 'savings', label: 'Savings', total: totalSavings, color: PAPER_BUDGET_COLORS.Savings },
+                    ].map((tab) => (
+                        <button
+                            key={tab.id}
+                            type="button"
+                            onClick={() => setActiveTab(tab.id)}
+                            className={`flex min-h-[48px] flex-1 cursor-pointer flex-col items-start justify-center rounded-md px-4 py-2 text-left transition-colors ${
+                                activeTab === tab.id
+                                    ? 'bg-[var(--paper-card)] text-[var(--paper-ink)] shadow-sm'
+                                    : 'text-[var(--paper-muted)] hover:text-[var(--paper-ink)]'
+                            }`}
+                        >
+                            <span className="flex items-center gap-2 text-sm">
+                                <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: tab.color }} />
+                                {tab.label}
+                            </span>
+                            <span className={`mt-1 text-sm tabular-nums ${paperMoney}`}>
+                                <BlurredValue>{formatCurrency(tab.total)}</BlurredValue>
+                            </span>
+                        </button>
+                    ))}
                 </div>
-            </div>
-
-            {/* Savings Calculator Modal */}
-            <SavingsCalculator
-                isOpen={showSavingsCalculator}
-                onClose={() => setShowSavingsCalculator(false)}
-            />
+                <div className="mt-6">
+                    <CategoryList
+                        items={activeTab === 'needs' ? needs : activeTab === 'wants' ? wants : savings}
+                        netIncome={netIncome}
+                        onAdd={(name, amount, transactionCategory) => addCategory(activeTab, name, amount, transactionCategory)}
+                        onUpdate={(index, field, val) => updateCategory(activeTab, index, field, val)}
+                        onRemove={(index) => removeCategory(activeTab, index)}
+                    />
+                </div>
+            </PaperCard>
         </div>
     )
 }
 
-function SummaryItem({ label, value, color, percentage }) {
+function SummaryMeta({ rows }) {
+    if (!rows.length) return null
     return (
-        <div className="flex justify-between items-center">
-            <span className="text-gray-600 dark:text-gray-400">{label}</span>
-            <BlurredValue><span className={`font-medium ${color}`}>
-                {formatCurrency(value, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                {percentage !== undefined && (
-                    <span className="text-sm ml-2 text-gray-500 dark:text-gray-400">
-                        ({formatNumber(percentage, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%)
-                    </span>
-                )}
-            </span></BlurredValue>
+        <div className="mt-2 space-y-0.5 text-sm text-[var(--paper-muted)]">
+            {rows.map((row) => (
+                <p key={row.label} className="flex justify-between gap-3">
+                    <span>{row.label}</span>
+                    <span className={`min-w-0 truncate text-right tabular-nums ${paperMoney}`}>{row.value}</span>
+                </p>
+            ))}
         </div>
     )
 }
 
-const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => {
+function MetaRow({ label, hint, value, tone }) {
+    return (
+        <div className="flex items-baseline justify-between gap-4 py-3">
+            <div className="min-w-0">
+                <p className="text-sm text-[var(--paper-muted)]">{label}</p>
+                {hint ? <p className="mt-0.5 text-xs text-[var(--paper-muted)]">{hint}</p> : null}
+            </div>
+            <p className={`shrink-0 text-right text-sm font-medium tabular-nums ${tone || 'text-[var(--paper-ink)]'}`}>{value}</p>
+        </div>
+    )
+}
+
+function QuietMenu({ value, options, labels, onChange, swatchFor, align = 'left' }) {
+    const [open, setOpen] = useState(false)
+    const ref = useRef(null)
+
+    useEffect(() => {
+        if (!open) return undefined
+        const onPointer = (event) => {
+            if (ref.current && !ref.current.contains(event.target)) setOpen(false)
+        }
+        document.addEventListener('mousedown', onPointer)
+        return () => document.removeEventListener('mousedown', onPointer)
+    }, [open])
+
+    const swatch = swatchFor?.(value)
+
+    return (
+        <div className="relative w-[11rem] shrink-0" ref={ref}>
+            <button
+                type="button"
+                onClick={() => setOpen((current) => !current)}
+                className="flex w-full cursor-pointer items-center gap-1.5 text-left text-xs text-[var(--paper-muted)] transition-colors hover:text-[var(--paper-ink)]"
+            >
+                {swatch ? <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: swatch }} /> : null}
+                <span className="min-w-0 flex-1 truncate">{labels[value] || value}</span>
+                <ChevronDown className={`h-3 w-3 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+            </button>
+            {open ? (
+                <div
+                    className={`absolute z-20 mt-2 max-h-64 min-w-[14rem] overflow-y-auto rounded-md border border-[var(--paper-line)] bg-[var(--paper-card)] py-1 shadow-sm ${
+                        align === 'right' ? 'right-0' : 'left-0'
+                    }`}
+                >
+                    {options.map((option) => (
+                        <button
+                            key={option}
+                            type="button"
+                            onClick={() => {
+                                onChange(option)
+                                setOpen(false)
+                            }}
+                            className={`flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--paper-canvas)] ${
+                                option === value
+                                    ? 'font-medium text-[var(--paper-ink)]'
+                                    : 'text-[var(--paper-muted)]'
+                            }`}
+                        >
+                            {swatchFor ? (
+                                <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: swatchFor(option) }} />
+                            ) : null}
+                            {labels[option] || option}
+                        </button>
+                    ))}
+                </div>
+            ) : null}
+        </div>
+    )
+}
+
+const CategoryList = ({ items, netIncome, onAdd, onUpdate, onRemove }) => {
     const [newName, setNewName] = useState('')
     const [newAmount, setNewAmount] = useState('')
     const [newTransactionCategory, setNewTransactionCategory] = useState('uncategorized')
-    const [newCadence, setNewCadence] = useState('monthly')
 
     const calculatePercentage = (amount) => {
         if (netIncome === 0) return 0
@@ -584,160 +525,116 @@ const CategoryList = ({ type, items, netIncome, onAdd, onUpdate, onRemove }) => 
 
     const handleAdd = () => {
         if (newName.trim()) {
-            onAdd(newName.trim(), parseFloat(newAmount) || 0, newTransactionCategory, newCadence)
+            onAdd(newName.trim(), parseFloat(newAmount) || 0, newTransactionCategory)
             setNewName('')
             setNewAmount('')
             setNewTransactionCategory('uncategorized')
-            setNewCadence('monthly')
-        }
-    }
-
-    const cadenceSuffix = (cadence) => {
-        if (cadence === 'annual') return '/yr'
-        if (cadence === 'tracking') return ''
-        return '/mo'
-    }
-
-    const handleKeyPress = (e) => {
-        if (e.key === 'Enter') {
-            handleAdd()
         }
     }
 
     const renderCategoryItem = (item, index) => {
-        const cadence = item.cadence || 'monthly'
-        const isMonthlyItem = cadence === 'monthly'
-        const isTracking = cadence === 'tracking'
         const percentage = calculatePercentage(item.amount)
         const isExcluded = item.excluded ?? false
 
         return (
-            <div key={index} className={`flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 py-3 border-b border-gray-200 dark:border-gray-600 last:border-b-0 group ${isExcluded ? 'opacity-60' : ''}`}>
-                <div className="flex items-center gap-2 min-w-0 flex-1">
+            <div
+                key={index}
+                className={`group flex flex-wrap items-center gap-x-4 gap-y-2 py-3 sm:flex-nowrap ${isExcluded ? 'opacity-60' : ''}`}
+            >
+                <input
+                    type="text"
+                    value={item.name}
+                    onChange={(e) => onUpdate(index, 'name', e.target.value)}
+                    className="min-w-0 flex-1 rounded-md border-none bg-transparent px-0 py-1 text-sm font-medium text-[var(--paper-ink)] outline-none transition-all focus:ring-2 focus:ring-[var(--paper-accent)]/20 sm:text-base"
+                />
+                <QuietMenu
+                    value={item.transaction_category || 'uncategorized'}
+                    options={BUDGET_TRANSACTION_CATEGORIES}
+                    labels={CATEGORY_LABELS}
+                    swatchFor={(key) => CATEGORY_COLORS[key] || '#9ca3af'}
+                    onChange={(next) => onUpdate(index, 'transaction_category', next)}
+                />
+                <BlurredValue as="div" className="flex w-28 shrink-0 items-center justify-end gap-1">
+                    <span className="text-sm tabular-nums text-[var(--paper-muted)]">R</span>
                     <input
                         type="text"
-                        value={item.name}
-                        onChange={(e) => onUpdate(index, 'name', e.target.value)}
-                        className="flex-1 min-w-0 min-h-[44px] py-2 bg-transparent border-none focus:ring-0 text-gray-900 dark:text-white font-medium"
+                        inputMode="decimal"
+                        value={item.amount}
+                        placeholder="0"
+                        onChange={(e) => onUpdate(index, 'amount', sanitizeAmount(e.target.value))}
+                        onFocus={(e) => e.target.select()}
+                        onKeyDown={amountKeyDown()}
+                        className="w-full min-w-0 border-none bg-transparent py-1 text-right text-sm tabular-nums text-[var(--paper-ink)] outline-none sm:text-base"
                     />
-                    <select
-                        value={item.transaction_category || 'uncategorized'}
-                        onChange={(e) => onUpdate(index, 'transaction_category', e.target.value)}
-                        className="flex-shrink-0 w-full sm:w-36 px-2 py-1.5 min-h-[44px] text-xs bg-white dark:bg-gray-600 border border-gray-200 dark:border-gray-500 rounded text-gray-900 dark:text-white"
-                    >
-                        {BUDGET_TRANSACTION_CATEGORIES.map(cat => (
-                            <option key={cat} value={cat}>{CATEGORY_LABELS[cat]}</option>
-                        ))}
-                    </select>
-                    <select
-                        value={cadence}
-                        onChange={(e) => onUpdate(index, 'cadence', e.target.value)}
-                        title="Budget cadence"
-                        className="flex-shrink-0 w-full sm:w-28 px-2 py-1.5 min-h-[44px] text-xs bg-white dark:bg-gray-600 border border-gray-200 dark:border-gray-500 rounded text-gray-900 dark:text-white"
-                    >
-                        {BUDGET_CADENCES.map(c => (
-                            <option key={c} value={c}>{CADENCE_LABELS[c]}</option>
-                        ))}
-                    </select>
-                </div>
-                <div className="flex items-center gap-2 flex-shrink-0 self-center">
-                    <BlurredValue as="div" className={`flex items-center border border-gray-200 dark:border-gray-500 rounded bg-white dark:bg-gray-600 min-h-[44px] ${isTracking ? 'opacity-40' : ''}`}>
-                        <span className="pl-3 text-gray-500 dark:text-gray-400 text-sm">R</span>
-                        <input
-                            type="number"
-                            value={isTracking ? '' : item.amount}
-                            placeholder={isTracking ? '—' : '0'}
-                            disabled={isTracking}
-                            onChange={(e) => onUpdate(index, 'amount', e.target.value.replace(/,/g, ''))}
-                            onFocus={(e) => e.target.select()}
-                            className="w-20 min-h-[44px] pl-1 pr-1 py-2 bg-transparent border-none focus:ring-0 text-right text-gray-900 dark:text-white disabled:cursor-not-allowed"
-                        />
-                        <span className="pr-2 text-gray-400 dark:text-gray-500 text-xs">{cadenceSuffix(cadence)}</span>
-                    </BlurredValue>
-                    <span className="text-xs text-gray-500 dark:text-gray-400 min-w-[50px] text-right">
-                        {isExcluded ? (
-                            <span className="text-amber-600 dark:text-amber-400" title="Not compared in Budget Analysis">Excl.</span>
-                        ) : isMonthlyItem ? (
-                            <BlurredValue>({formatNumber(percentage, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%)</BlurredValue>
-                        ) : (
-                            <span className="text-gray-400 dark:text-gray-500" title="Not counted in the monthly summary">{cadence === 'annual' ? 'Annual' : 'Track'}</span>
-                        )}
-                    </span>
-                    <button
-                        type="button"
-                        onClick={() => onUpdate(index, 'excluded', !isExcluded)}
-                        title="Exclude from Budget Analysis (transaction comparison)"
-                        className={`p-2 -m-2 transition-opacity opacity-100 sm:opacity-0 sm:group-hover:opacity-100 ${isExcluded ? 'text-amber-500 dark:text-amber-400' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'}`}
-                    >
-                        <BarChart2 className="w-4 h-4" />
-                    </button>
-                    <button
-                        onClick={() => onRemove(index)}
-                        className="p-2 -m-2 text-gray-400 hover:text-red-500 dark:hover:text-red-400 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
-                    >
-                        <Trash2 className="w-4 h-4" />
-                    </button>
-                </div>
+                </BlurredValue>
+                <span className="w-8 shrink-0 text-right text-xs text-[var(--paper-muted)]">/mo</span>
+                <span className="w-14 shrink-0 text-right text-xs text-[var(--paper-muted)]">
+                    {isExcluded ? (
+                        <span className="text-[var(--paper-accent)]" title="Not compared in Budget Analysis">Excl.</span>
+                    ) : (
+                        <BlurredValue>({formatNumber(percentage, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%)</BlurredValue>
+                    )}
+                </span>
+                <button
+                    type="button"
+                    onClick={() => onUpdate(index, 'excluded', !isExcluded)}
+                    title="Exclude from Budget Analysis (transaction comparison)"
+                    className={`cursor-pointer rounded-md p-2 text-[var(--paper-muted)] transition-all sm:opacity-0 sm:group-hover:opacity-100 ${isExcluded ? 'text-[var(--paper-accent)]' : 'hover:text-[var(--paper-ink)]'}`}
+                >
+                    <BarChart2 className="h-4 w-4" />
+                </button>
+                <button
+                    type="button"
+                    onClick={() => onRemove(index)}
+                    className="cursor-pointer rounded-md p-2 text-[var(--paper-muted)] transition-all hover:bg-[var(--paper-canvas)] hover:text-[var(--paper-brick)] sm:opacity-0 sm:group-hover:opacity-100"
+                    aria-label="Delete item"
+                >
+                    <Trash2 className="h-4 w-4" />
+                </button>
             </div>
         )
     }
 
     return (
-        <div className="space-y-3">
-            <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2">
+        <div>
+            <div className={paperDivider}>
+                {items.map((item, index) => renderCategoryItem(item, index))}
+                {items.length === 0 ? (
+                    <p className="py-6 text-center text-sm text-[var(--paper-muted)]">No categories yet</p>
+                ) : null}
+            </div>
+            <div className="flex flex-col gap-3 border-t border-[var(--paper-line)] pt-4 sm:flex-row sm:items-center">
                 <input
                     type="text"
-                    placeholder="Category name..."
+                    placeholder="Category name…"
                     value={newName}
                     onChange={(e) => setNewName(e.target.value)}
-                    onKeyPress={handleKeyPress}
-                    className="flex-1 min-w-0 w-full sm:min-w-[150px] px-3 py-3 min-h-[44px] border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors"
+                    onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+                    className={`${fieldInput} min-w-0 flex-1`}
                 />
-                <BlurredValue as="div" className="flex items-center border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 sm:w-auto w-full min-h-[44px]">
-                    <span className="pl-3 text-gray-500 dark:text-gray-400 text-sm">R</span>
+                <QuietMenu
+                    value={newTransactionCategory}
+                    options={BUDGET_TRANSACTION_CATEGORIES}
+                    labels={CATEGORY_LABELS}
+                    swatchFor={(key) => CATEGORY_COLORS[key] || '#9ca3af'}
+                    onChange={setNewTransactionCategory}
+                />
+                <BlurredValue as="div" className="flex w-full items-center gap-1 sm:w-32">
+                    <span className="text-sm tabular-nums text-[var(--paper-muted)]">R</span>
                     <input
-                        type="number"
-                        placeholder="0"
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="0.00"
                         value={newAmount}
-                        onChange={(e) => setNewAmount(e.target.value.replace(/,/g, ''))}
-                        onKeyPress={handleKeyPress}
+                        onChange={(e) => setNewAmount(sanitizeAmount(e.target.value))}
+                        onKeyDown={amountKeyDown(() => handleAdd())}
                         onFocus={(e) => e.target.select()}
-                        className="w-24 min-w-0 flex-1 sm:flex-initial pl-1 pr-3 py-3 bg-transparent border-none focus:ring-0 text-right text-gray-900 dark:text-white"
+                        className="w-full border-none bg-transparent py-1 text-right text-sm tabular-nums text-[var(--paper-ink)] outline-none"
                     />
                 </BlurredValue>
-                <select
-                    value={newTransactionCategory}
-                    onChange={(e) => setNewTransactionCategory(e.target.value)}
-                    className="w-full sm:w-44 px-3 py-3 min-h-[44px] border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors"
-                >
-                    {BUDGET_TRANSACTION_CATEGORIES.map(cat => (
-                        <option key={cat} value={cat}>{CATEGORY_LABELS[cat]}</option>
-                    ))}
-                </select>
-                <select
-                    value={newCadence}
-                    onChange={(e) => setNewCadence(e.target.value)}
-                    title="Budget cadence"
-                    className="w-full sm:w-32 px-3 py-3 min-h-[44px] border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors"
-                >
-                    {BUDGET_CADENCES.map(c => (
-                        <option key={c} value={c}>{CADENCE_LABELS[c]}</option>
-                    ))}
-                </select>
-                <button
-                    onClick={handleAdd}
-                    className="px-4 py-2.5 min-h-[44px] text-base bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-1"
-                >
-                    <Plus className="w-4 h-4" />
+                <button type="button" onClick={handleAdd} className={btnPrimary}>
                     Add
                 </button>
-            </div>
-
-            <div className="space-y-2">
-                {items.map((item, index) => renderCategoryItem(item, index))}
-                {items.length === 0 && (
-                    <p className="text-center text-gray-500 dark:text-gray-400 py-4">No categories yet</p>
-                )}
             </div>
         </div>
     )
