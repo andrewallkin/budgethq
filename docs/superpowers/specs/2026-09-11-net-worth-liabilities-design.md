@@ -1,7 +1,7 @@
 # Home net worth and visible liabilities
 
 **Date:** 2026-09-11  
-**Status:** Draft — awaiting user review
+**Status:** Approved — implemented
 
 ## Goal
 
