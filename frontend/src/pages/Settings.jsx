@@ -1,12 +1,198 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
 import axios from 'axios'
-import { CheckCircle, XCircle, RefreshCw, AlertTriangle, LayoutDashboard, HelpCircle } from 'lucide-react'
-import { formatDateSafe } from '../utils/numberFormatting'
-import { fetchAuthConfig } from '../utils/authConfig'
+import { ArrowRight, CheckCircle, RefreshCw, XCircle } from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
 import ConfirmModal from '../components/ConfirmModal'
+import {
+    PaperCard,
+    paperBtnDanger,
+    paperBtnGhost,
+    paperBtnPrimary,
+    paperDivider,
+    paperEyebrow,
+    paperField,
+    paperSegment,
+    paperTitle,
+} from '../components/appUi'
 import { useAutoClearingMessage } from '../hooks/useAutoClearingMessage'
+import { fetchAuthConfig } from '../utils/authConfig'
+import { formatDateSafe } from '../utils/numberFormatting'
+
+const SECTIONS = [
+    { id: 'account', label: 'Account' },
+    { id: 'preferences', label: 'Preferences' },
+    { id: 'connections', label: 'Connections' },
+]
+
+const HISTORICAL_MONTHS = [1, 3, 6]
+
+function sectionFromHash() {
+    const id = window.location.hash.replace('#', '')
+    return SECTIONS.some((section) => section.id === id) ? id : 'account'
+}
+
+function AlertBanner({ tone = 'error', children }) {
+    if (!children) return null
+    const isError = tone === 'error'
+    return (
+        <p
+            role={isError ? 'alert' : 'status'}
+            className={`rounded-md border px-3 py-2 text-sm ${
+                isError
+                    ? 'border-[var(--paper-brick)]/30 bg-[var(--paper-brick)]/8 text-[var(--paper-brick)]'
+                    : 'border-[var(--paper-olive)]/30 bg-[var(--paper-olive)]/10 text-[var(--paper-olive)]'
+            }`}
+        >
+            {children}
+        </p>
+    )
+}
+
+function FieldHint({ id, children }) {
+    return (
+        <p id={id} className="mt-1.5 text-xs text-[var(--paper-muted)]">
+            {children}
+        </p>
+    )
+}
+
+function PaperSwitch({ checked, onChange, labelledBy, describedBy }) {
+    return (
+        <button
+            type="button"
+            role="switch"
+            aria-checked={checked}
+            aria-labelledby={labelledBy}
+            aria-describedby={describedBy}
+            onClick={() => onChange(!checked)}
+            className={[
+                'relative inline-flex h-7 w-12 shrink-0 cursor-pointer items-center rounded-full border transition-colors duration-200 motion-reduce:transition-none',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--paper-accent)]/40',
+                checked
+                    ? 'border-[var(--paper-ink)] bg-[var(--paper-ink)]'
+                    : 'border-[var(--paper-line)] bg-[var(--paper-canvas)]',
+            ].join(' ')}
+        >
+            <span
+                aria-hidden="true"
+                className={[
+                    'inline-block h-[18px] w-[18px] rounded-full transition-transform duration-200 motion-reduce:transition-none',
+                    checked
+                        ? 'translate-x-[22px] bg-[var(--paper-card)]'
+                        : 'translate-x-1 bg-[var(--paper-muted)]',
+                ].join(' ')}
+            />
+        </button>
+    )
+}
+
+function ToggleRow({ title, description, checked, onChange }) {
+    const uid = useId()
+    const titleId = `${uid}-title`
+    const descId = `${uid}-desc`
+
+    return (
+        <div className="flex items-start justify-between gap-4 py-4 first:pt-0 last:pb-0">
+            <div className="min-w-0">
+                <p id={titleId} className="text-sm font-medium text-[var(--paper-ink)]">
+                    {title}
+                </p>
+                <p id={descId} className="mt-1 text-sm leading-relaxed text-[var(--paper-muted)]">
+                    {description}
+                </p>
+            </div>
+            <PaperSwitch
+                checked={checked}
+                onChange={onChange}
+                labelledBy={titleId}
+                describedBy={descId}
+            />
+        </div>
+    )
+}
+
+function StatusPill({ ok, label }) {
+    return (
+        <span
+            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs whitespace-nowrap ${
+                ok
+                    ? 'border-[var(--paper-olive)]/25 bg-[var(--paper-olive)]/10 text-[var(--paper-olive)]'
+                    : 'border-[var(--paper-line)] bg-[var(--paper-canvas)] text-[var(--paper-muted)]'
+            }`}
+        >
+            {ok ? (
+                <CheckCircle className="h-3.5 w-3.5" aria-hidden="true" />
+            ) : (
+                <XCircle className="h-3.5 w-3.5" aria-hidden="true" />
+            )}
+            {label}
+        </span>
+    )
+}
+
+function ConnectionStatusPanel({ ok, loading = false, title, detail, actions }) {
+    return (
+        <div
+            role="status"
+            aria-atomic="true"
+            className={[
+                'rounded-md border p-4',
+                loading
+                    ? 'border-[var(--paper-line)] bg-[var(--paper-canvas)]'
+                    : ok
+                      ? 'border-[var(--paper-olive)]/30 bg-[var(--paper-olive)]/10'
+                      : 'border-[var(--paper-line)] bg-[var(--paper-canvas)]',
+            ].join(' ')}
+        >
+            <div className="flex items-start gap-3">
+                {loading ? (
+                    <span className="mt-0.5 h-5 w-5 shrink-0 rounded-full border border-[var(--paper-line)]" aria-hidden="true" />
+                ) : ok ? (
+                    <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-[var(--paper-olive)]" aria-hidden="true" />
+                ) : (
+                    <XCircle className="mt-0.5 h-5 w-5 shrink-0 text-[var(--paper-muted)]" aria-hidden="true" />
+                )}
+                <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-[var(--paper-ink)]">{title}</p>
+                    {detail ? (
+                        <p className="mt-1 text-sm leading-relaxed text-[var(--paper-muted)]">{detail}</p>
+                    ) : null}
+                </div>
+            </div>
+            {actions ? <div className="mt-4 flex flex-wrap gap-2">{actions}</div> : null}
+        </div>
+    )
+}
+
+function SectionNav({ active, onChange }) {
+    return (
+        <nav className="-mx-1 overflow-x-auto px-1" aria-label="Settings sections">
+            <div className={`${paperSegment} w-max min-w-full`}>
+                {SECTIONS.map((section) => {
+                    const isActive = section.id === active
+                    return (
+                        <button
+                            key={section.id}
+                            type="button"
+                            onClick={() => onChange(section.id)}
+                            aria-current={isActive ? 'page' : undefined}
+                            className={[
+                                'inline-flex min-h-10 min-w-[7rem] flex-1 cursor-pointer items-center justify-center rounded-md px-3 text-sm font-medium whitespace-nowrap transition-colors duration-200',
+                                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--paper-accent)]/40',
+                                isActive
+                                    ? 'bg-[var(--paper-ink)] text-[var(--paper-card)]'
+                                    : 'text-[var(--paper-muted)] hover:bg-[var(--paper-canvas)] hover:text-[var(--paper-ink)]',
+                            ].join(' ')}
+                        >
+                            {section.label}
+                        </button>
+                    )
+                })}
+            </div>
+        </nav>
+    )
+}
 
 export default function Settings() {
     const {
@@ -18,33 +204,36 @@ export default function Settings() {
         blurSensitiveValues,
         setBlurSensitiveValues,
     } = useAuth()
+
+    const [section, setSection] = useState(sectionFromHash)
+
     const [currentPassword, setCurrentPassword] = useState('')
     const [newPassword, setNewPassword] = useState('')
     const [confirmPassword, setConfirmPassword] = useState('')
+    const [passwordFieldError, setPasswordFieldError] = useState('')
     const [error, setError] = useState('')
     const [success, setSuccess] = useAutoClearingMessage(8000)
     const [loading, setLoading] = useState(false)
 
-    // Username change state
     const [username, setUsername] = useState('')
     const [usernameError, setUsernameError] = useState('')
     const [usernameSuccess, setUsernameSuccess] = useAutoClearingMessage(8000)
     const [usernameLoading, setUsernameLoading] = useState(false)
     const [restrictAuthorizedUsers, setRestrictAuthorizedUsers] = useState(true)
 
-    // OpenAI API Key state
     const [openaiApiKey, setOpenaiApiKey] = useState('')
     const [hasApiKey, setHasApiKey] = useState(false)
+    const [apiKeyChecked, setApiKeyChecked] = useState(false)
+    const [replacingApiKey, setReplacingApiKey] = useState(false)
     const [apiKeyError, setApiKeyError] = useState('')
     const [apiKeySuccess, setApiKeySuccess] = useAutoClearingMessage(8000)
     const [apiKeyLoading, setApiKeyLoading] = useState(false)
 
-    // Investec settings state
     const [connectionStatus, setConnectionStatus] = useState(null)
     const [credentials, setCredentials] = useState({
         client_id: '',
         client_secret: '',
-        api_key: ''
+        api_key: '',
     })
     const [investecSaving, setInvestecSaving] = useState(false)
     const [syncing, setSyncing] = useState(false)
@@ -56,18 +245,19 @@ export default function Settings() {
     const [syncingHistorical, setSyncingHistorical] = useState(null)
     const [syncSuccess, setSyncSuccess] = useAutoClearingMessage(8000)
 
-    // Budget period settings
     const [budgetPeriodStartDay, setBudgetPeriodStartDay] = useState(1)
     const [budgetPeriodLoading, setBudgetPeriodLoading] = useState(false)
     const [budgetPeriodSaving, setBudgetPeriodSaving] = useState(false)
     const [budgetPeriodError, setBudgetPeriodError] = useState('')
     const [budgetPeriodSuccess, setBudgetPeriodSuccess] = useAutoClearingMessage(8000)
 
-    // Initialize username from user
+    const usernameHintId = useId()
+    const passwordConfirmErrorId = useId()
+    const apiKeyHintId = useId()
+    const periodHintId = useId()
+
     useEffect(() => {
-        if (user?.username) {
-            setUsername(user.username)
-        }
+        if (user?.username) setUsername(user.username)
     }, [user])
 
     useEffect(() => {
@@ -76,7 +266,6 @@ export default function Settings() {
         })
     }, [])
 
-    // Check if user has API key on mount
     useEffect(() => {
         const checkApiKey = async () => {
             try {
@@ -84,6 +273,8 @@ export default function Settings() {
                 setHasApiKey(response.data.has_key)
             } catch (err) {
                 console.error('Failed to check API key status', err)
+            } finally {
+                setApiKeyChecked(true)
             }
         }
         checkApiKey()
@@ -93,7 +284,7 @@ export default function Settings() {
         try {
             const response = await axios.get('/api/investec/credentials/status')
             setConnectionStatus(response.data)
-        } catch (err) {
+        } catch {
             setConnectionStatus({ is_connected: false })
         }
     }
@@ -102,15 +293,13 @@ export default function Settings() {
         fetchConnectionStatus()
     }, [])
 
-    // Fetch budget period on mount
     useEffect(() => {
         const fetchBudgetPeriod = async () => {
             setBudgetPeriodLoading(true)
             try {
                 const response = await axios.get('/api/budget/default_user')
                 setBudgetPeriodStartDay(response.data.budget_period_start_day ?? 1)
-            } catch (err) {
-                // No budget yet - use default
+            } catch {
                 setBudgetPeriodStartDay(1)
             } finally {
                 setBudgetPeriodLoading(false)
@@ -119,6 +308,20 @@ export default function Settings() {
         fetchBudgetPeriod()
     }, [])
 
+    useEffect(() => {
+        const onHash = () => setSection(sectionFromHash())
+        window.addEventListener('hashchange', onHash)
+        return () => window.removeEventListener('hashchange', onHash)
+    }, [])
+
+    const goToSection = (id) => {
+        setSection(id)
+        const nextHash = `#${id}`
+        if (window.location.hash !== nextHash) {
+            window.history.replaceState(null, '', nextHash)
+        }
+    }
+
     const handleBudgetPeriodSave = async (e) => {
         e.preventDefault()
         setBudgetPeriodError('')
@@ -126,7 +329,7 @@ export default function Settings() {
         setBudgetPeriodSaving(true)
         try {
             await axios.patch('/api/budget/default_user', {
-                budget_period_start_day: Math.max(1, Math.min(31, budgetPeriodStartDay)) || 1
+                budget_period_start_day: Math.max(1, Math.min(31, budgetPeriodStartDay)) || 1,
             })
             setBudgetPeriodSuccess('Budget period saved')
         } catch (err) {
@@ -144,15 +347,13 @@ export default function Settings() {
 
         try {
             await axios.post('/api/investec/credentials', credentials)
-            setInvestecSuccess('Successfully connected to Investec! Syncing accounts...')
+            setInvestecSuccess('Connected to Investec. Syncing accounts…')
             setCredentials({ client_id: '', client_secret: '', api_key: '' })
-
             await axios.post('/api/investec/accounts/sync')
             await fetchConnectionStatus()
-            // Backend auto-sets has_investec_account=true on connect; refresh nav preference
             await updateInvestecNavPreference(true)
         } catch (err) {
-            setInvestecError(err.response?.data?.detail || 'Failed to connect. Please check your credentials.')
+            setInvestecError(err.response?.data?.detail || 'Could not connect. Check the credentials and try again.')
         } finally {
             setInvestecSaving(false)
         }
@@ -165,7 +366,7 @@ export default function Settings() {
 
         try {
             await axios.delete('/api/investec/credentials')
-            setInvestecSuccess('Successfully disconnected from Investec')
+            setInvestecSuccess('Disconnected from Investec')
             await fetchConnectionStatus()
         } catch (err) {
             setInvestecError(err.response?.data?.detail || 'Failed to disconnect')
@@ -181,7 +382,7 @@ export default function Settings() {
 
         try {
             await axios.post('/api/investec/accounts/sync')
-            setInvestecSuccess('Accounts synced successfully')
+            setInvestecSuccess('Accounts synced')
             await fetchConnectionStatus()
         } catch (err) {
             setInvestecError(err.response?.data?.detail || 'Failed to sync accounts')
@@ -198,8 +399,7 @@ export default function Settings() {
         try {
             const response = await axios.post('/api/investec/transactions/sync-historical', { months })
             setSyncSuccess(
-                `Synced ${response.data.new_transactions} transactions from the last ${months} month(s) ` +
-                `(${response.data.categorized} categorized by rules)`
+                `Synced ${response.data.new_transactions} transactions from the last ${months} month(s) (${response.data.categorized} categorized by rules)`,
             )
         } catch (err) {
             setInvestecError(err.response?.data?.detail || 'Failed to sync historical transactions')
@@ -208,18 +408,19 @@ export default function Settings() {
         }
     }
 
-    const handleSubmit = async (e) => {
+    const handleSubmit = (e) => {
         e.preventDefault()
         setError('')
         setSuccess('')
+        setPasswordFieldError('')
 
         if (newPassword !== confirmPassword) {
-            setError('New passwords do not match')
+            setPasswordFieldError('New passwords do not match')
             return
         }
 
         if (newPassword.length < 6) {
-            setError('Password must be at least 6 characters')
+            setPasswordFieldError('Password must be at least 6 characters')
             return
         }
 
@@ -232,12 +433,13 @@ export default function Settings() {
         try {
             await axios.post('/api/auth/change-password', {
                 current_password: currentPassword,
-                new_password: newPassword
+                new_password: newPassword,
             })
-            setSuccess('Password changed successfully!')
+            setSuccess('Password changed')
             setCurrentPassword('')
             setNewPassword('')
             setConfirmPassword('')
+            setPasswordFieldError('')
         } catch (err) {
             setError(err.response?.data?.detail || 'Failed to change password')
         } finally {
@@ -259,20 +461,17 @@ export default function Settings() {
 
         try {
             await axios.put('/api/auth/user/settings/openai-key', {
-                api_key: openaiApiKey
+                api_key: openaiApiKey,
             })
-            setApiKeySuccess('OpenAI API key saved successfully!')
+            setApiKeySuccess('OpenAI API key saved')
             setHasApiKey(true)
             setOpenaiApiKey('')
+            setReplacingApiKey(false)
         } catch (err) {
             setApiKeyError(err.response?.data?.detail || 'Failed to save API key')
         } finally {
             setApiKeyLoading(false)
         }
-    }
-
-    const handleDeleteApiKey = () => {
-        setShowDeleteApiKeyConfirm(true)
     }
 
     const doDeleteApiKey = async () => {
@@ -282,9 +481,10 @@ export default function Settings() {
 
         try {
             await axios.delete('/api/auth/user/settings/openai-key')
-            setApiKeySuccess('OpenAI API key deleted successfully')
+            setApiKeySuccess('OpenAI API key removed')
             setHasApiKey(false)
             setOpenaiApiKey('')
+            setReplacingApiKey(false)
         } catch (err) {
             setApiKeyError(err.response?.data?.detail || 'Failed to delete API key')
         } finally {
@@ -303,7 +503,7 @@ export default function Settings() {
         }
 
         if (username === user?.username) {
-            setUsernameError('New username is the same as current username')
+            setUsernameError('That is already your username')
             return
         }
 
@@ -311,9 +511,9 @@ export default function Settings() {
 
         try {
             await axios.put('/api/auth/user/username', {
-                username: username.trim()
+                username: username.trim(),
             })
-            setUsernameSuccess('Username updated successfully! Please log in again for changes to take effect.')
+            setUsernameSuccess('Username updated. Sign in again for it to take effect.')
         } catch (err) {
             setUsernameError(err.response?.data?.detail || 'Failed to update username')
         } finally {
@@ -321,446 +521,471 @@ export default function Settings() {
         }
     }
 
+    const investecConnected = Boolean(connectionStatus?.is_connected)
+    const lastSyncedLabel = connectionStatus?.last_synced
+        ? formatDateSafe(connectionStatus.last_synced, {
+              day: 'numeric',
+              month: 'short',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+          })
+        : null
+
     return (
-        <div className="w-full">
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-5">⚙️ Settings</h1>
+        <div className="mx-auto max-w-[1080px] space-y-8">
+            <header className="space-y-4">
+                <div>
+                    <h1 className={paperTitle}>Settings</h1>
+                    <p className={`mt-1 ${paperEyebrow}`}>Account, preferences, and connections</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                    <StatusPill ok={Boolean(user?.username)} label={user?.username || 'Signed in'} />
+                    <StatusPill ok={blurSensitiveValues} label={blurSensitiveValues ? 'Amounts hidden' : 'Amounts visible'} />
+                    <StatusPill
+                        ok={investecConnected}
+                        label={investecConnected ? 'Banking connected' : showInvestecNav ? 'Banking not connected' : 'Banking hidden'}
+                    />
+                    <StatusPill ok={hasApiKey} label={hasApiKey ? 'Payslip AI ready' : 'Payslip AI needs a key'} />
+                </div>
+                <SectionNav active={section} onChange={goToSection} />
+            </header>
 
-            {/* Top row: 3-column on xl, 2-column on lg, 1-column on mobile */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
-
-                {/* Account Information */}
-                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-200 dark:divide-gray-700">
-                    <div className="p-5">
-                        <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-4">Account Information</h2>
-                        {usernameError && (
-                            <div className="mb-3 p-3 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 rounded-lg text-sm">{usernameError}</div>
-                        )}
-                        {usernameSuccess && (
-                            <div className="mb-3 p-3 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 rounded-lg text-sm">{usernameSuccess}</div>
-                        )}
-                        <form onSubmit={handleUsernameChange}>
-                            <label htmlFor="username" className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1.5">Username</label>
-                            <div className="flex gap-2">
-                                <input
-                                    id="username"
-                                    type="text"
-                                    value={username}
-                                    onChange={(e) => setUsername(e.target.value)}
-                                    className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                                />
-                                <button
-                                    type="submit"
-                                    disabled={usernameLoading || username === user?.username}
-                                    className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                >
-                                    {usernameLoading ? 'Saving...' : 'Save'}
-                                </button>
-                            </div>
-                            {restrictAuthorizedUsers && (
-                                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">Must be in the authorized users list</p>
-                            )}
-                        </form>
-                    </div>
-
-                    <div className="p-5">
-                        <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-4">Change Password</h3>
-                        {error && (
-                            <div className="mb-3 p-3 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 rounded-lg text-sm">{error}</div>
-                        )}
-                        {success && (
-                            <div className="mb-3 p-3 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 rounded-lg text-sm">{success}</div>
-                        )}
-                        <form onSubmit={handleSubmit} className="space-y-3">
+            {section === 'account' ? (
+                <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+                    <PaperCard className="p-5 sm:p-6">
+                        <p className={paperEyebrow}>Username</p>
+                        <p className="mt-2 text-sm leading-relaxed text-[var(--paper-muted)]">
+                            Used to sign in. Changing it requires a new login.
+                        </p>
+                        <form onSubmit={handleUsernameChange} className="mt-5 space-y-3">
+                            <AlertBanner>{usernameError}</AlertBanner>
+                            <AlertBanner tone="success">{usernameSuccess}</AlertBanner>
                             <div>
-                                <label htmlFor="current-password" className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1.5">Current Password</label>
+                                <label htmlFor="username" className="mb-1.5 block text-sm font-medium text-[var(--paper-ink)]">
+                                    Username
+                                </label>
+                                <div className="flex flex-col gap-2 sm:flex-row">
+                                    <input
+                                        id="username"
+                                        type="text"
+                                        autoComplete="username"
+                                        value={username}
+                                        onChange={(e) => setUsername(e.target.value)}
+                                        aria-describedby={restrictAuthorizedUsers ? usernameHintId : undefined}
+                                        aria-invalid={Boolean(usernameError)}
+                                        className={`${paperField} flex-1`}
+                                    />
+                                    <button
+                                        type="submit"
+                                        disabled={usernameLoading || username === user?.username}
+                                        className={paperBtnPrimary}
+                                    >
+                                        {usernameLoading ? 'Saving…' : 'Save'}
+                                    </button>
+                                </div>
+                                {restrictAuthorizedUsers ? (
+                                    <FieldHint id={usernameHintId}>Must be in the authorized users list.</FieldHint>
+                                ) : null}
+                            </div>
+                        </form>
+                    </PaperCard>
+
+                    <PaperCard className="p-5 sm:p-6">
+                        <p className={paperEyebrow}>Password</p>
+                        <p className="mt-2 text-sm leading-relaxed text-[var(--paper-muted)]">
+                            Use a new password of at least 6 characters.
+                        </p>
+                        <form onSubmit={handleSubmit} className="mt-5 space-y-3">
+                            <AlertBanner>{error}</AlertBanner>
+                            <AlertBanner tone="success">{success}</AlertBanner>
+                            <div>
+                                <label htmlFor="current-password" className="mb-1.5 block text-sm font-medium text-[var(--paper-ink)]">
+                                    Current password
+                                </label>
                                 <input
                                     id="current-password"
                                     type="password"
+                                    autoComplete="current-password"
                                     required
                                     value={currentPassword}
                                     onChange={(e) => setCurrentPassword(e.target.value)}
-                                    className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                    className={paperField}
                                 />
                             </div>
                             <div>
-                                <label htmlFor="new-password" className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1.5">New Password</label>
+                                <label htmlFor="new-password" className="mb-1.5 block text-sm font-medium text-[var(--paper-ink)]">
+                                    New password
+                                </label>
                                 <input
                                     id="new-password"
                                     type="password"
+                                    autoComplete="new-password"
                                     required
                                     value={newPassword}
-                                    onChange={(e) => setNewPassword(e.target.value)}
-                                    className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                    onChange={(e) => {
+                                        setNewPassword(e.target.value)
+                                        setPasswordFieldError('')
+                                    }}
+                                    aria-invalid={Boolean(passwordFieldError)}
+                                    className={paperField}
                                 />
                             </div>
                             <div>
-                                <label htmlFor="confirm-password" className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1.5">Confirm New Password</label>
+                                <label htmlFor="confirm-password" className="mb-1.5 block text-sm font-medium text-[var(--paper-ink)]">
+                                    Confirm new password
+                                </label>
                                 <input
                                     id="confirm-password"
                                     type="password"
+                                    autoComplete="new-password"
                                     required
                                     value={confirmPassword}
-                                    onChange={(e) => setConfirmPassword(e.target.value)}
-                                    className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                    onChange={(e) => {
+                                        setConfirmPassword(e.target.value)
+                                        setPasswordFieldError('')
+                                    }}
+                                    aria-invalid={Boolean(passwordFieldError)}
+                                    aria-describedby={passwordFieldError ? passwordConfirmErrorId : undefined}
+                                    className={paperField}
                                 />
+                                {passwordFieldError ? (
+                                    <p id={passwordConfirmErrorId} role="alert" className="mt-1.5 text-sm text-[var(--paper-brick)]">
+                                        {passwordFieldError}
+                                    </p>
+                                ) : null}
                             </div>
-                            <button
-                                type="submit"
-                                disabled={loading}
-                                className="w-full py-2 px-4 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-                            >
-                                {loading ? 'Changing...' : 'Change Password'}
+                            <button type="submit" disabled={loading} className={`${paperBtnPrimary} w-full`}>
+                                {loading ? 'Changing…' : 'Change password'}
                             </button>
                         </form>
-                    </div>
+                    </PaperCard>
                 </div>
+            ) : null}
 
-                {/* OpenAI API Key */}
-                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
-                    <div className="flex items-center justify-between mb-1">
-                        <h2 className="text-base font-semibold text-gray-900 dark:text-white">OpenAI API Key</h2>
-                        {hasApiKey && (
-                            <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/30 px-2 py-1 rounded-full">
-                                <CheckCircle className="w-3 h-3" /> Active
-                            </span>
-                        )}
-                    </div>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                        Encrypted key used for payslip data extraction. Get one at{' '}
-                        <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">
-                            OpenAI Platform
-                        </a>.
-                    </p>
-                    {apiKeyError && (
-                        <div className="mb-3 p-3 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 rounded-lg text-sm">{apiKeyError}</div>
-                    )}
-                    {apiKeySuccess && (
-                        <div className="mb-3 p-3 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 rounded-lg text-sm">{apiKeySuccess}</div>
-                    )}
-                    <form onSubmit={handleSaveApiKey} className="space-y-3">
-                        <div>
-                            <label htmlFor="openai-api-key" className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1.5">
-                                {hasApiKey ? 'Replace API Key' : 'API Key'}
-                            </label>
-                            <input
-                                id="openai-api-key"
-                                type="password"
-                                required
-                                value={openaiApiKey}
-                                onChange={(e) => setOpenaiApiKey(e.target.value)}
-                                placeholder="sk-..."
-                                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                            />
-                        </div>
-                        <div className="flex gap-2">
-                            <button
-                                type="submit"
-                                disabled={apiKeyLoading}
-                                className="flex-1 py-2 px-4 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-                            >
-                                {apiKeyLoading ? 'Saving...' : hasApiKey ? 'Update Key' : 'Save Key'}
-                            </button>
-                            {hasApiKey && (
-                                <button
-                                    type="button"
-                                    onClick={handleDeleteApiKey}
-                                    disabled={apiKeyLoading}
-                                    className="py-2 px-4 text-sm font-medium text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 transition-colors"
-                                >
-                                    Remove
-                                </button>
-                            )}
-                        </div>
-                    </form>
-                </div>
-
-                {/* RA under Investments */}
-                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <h2 className="text-base font-semibold text-gray-900 dark:text-white">RA tools under Investments</h2>
-                            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-                                Shows RA Performance and the RA tax calculator on the Investments page and home
-                            </p>
-                        </div>
-                        <button
-                            role="switch"
-                            aria-checked={showRaUnderInvestments}
-                            onClick={() => updateRaUnderInvestmentsPreference(!showRaUnderInvestments)}
-                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-                                showRaUnderInvestments ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-600'
-                            }`}
-                        >
-                            <span
-                                className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                                    showRaUnderInvestments ? 'translate-x-5' : 'translate-x-0'
-                                }`}
-                            />
-                        </button>
-                    </div>
-                </div>
-
-                {/* Investec Integration */}
-                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-200 dark:divide-gray-700">
-                    <div className="p-5">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <h2 className="text-base font-semibold text-gray-900 dark:text-white">Investec Integration</h2>
-                                <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Shows Investec Banking in the navigation</p>
-                            </div>
-                            <button
-                                role="switch"
-                                aria-checked={showInvestecNav}
-                                onClick={() => updateInvestecNavPreference(!showInvestecNav)}
-                                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-                                    showInvestecNav ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-600'
-                                }`}
-                            >
-                                <span
-                                    className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                                        showInvestecNav ? 'translate-x-5' : 'translate-x-0'
-                                    }`}
+            {section === 'preferences' ? (
+                <div className="space-y-5">
+                    <div className="grid gap-5 lg:grid-cols-2 lg:items-stretch">
+                        <PaperCard className="p-5 sm:p-6">
+                            <p className={paperEyebrow}>Display</p>
+                            <div className={`mt-4 ${paperDivider}`}>
+                                <ToggleRow
+                                    title="Blur amounts"
+                                    description="Hide balances and amounts when sharing your screen."
+                                    checked={blurSensitiveValues}
+                                    onChange={setBlurSensitiveValues}
                                 />
-                            </button>
-                        </div>
+                                <ToggleRow
+                                    title="RA tools under Investments"
+                                    description="Show RA Performance and the RA tax calculator on Investments and Home."
+                                    checked={showRaUnderInvestments}
+                                    onChange={updateRaUnderInvestmentsPreference}
+                                />
+                            </div>
+                        </PaperCard>
+
+                        <PaperCard className="p-5 sm:p-6">
+                            <p className={paperEyebrow}>Budget period</p>
+                            <p id={periodHintId} className="mt-2 text-sm leading-relaxed text-[var(--paper-muted)]">
+                                Day of the month the period starts. Day 22 runs from the 22nd to the 21st of the next month.
+                            </p>
+                            {budgetPeriodLoading ? (
+                                <p className="mt-5 text-sm text-[var(--paper-muted)]">Loading…</p>
+                            ) : (
+                                <form onSubmit={handleBudgetPeriodSave} className="mt-5">
+                                    <label htmlFor="budget-period-start" className="mb-1.5 block text-sm font-medium text-[var(--paper-ink)]">
+                                        Period start day
+                                    </label>
+                                    <div className="flex flex-wrap items-center gap-3">
+                                        <input
+                                            id="budget-period-start"
+                                            type="number"
+                                            min={1}
+                                            max={31}
+                                            value={budgetPeriodStartDay}
+                                            onChange={(e) => setBudgetPeriodStartDay(parseInt(e.target.value, 10) || 1)}
+                                            aria-describedby={periodHintId}
+                                            className="h-10 w-16 shrink-0 rounded-md border border-[var(--paper-line)] bg-[var(--paper-card)] px-2 text-center text-sm font-medium tabular-nums text-[var(--paper-ink)] outline-none transition-colors focus:ring-2 focus:ring-[var(--paper-accent)]/20"
+                                        />
+                                        <span className="text-sm text-[var(--paper-muted)]">of each month</span>
+                                        <button type="submit" disabled={budgetPeriodSaving} className={paperBtnPrimary}>
+                                            {budgetPeriodSaving ? 'Saving…' : 'Save'}
+                                        </button>
+                                    </div>
+                                </form>
+                            )}
+                            {budgetPeriodError ? (
+                                <p role="alert" className="mt-2 text-sm text-[var(--paper-brick)]">
+                                    {budgetPeriodError}
+                                </p>
+                            ) : null}
+                            {budgetPeriodSuccess ? (
+                                <p role="status" className="mt-2 text-sm text-[var(--paper-olive)]">
+                                    {budgetPeriodSuccess}
+                                </p>
+                            ) : null}
+                        </PaperCard>
                     </div>
 
-                    {showInvestecNav && (
-                        <div className="p-5 space-y-4">
-                            {investecError && (
-                                <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 rounded-lg text-sm flex items-center gap-2">
-                                    <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-                                    <span>{investecError}</span>
-                                </div>
-                            )}
-                            {investecSuccess && (
-                                <div className="p-3 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 rounded-lg text-sm flex items-center gap-2">
-                                    <CheckCircle className="w-4 h-4 flex-shrink-0" />
-                                    <span>{investecSuccess}</span>
-                                </div>
-                            )}
+                    <PaperCard className="overflow-hidden">
+                        <Link
+                            to="/category-guide"
+                            className="group flex cursor-pointer items-center justify-between gap-4 px-5 py-4 transition-colors duration-200 hover:bg-[var(--paper-canvas)]/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--paper-accent)]/20 sm:px-6"
+                        >
+                            <div>
+                                <p className="text-sm font-medium text-[var(--paper-ink)]">Category guide</p>
+                                <p className="mt-0.5 text-sm text-[var(--paper-muted)]">Shared categories for budget and banking</p>
+                            </div>
+                            <ArrowRight className="h-4 w-4 shrink-0 text-[var(--paper-muted)] transition-colors group-hover:text-[var(--paper-ink)]" aria-hidden="true" />
+                        </Link>
+                    </PaperCard>
+                </div>
+            ) : null}
+
+            {section === 'connections' ? (
+                <div className="space-y-5">
+                    <PaperCard className="p-5 sm:p-6">
+                        <p className={paperEyebrow}>Investec banking</p>
+                        <p className="mt-2 text-sm leading-relaxed text-[var(--paper-muted)]">
+                            Sync accounts and transactions from Investec Programmable Banking.
+                        </p>
+
+                        <div className="mt-5 space-y-4">
+                            <AlertBanner>{investecError}</AlertBanner>
+                            <AlertBanner tone="success">{investecSuccess}</AlertBanner>
 
                             {connectionStatus === null ? (
-                                <p className="text-sm text-gray-400">Checking connection...</p>
-                            ) : connectionStatus?.is_connected ? (
+                                <ConnectionStatusPanel
+                                    loading
+                                    title="Checking connection…"
+                                    detail="Looking up your Investec credentials."
+                                />
+                            ) : investecConnected ? (
                                 <>
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-2.5">
-                                            <CheckCircle className="w-5 h-5 text-green-500 dark:text-green-400 shrink-0" />
-                                            <div>
-                                                <p className="text-sm font-medium text-gray-900 dark:text-white">Connected</p>
-                                                {connectionStatus.last_synced && (
-                                                    <p className="text-xs text-gray-400 dark:text-gray-500">
-                                                        Last synced {formatDateSafe(connectionStatus.last_synced, {
-                                                            day: 'numeric',
-                                                            month: 'short',
-                                                            year: 'numeric',
-                                                            hour: '2-digit',
-                                                            minute: '2-digit'
-                                                        })}
-                                                    </p>
-                                                )}
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <button
-                                                onClick={handleSyncNow}
-                                                disabled={syncing}
-                                                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/40 disabled:opacity-50 transition-colors"
-                                            >
-                                                <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
-                                                {syncing ? 'Syncing' : 'Sync'}
-                                            </button>
-                                            <button
-                                                onClick={() => setShowDisconnectConfirm(true)}
-                                                className="px-3 py-1.5 text-sm font-medium text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                                            >
-                                                Disconnect
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    <div className="pt-1">
-                                        <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Sync Historical Transactions</p>
-                                        <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">Import past transactions for the selected time period</p>
-                                        <div className="flex rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600">
-                                            {[1, 3, 6].map((months, idx) => (
+                                    <ConnectionStatusPanel
+                                        ok
+                                        title="Banking is connected"
+                                        detail={
+                                            lastSyncedLabel
+                                                ? `Last synced ${lastSyncedLabel}.`
+                                                : 'Credentials are stored. Sync to pull the latest transactions.'
+                                        }
+                                        actions={
+                                            <>
                                                 <button
-                                                    key={months}
-                                                    onClick={() => handleHistoricalSync(months)}
-                                                    disabled={!!syncingHistorical}
-                                                    className={`flex-1 py-2 text-sm font-medium transition-colors disabled:opacity-50 ${
-                                                        syncingHistorical === months
-                                                            ? 'bg-purple-600 text-white'
-                                                            : 'text-purple-700 dark:text-purple-300 bg-white dark:bg-gray-800 hover:bg-purple-50 dark:hover:bg-purple-900/20'
-                                                    } ${idx < 2 ? 'border-r border-gray-200 dark:border-gray-600' : ''}`}
+                                                    type="button"
+                                                    onClick={handleSyncNow}
+                                                    disabled={syncing}
+                                                    className={paperBtnGhost}
                                                 >
-                                                    {syncingHistorical === months ? 'Syncing...' : `${months} month${months > 1 ? 's' : ''}`}
+                                                    <RefreshCw
+                                                        className={`h-3.5 w-3.5 ${syncing ? 'animate-spin motion-reduce:animate-none' : ''}`}
+                                                        aria-hidden="true"
+                                                    />
+                                                    {syncing ? 'Syncing' : 'Sync now'}
                                                 </button>
-                                            ))}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowDisconnectConfirm(true)}
+                                                    className={paperBtnDanger}
+                                                >
+                                                    Disconnect
+                                                </button>
+                                            </>
+                                        }
+                                    />
+
+                                    <div>
+                                        <p className="text-sm font-medium text-[var(--paper-ink)]">Import past transactions</p>
+                                        <p className="mt-1 mb-3 text-sm text-[var(--paper-muted)]">
+                                            Pull history for Budget Analysis. This can take a minute.
+                                        </p>
+                                        <div className="flex flex-wrap gap-2">
+                                            {HISTORICAL_MONTHS.map((months) => {
+                                                const busy = syncingHistorical === months
+                                                return (
+                                                    <button
+                                                        key={months}
+                                                        type="button"
+                                                        onClick={() => handleHistoricalSync(months)}
+                                                        disabled={Boolean(syncingHistorical)}
+                                                        className={paperBtnGhost}
+                                                    >
+                                                        {busy ? 'Syncing…' : `Last ${months} month${months > 1 ? 's' : ''}`}
+                                                    </button>
+                                                )
+                                            })}
                                         </div>
-                                        {syncSuccess && (
-                                            <p className="mt-2 text-xs text-green-600 dark:text-green-400">{syncSuccess}</p>
-                                        )}
+                                        {syncSuccess ? (
+                                            <p role="status" className="mt-2 text-sm text-[var(--paper-olive)]">
+                                                {syncSuccess}
+                                            </p>
+                                        ) : null}
                                     </div>
                                 </>
                             ) : (
                                 <>
-                                    <div className="flex items-center gap-2">
-                                        <XCircle className="w-5 h-5 text-gray-400 dark:text-gray-500 shrink-0" />
-                                        <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Not Connected</p>
-                                    </div>
+                                    <ConnectionStatusPanel
+                                        title="Banking is not connected"
+                                        detail="Add your Programmable Banking credentials to import accounts and transactions."
+                                    />
                                     <form onSubmit={handleInvestecConnect} className="space-y-3">
                                         <div>
-                                            <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1.5">Client ID</label>
+                                            <label htmlFor="investec-client-id" className="mb-1.5 block text-sm font-medium text-[var(--paper-ink)]">
+                                                Client ID
+                                            </label>
                                             <input
+                                                id="investec-client-id"
                                                 type="password"
+                                                autoComplete="off"
                                                 value={credentials.client_id}
                                                 onChange={(e) => setCredentials({ ...credentials, client_id: e.target.value })}
                                                 required
-                                                placeholder="Enter your Client ID"
-                                                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                                className={paperField}
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1.5">Client Secret</label>
+                                            <label htmlFor="investec-client-secret" className="mb-1.5 block text-sm font-medium text-[var(--paper-ink)]">
+                                                Client secret
+                                            </label>
                                             <input
+                                                id="investec-client-secret"
                                                 type="password"
+                                                autoComplete="off"
                                                 value={credentials.client_secret}
                                                 onChange={(e) => setCredentials({ ...credentials, client_secret: e.target.value })}
                                                 required
-                                                placeholder="Enter your Client Secret"
-                                                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                                className={paperField}
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1.5">API Key</label>
+                                            <label htmlFor="investec-api-key" className="mb-1.5 block text-sm font-medium text-[var(--paper-ink)]">
+                                                API key
+                                            </label>
                                             <input
+                                                id="investec-api-key"
                                                 type="password"
+                                                autoComplete="off"
                                                 value={credentials.api_key}
                                                 onChange={(e) => setCredentials({ ...credentials, api_key: e.target.value })}
                                                 required
-                                                placeholder="Enter your API Key"
-                                                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                                className={paperField}
                                             />
                                         </div>
-                                        <button
-                                            type="submit"
-                                            disabled={investecSaving}
-                                            className="w-full py-2 px-4 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-                                        >
-                                            {investecSaving ? 'Connecting...' : 'Connect Account'}
+                                        <button type="submit" disabled={investecSaving} className={`${paperBtnPrimary} w-full`}>
+                                            {investecSaving ? 'Connecting…' : 'Connect account'}
                                         </button>
                                     </form>
-                                    <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                                        <p className="text-xs font-medium text-blue-800 dark:text-blue-300 mb-1.5">How to get your credentials:</p>
-                                        <ol className="text-xs text-blue-700 dark:text-blue-400 space-y-0.5 list-decimal list-inside">
+                                    <div className="rounded-md border border-[var(--paper-line)] bg-[var(--paper-canvas)] p-4">
+                                        <p className="text-sm font-medium text-[var(--paper-ink)]">Where to find credentials</p>
+                                        <ol className="mt-2 list-inside list-decimal space-y-1 text-sm text-[var(--paper-muted)]">
                                             <li>Log in to Investec Online Banking</li>
-                                            <li>Navigate to Programmable Banking</li>
+                                            <li>Open Programmable Banking</li>
                                             <li>Create or use an existing API key</li>
-                                            <li>Copy the Client ID, Secret, and API Key</li>
+                                            <li>Copy the Client ID, secret, and API key</li>
                                         </ol>
                                     </div>
                                 </>
                             )}
                         </div>
-                    )}
-                </div>
-            </div>
 
-            {/* Second row: Budget Categories, Budget Preferences, Privacy */}
-            <div className="mt-5 grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
-                {/* Budget Categories */}
-                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
-                    <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-1">Budget Categories</h2>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                        Manage budget entries and view the transaction category reference.
-                    </p>
-                    <div className="flex flex-col gap-2">
-                        <Link
-                            to="/budget"
-                            className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                        >
-                            <LayoutDashboard className="w-7 h-7 text-blue-500 dark:text-blue-400 shrink-0" />
-                            <div>
-                                <p className="text-sm font-medium text-gray-900 dark:text-white">Budget Dashboard</p>
-                                <p className="text-xs text-gray-400 dark:text-gray-500">Manage needs, wants, and savings categories</p>
-                            </div>
-                        </Link>
-                        <Link
-                            to="/category-guide"
-                            className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                        >
-                            <HelpCircle className="w-7 h-7 text-blue-500 dark:text-blue-400 shrink-0" />
-                            <div>
-                                <p className="text-sm font-medium text-gray-900 dark:text-white">Category Guide</p>
-                                <p className="text-xs text-gray-400 dark:text-gray-500">Transaction category reference and examples</p>
-                            </div>
-                        </Link>
-                    </div>
-                </div>
-
-                {/* Budget Preferences */}
-                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
-                    <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-1">Budget Preferences</h2>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                        Day of month your budget period starts. E.g., day 22 means 22nd → 21st of next month.
-                    </p>
-                    {budgetPeriodLoading ? (
-                        <p className="text-sm text-gray-400">Loading...</p>
-                    ) : (
-                        <form onSubmit={handleBudgetPeriodSave}>
-                            <label htmlFor="budget-period-start" className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1.5">Period start day</label>
-                            <div className="flex items-center gap-3">
-                                <input
-                                    id="budget-period-start"
-                                    type="number"
-                                    min={1}
-                                    max={31}
-                                    value={budgetPeriodStartDay}
-                                    onChange={(e) => setBudgetPeriodStartDay(parseInt(e.target.value, 10) || 1)}
-                                    className="w-20 px-3 py-2 text-sm text-center font-medium border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                                />
-                                <span className="text-sm text-gray-500 dark:text-gray-400">of each month</span>
-                                <button
-                                    type="submit"
-                                    disabled={budgetPeriodSaving}
-                                    className="ml-auto px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-                                >
-                                    {budgetPeriodSaving ? 'Saving...' : 'Save'}
-                                </button>
-                            </div>
-                        </form>
-                    )}
-                    {budgetPeriodError && <p className="mt-2 text-sm text-red-600 dark:text-red-400">{budgetPeriodError}</p>}
-                    {budgetPeriodSuccess && <p className="mt-2 text-sm text-green-600 dark:text-green-400">{budgetPeriodSuccess}</p>}
-                </div>
-
-                {/* Privacy */}
-                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
-                    <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-1">Privacy</h2>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                        Hide amounts when sharing your screen (e.g. with friends)
-                    </p>
-                    <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Blur sensitive values</span>
-                        <button
-                            role="switch"
-                            aria-checked={blurSensitiveValues}
-                            onClick={() => setBlurSensitiveValues(!blurSensitiveValues)}
-                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-                                blurSensitiveValues ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-600'
-                            }`}
-                        >
-                            <span
-                                className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                                    blurSensitiveValues ? 'translate-x-5' : 'translate-x-0'
-                                }`}
+                        <div className="mt-5 border-t border-[var(--paper-line)] pt-1">
+                            <ToggleRow
+                                title="Show Banking in the sidebar"
+                                description="Adds Investec Banking to navigation. Connecting an account turns this on automatically."
+                                checked={showInvestecNav}
+                                onChange={updateInvestecNavPreference}
                             />
-                        </button>
-                    </div>
+                        </div>
+                    </PaperCard>
+
+                    <PaperCard className="p-5 sm:p-6">
+                        <p className={paperEyebrow}>Payslip extraction</p>
+                        <p id={apiKeyHintId} className="mt-2 text-sm leading-relaxed text-[var(--paper-muted)]">
+                            Encrypted OpenAI key used to read uploaded payslips.{' '}
+                            <a
+                                href="https://platform.openai.com/api-keys"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[var(--paper-ink)] underline decoration-[var(--paper-line)] underline-offset-2 hover:decoration-[var(--paper-ink)]"
+                            >
+                                Get a key on OpenAI Platform
+                            </a>
+                            .
+                        </p>
+
+                        <div className="mt-5 space-y-4">
+                            <AlertBanner>{apiKeyError}</AlertBanner>
+                            <AlertBanner tone="success">{apiKeySuccess}</AlertBanner>
+
+                            {!apiKeyChecked ? (
+                                <ConnectionStatusPanel
+                                    loading
+                                    title="Checking API key…"
+                                    detail="Looking up whether an OpenAI key is stored on this account."
+                                />
+                            ) : hasApiKey ? (
+                                <ConnectionStatusPanel
+                                    ok
+                                    title="API key is saved"
+                                    detail="An encrypted OpenAI key is stored on this account. Payslip uploads can be extracted automatically."
+                                    actions={
+                                        <>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setReplacingApiKey((open) => !open)
+                                                    setApiKeyError('')
+                                                }}
+                                                className={paperBtnGhost}
+                                            >
+                                                {replacingApiKey ? 'Cancel replace' : 'Replace key'}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowDeleteApiKeyConfirm(true)}
+                                                disabled={apiKeyLoading}
+                                                className={paperBtnDanger}
+                                            >
+                                                Remove key
+                                            </button>
+                                        </>
+                                    }
+                                />
+                            ) : (
+                                <ConnectionStatusPanel
+                                    title="No API key saved"
+                                    detail="Payslip extraction is unavailable until you add an OpenAI API key."
+                                />
+                            )}
+
+                            {apiKeyChecked && (!hasApiKey || replacingApiKey) ? (
+                                <form onSubmit={handleSaveApiKey} className="space-y-3">
+                                    <div>
+                                        <label htmlFor="openai-api-key" className="mb-1.5 block text-sm font-medium text-[var(--paper-ink)]">
+                                            {hasApiKey ? 'New API key' : 'API key'}
+                                        </label>
+                                        <input
+                                            id="openai-api-key"
+                                            type="password"
+                                            autoComplete="off"
+                                            required
+                                            value={openaiApiKey}
+                                            onChange={(e) => setOpenaiApiKey(e.target.value)}
+                                            placeholder="sk-…"
+                                            aria-describedby={apiKeyHintId}
+                                            className={paperField}
+                                        />
+                                    </div>
+                                    <button type="submit" disabled={apiKeyLoading} className={`${paperBtnPrimary} w-full`}>
+                                        {apiKeyLoading ? 'Saving…' : hasApiKey ? 'Save new key' : 'Save key'}
+                                    </button>
+                                </form>
+                            ) : null}
+                        </div>
+                    </PaperCard>
                 </div>
-            </div>
+            ) : null}
 
             <ConfirmModal
                 isOpen={showDisconnectConfirm}
