@@ -292,45 +292,39 @@ export default function HomeOverview() {
             ) : null}
 
             <PaperCard className="overflow-hidden">
-                <div className="grid grid-cols-1 divide-y divide-[var(--paper-line)] md:grid-cols-3 md:divide-x md:divide-y-0">
-                    <Link to="/salary" className="block cursor-pointer p-5 transition-colors hover:bg-[var(--paper-canvas)]/50 sm:p-6">
-                        <p className={paperEyebrow}>Take-home</p>
-                        <BlurredValue>
-                            <p className={`mt-3 text-3xl text-[var(--paper-ink)] ${paperMoney}`}>
-                                {formatCompactCurrency(netPay)}
-                            </p>
-                        </BlurredValue>
-                        <p className="mt-2 text-sm text-[var(--paper-muted)]">
-                            {overview.budget.salarySkippedAdditional
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+                    <StripStat
+                        to="/salary"
+                        label="Take-home salary"
+                        value={formatCompactCurrency(netPay)}
+                        hint={
+                            overview.budget.salarySkippedAdditional
                                 ? `${overview.budget.salaryPayslipLabel || 'Last normal payslip'} · bonus excluded`
                                 : takeHomeShare != null
                                     ? `${formatPercent(takeHomeShare, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} of gross`
-                                    : (overview.budget.payslipLabel || 'Latest payslip')}
-                        </p>
-                    </Link>
-                    <Link to="/budget" className="block cursor-pointer p-5 transition-colors hover:bg-[var(--paper-canvas)]/50 sm:p-6">
-                        <p className={paperEyebrow}>{isOverBudget ? 'Over budget' : 'Unallocated'}</p>
-                        <BlurredValue>
-                            <p className={`mt-3 text-3xl ${paperMoney} ${isOverBudget ? paperMoneyTone(-1) : 'text-[var(--paper-ink)]'}`}>
-                                {formatCompactCurrency(Math.abs(overview.budget.remaining))}
-                            </p>
-                        </BlurredValue>
-                        <p className="mt-2 text-sm text-[var(--paper-muted)]">
-                            {formatCompactCurrency(totalBudgeted)} of {formatCompactCurrency(netPay)} budgeted
-                        </p>
-                    </Link>
-                    <div className="p-5 sm:p-6">
-                        <p className={paperEyebrow}>Cash and investments</p>
-                        <BlurredValue>
-                            <p className={`mt-3 text-3xl text-[var(--paper-ink)] ${paperMoney}`}>
-                                {invested == null && cash === 0 ? '—' : formatCompactCurrency(position, overview.investments.baseCurrency)}
-                            </p>
-                        </BlurredValue>
-                        <p className="mt-2 text-sm text-[var(--paper-muted)]">
-                            {formatCompactCurrency(cash)} cash
-                            {invested != null ? ` · ${formatCompactCurrency(invested, overview.investments.baseCurrency)} invested` : ''}
-                        </p>
-                    </div>
+                                    : (overview.budget.payslipLabel || 'Latest payslip')
+                        }
+                    />
+                    <StripStat
+                        to="/investments"
+                        label="Assets"
+                        value={
+                            invested == null && cash === 0
+                                ? '—'
+                                : formatCompactCurrency(position, overview.investments.baseCurrency)
+                        }
+                    />
+                    <StripStat
+                        to="/investec/accounts"
+                        label="Liabilities"
+                        value={formatCompactCurrency(overview.accounts.liabilityTotal)}
+                        valueClassName="text-[var(--paper-brick)]"
+                    />
+                    <StripStat
+                        label="Net worth"
+                        value={formatCompactCurrency(netWorth, overview.investments.baseCurrency)}
+                        valueClassName={paperMoneyTone(netWorth)}
+                    />
                 </div>
             </PaperCard>
 
@@ -553,6 +547,31 @@ export default function HomeOverview() {
             </PaperCard>
         </div>
     )
+}
+
+const stripCellClass =
+    'min-w-0 block border-b border-[var(--paper-line)] p-5 last:border-b-0 sm:p-6 sm:[&:nth-child(odd)]:border-r sm:[&:nth-child(n+3)]:border-b-0 lg:border-b-0 lg:border-r lg:last:border-r-0'
+
+function StripStat({ to, label, value, hint, valueClassName = 'text-[var(--paper-ink)]' }) {
+    const inner = (
+        <>
+            <p className={paperEyebrow}>{label}</p>
+            <BlurredValue>
+                <p className={`mt-3 text-2xl xl:text-3xl ${paperMoney} ${valueClassName}`}>{value}</p>
+            </BlurredValue>
+            {hint ? <p className="mt-2 text-sm text-[var(--paper-muted)]">{hint}</p> : null}
+        </>
+    )
+
+    if (to) {
+        return (
+            <Link to={to} className={`cursor-pointer transition-colors hover:bg-[var(--paper-canvas)]/50 ${stripCellClass}`}>
+                {inner}
+            </Link>
+        )
+    }
+
+    return <div className={stripCellClass}>{inner}</div>
 }
 
 function HoldingLines({ items, valueClassName = 'text-[var(--paper-ink)]' }) {
