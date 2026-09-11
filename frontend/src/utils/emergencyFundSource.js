@@ -1,10 +1,12 @@
+import { withInvestecEmergencyOverlay } from './accountLocalMeta'
+
 export const EMERGENCY_FUND_SOURCES = {
     MANUAL: 'manual',
     BANK_SYNC: 'bank_sync'
 }
 
 export function getEmergencyFundAccount(accounts = []) {
-    return accounts.find((account) => account.is_emergency_fund_account) || null
+    return accounts.find((account) => withInvestecEmergencyOverlay(account).is_emergency_fund_account) || null
 }
 
 export function canUseBankSync({ hasInvestecCredentials, emergencyAccount }) {
