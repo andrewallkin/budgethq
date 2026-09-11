@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Routes, Route, Link, useLocation, Navigate, Outlet } from 'react-router-dom'
-import { LayoutDashboard, PieChart as PieChartIcon, Home, Moon, Sun, LogOut, Settings as SettingsIcon, ChevronLeft, ChevronRight, Calculator, Shield, TrendingUp, Menu, HelpCircle, Building2, Sparkles } from 'lucide-react'
+import { LayoutDashboard, PieChart as PieChartIcon, Home, Moon, Sun, LogOut, Settings as SettingsIcon, ChevronLeft, ChevronRight, Calculator, Shield, TrendingUp, Menu, HelpCircle, Building2 } from 'lucide-react'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import BudgetDashboard from './pages/BudgetDashboard'
 import RATaxCalculator from './pages/RATaxCalculator'
@@ -16,7 +16,6 @@ import BankTransactions from './pages/BankTransactions'
 import CategorizationRules from './pages/CategorizationRules'
 import BudgetAnalysis from './pages/BudgetAnalysis'
 import CategoryGuide from './pages/CategoryGuide'
-import InvestmentsLanding from './pages/InvestmentsLanding'
 import InvestmentPortfolioPage from './pages/InvestmentPortfolioPage'
 import InvestmentsV2Landing from './pages/investments-v2/InvestmentsV2Landing'
 import InvestmentsV2Detail from './pages/investments-v2/InvestmentsV2Detail'
@@ -24,9 +23,6 @@ import InvestmentsV2RaCalculator from './pages/investments-v2/InvestmentsV2RaCal
 import { InvestmentsV2Provider } from './investments-v2/InvestmentsV2Provider'
 import InvestecLanding from './pages/InvestecLanding'
 import HomeOverview from './pages/HomeOverview'
-import UiLabHome from './pages/ui-lab/UiLabHome'
-import UiLabBudget from './pages/ui-lab/UiLabBudget'
-import UiLabInvestments from './pages/ui-lab/UiLabInvestments'
 
 function ProtectedRoute({ children }) {
     const { user } = useAuth()
@@ -56,33 +52,38 @@ function InvestmentsV2Layout() {
     )
 }
 
+function LegacyInvestmentsV2Redirect() {
+    const location = useLocation()
+    const suffix = location.pathname.replace(/^\/investments-v2/, '')
+    const nextPath = suffix === '/ra/calculator' ? '/investments/calculator' : `/investments${suffix || ''}`
+    return <Navigate to={`${nextPath}${location.search}${location.hash}`} replace />
+}
+
 function AppContent() {
     const location = useLocation()
     const { user, logout, showInvestecNav } = useAuth()
     const [darkMode, setDarkMode] = useState(() => {
         const saved = localStorage.getItem('darkMode')
-        return saved ? JSON.parse(saved) : window.matchMedia('(prefers-color-scheme: dark)').matches
+        return saved ? JSON.parse(saved) : false
     })
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
         const saved = localStorage.getItem('sidebarCollapsed')
         return saved ? JSON.parse(saved) : false
     })
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
-    const isUiLab = location.pathname.startsWith('/ui-lab')
     // Close mobile menu when route changes
     useEffect(() => {
         setIsMobileMenuOpen(false)
     }, [location.pathname])
 
     useEffect(() => {
-        const useDark = darkMode && !isUiLab
-        if (useDark) {
+        if (darkMode) {
             document.documentElement.classList.add('dark')
         } else {
             document.documentElement.classList.remove('dark')
         }
         localStorage.setItem('darkMode', JSON.stringify(darkMode))
-    }, [darkMode, isUiLab])
+    }, [darkMode])
 
     useEffect(() => {
         localStorage.setItem('sidebarCollapsed', JSON.stringify(isSidebarCollapsed))
@@ -90,26 +91,26 @@ function AppContent() {
 
     const navItems = [
         { path: '/', label: 'Home', icon: Home },
-        { path: '/salary', label: 'Payslip & Tax', icon: Calculator },
-        { path: '/budget', label: 'Budget Dashboard', icon: LayoutDashboard },
+        { path: '/salary', label: 'Payslip', icon: Calculator },
+        { path: '/budget', label: 'Budget', icon: LayoutDashboard },
         { path: '/investments', label: 'Investments', icon: PieChartIcon },
-        { path: '/investments-v2', label: 'Investments 2.0', icon: Sparkles },
         ...(SHOW_EMERGENCY_SAVINGS_UI
-            ? [{ path: '/emergency-savings', label: 'Emergency Savings', icon: Shield }]
+            ? [{ path: '/emergency-savings', label: 'Emergency', icon: Shield }]
             : []),
-        ...(showInvestecNav ? [{ path: '/investec', label: 'Investec Banking', icon: Building2 }] : []),
-        { path: '/category-guide', label: 'Budget Category Guide', icon: HelpCircle },
+        ...(showInvestecNav ? [{ path: '/investec', label: 'Banking', icon: Building2 }] : []),
+        { path: '/category-guide', label: 'Guide', icon: HelpCircle },
         { path: '/settings', label: 'Settings', icon: SettingsIcon },
-        { path: '/ui-lab/home', label: 'UI Lab', icon: Sparkles },
     ]
 
     // Don't show sidebar on login/register pages
     if (location.pathname === '/login' || location.pathname === '/register') {
         return (
-            <Routes>
-                <Route path="/login" element={<Login />} />
-                <Route path="/register" element={<Register />} />
-            </Routes>
+            <div className="h-full overflow-y-auto">
+                <Routes>
+                    <Route path="/login" element={<Login />} />
+                    <Route path="/register" element={<Register />} />
+                </Routes>
+            </div>
         )
     }
 
@@ -117,8 +118,8 @@ function AppContent() {
         <>
             <div className={`p-6 flex ${collapsed && !isMobile ? 'justify-center' : 'justify-between'} items-center`}>
                 {(!collapsed || isMobile) && (
-                    <h1 className={`text-xl ${isUiLab ? 'font-semibold tracking-tight text-neutral-950 dark:text-white' : 'font-bold text-gray-800 dark:text-white'}`}>
-                        {isUiLab ? 'BudgetHQ' : '📊 BudgetHQ'}
+                    <h1 className="text-xl font-semibold tracking-tight text-neutral-950 dark:text-white">
+                        BudgetHQ
                     </h1>
                 )}
                 {!isMobile && (
@@ -130,7 +131,6 @@ function AppContent() {
                         >
                             {collapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
                         </button>
-                        {!isUiLab && (
                         <button
                             onClick={() => setDarkMode(!darkMode)}
                             className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 transition-colors"
@@ -138,20 +138,14 @@ function AppContent() {
                         >
                             {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
                         </button>
-                        )}
                     </div>
                 )}
             </div>
             <nav className={`flex-1 ${collapsed && !isMobile ? 'px-2' : 'px-4'} space-y-2`}>
                 {navItems.map((item) => {
                     const Icon = item.icon
-                    const isActive = item.path === '/ui-lab/home'
-                        ? location.pathname.startsWith('/ui-lab')
-                        : item.path === '/investments-v2'
-                        ? location.pathname.startsWith('/investments-v2')
-                        : item.path === '/investments'
-                        ? (location.pathname.startsWith('/investments') &&
-                              !location.pathname.startsWith('/investments-v2')) ||
+                    const isActive = item.path === '/investments'
+                        ? location.pathname.startsWith('/investments') ||
                           location.pathname === '/portfolio'
                         : item.path === '/investec'
                         ? location.pathname.startsWith('/investec')
@@ -160,14 +154,10 @@ function AppContent() {
                         <Link
                             key={item.path}
                             to={item.path}
-                            className={`flex items-center ${collapsed && !isMobile ? 'justify-center px-2' : 'px-4'} py-3 transition-colors ${
-                                isUiLab
-                                    ? `rounded-2xl text-sm ${isActive
-                                        ? 'bg-white text-neutral-950 shadow-[0_8px_24px_rgba(17,17,17,0.06)] dark:bg-neutral-800 dark:text-white'
-                                        : 'text-neutral-500 hover:bg-white/70 dark:hover:bg-neutral-800/70'}`
-                                    : `rounded-lg ${isActive
-                                        ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
-                                        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}`
+                            className={`flex items-center rounded-xl text-sm ${collapsed && !isMobile ? 'justify-center px-2' : 'px-4'} py-3 transition-colors ${
+                                isActive
+                                    ? 'bg-[var(--paper-card)] text-[var(--paper-ink)]'
+                                    : 'text-[var(--paper-muted)] hover:bg-[var(--paper-card)]/70'
                             }`}
                             title={collapsed && !isMobile ? item.label : ''}
                         >
@@ -180,11 +170,11 @@ function AppContent() {
                 })}
             </nav>
             {user && (
-                <div className={`p-4 border-t border-gray-200 dark:border-gray-700 ${collapsed && !isMobile ? 'flex justify-center' : ''}`}>
+                <div className={`p-4 ${collapsed && !isMobile ? 'flex justify-center' : ''}`}>
                     <div className={`flex items-center ${collapsed && !isMobile ? 'justify-center' : 'justify-between'}`}>
                         {(!collapsed || isMobile) && (
                             <div className="text-sm">
-                                <p className="font-medium text-gray-900 dark:text-white truncate">{user.username}</p>
+                                <p className="font-medium text-neutral-900 dark:text-white truncate">{user.username}</p>
                             </div>
                         )}
                         <button
@@ -201,9 +191,9 @@ function AppContent() {
     )
 
     return (
-        <div className={`flex h-screen transition-colors duration-200${isUiLab ? ' ui-lab bg-[#F3F4F6]' : ' bg-gray-50 dark:bg-gray-900'}`}>
+        <div className="flex h-full overflow-hidden transition-colors duration-200 app-shell paper-shell">
             {/* Mobile header bar */}
-            <header className="lg:hidden fixed top-0 left-0 right-0 h-14 z-30 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between px-5 sm:px-6">
+            <header className="lg:hidden fixed top-0 left-0 right-0 h-14 z-30 flex items-center justify-between px-5 sm:px-6 bg-[var(--paper-canvas)]">
                 <button
                     onClick={() => setIsMobileMenuOpen(true)}
                     className="p-2 min-w-[44px] min-h-[44px] rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 transition-colors flex items-center justify-center"
@@ -211,11 +201,10 @@ function AppContent() {
                 >
                     <Menu className="w-6 h-6" />
                 </button>
-                <h1 className={`text-lg ${isUiLab ? 'font-semibold tracking-tight' : 'font-bold'} text-gray-800 dark:text-white`}>
-                    {isUiLab ? 'BudgetHQ' : '📊 BudgetHQ'}
+                <h1 className="text-lg font-semibold tracking-tight text-neutral-950 dark:text-white">
+                    BudgetHQ
                 </h1>
                 <div className="flex items-center gap-1">
-                    {!isUiLab && (
                     <button
                         onClick={() => setDarkMode(!darkMode)}
                         className="p-2 min-w-[44px] min-h-[44px] rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 transition-colors flex items-center justify-center"
@@ -223,7 +212,6 @@ function AppContent() {
                     >
                         {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
                     </button>
-                    )}
                     <button
                         onClick={logout}
                         className="p-2 min-w-[44px] min-h-[44px] rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 transition-colors flex items-center justify-center"
@@ -247,29 +235,27 @@ function AppContent() {
             <aside
                 className={`lg:hidden fixed inset-y-0 left-0 w-64 z-50 flex flex-col transform transition-transform duration-300 ease-in-out ${
                     isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
-                } ${isUiLab ? 'bg-[#F3F4F6] dark:bg-neutral-950 border-r border-transparent' : 'bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700'}`}
+                } bg-[var(--paper-canvas)]`}
             >
                 <SidebarContent collapsed={false} isMobile />
             </aside>
 
             {/* Desktop sidebar */}
-            <aside className={`hidden lg:flex ${isSidebarCollapsed ? 'w-16' : 'w-64'} flex-col transition-all duration-300 ease-in-out overflow-hidden shrink-0 ${isUiLab ? 'bg-[#F3F4F6] dark:bg-neutral-950 border-r border-transparent' : 'bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700'}`}>
+            <aside className={`hidden lg:flex ${isSidebarCollapsed ? 'w-16' : 'w-64'} flex-col transition-all duration-300 ease-in-out overflow-hidden shrink-0 bg-[var(--paper-canvas)]`}>
                 <SidebarContent collapsed={isSidebarCollapsed} isMobile={false} />
             </aside>
 
-            {/* Main Content */}
-            <div className="flex-1 overflow-y-auto pt-14 lg:pt-0">
-                <div className="p-4 sm:p-6 lg:p-8">
+            {/* Main content */}
+            <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+                <div className="p-4 pt-[4.5rem] sm:p-6 sm:pt-20 lg:p-8">
                     <Routes>
                         <Route path="/" element={<ProtectedRoute><HomeOverview /></ProtectedRoute>} />
                         <Route path="/budget" element={<ProtectedRoute><BudgetDashboard /></ProtectedRoute>} />
                         <Route path="/salary" element={<ProtectedRoute><SalaryPage /></ProtectedRoute>} />
                         <Route path="/investments/ra/calculator" element={<ProtectedRoute><RaSectionRoute><RATaxCalculator /></RaSectionRoute></ProtectedRoute>} />
                         <Route path="/investments/ra" element={<ProtectedRoute><RaSectionRoute><RAPerformance /></RaSectionRoute></ProtectedRoute>} />
-                        <Route path="/investments" element={<ProtectedRoute><InvestmentsLanding /></ProtectedRoute>} />
-                        <Route path="/investments/:portfolioSlug" element={<ProtectedRoute><InvestmentPortfolioPage /></ProtectedRoute>} />
                         <Route
-                            path="/investments-v2"
+                            path="/investments"
                             element={
                                 <ProtectedRoute>
                                     <InvestmentsV2Layout />
@@ -277,19 +263,13 @@ function AppContent() {
                             }
                         >
                             <Route index element={<InvestmentsV2Landing />} />
-                            <Route path="ra/calculator" element={<InvestmentsV2RaCalculator />} />
-                            <Route
-                                path="sheets/:portfolioSlug"
-                                element={
-                                    <InvestmentPortfolioPage
-                                        hubBackLink={{ to: '/investments-v2', label: 'Investments 2.0' }}
-                                        notFoundTo="/investments-v2"
-                                    />
-                                }
-                            />
+                            <Route path="calculator" element={<InvestmentsV2RaCalculator />} />
+                            <Route path="sheets/:portfolioSlug" element={<InvestmentPortfolioPage />} />
                             <Route path=":accountId" element={<InvestmentsV2Detail />} />
                         </Route>
-                        <Route path="/portfolio" element={<Navigate to="/investments/tfsa" replace />} />
+                        <Route path="/investments-v2" element={<ProtectedRoute><LegacyInvestmentsV2Redirect /></ProtectedRoute>} />
+                        <Route path="/investments-v2/*" element={<ProtectedRoute><LegacyInvestmentsV2Redirect /></ProtectedRoute>} />
+                        <Route path="/portfolio" element={<Navigate to="/investments/sheets/tfsa" replace />} />
                         <Route
                             path="/emergency-savings"
                             element={
@@ -309,10 +289,6 @@ function AppContent() {
                         <Route path="/investec/budget-analysis" element={<ProtectedRoute><BudgetAnalysis /></ProtectedRoute>} />
                         <Route path="/category-guide" element={<ProtectedRoute><CategoryGuide /></ProtectedRoute>} />
                         <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-                        <Route path="/ui-lab" element={<ProtectedRoute><Navigate to="/ui-lab/home" replace /></ProtectedRoute>} />
-                        <Route path="/ui-lab/home" element={<ProtectedRoute><UiLabHome /></ProtectedRoute>} />
-                        <Route path="/ui-lab/budget" element={<ProtectedRoute><UiLabBudget /></ProtectedRoute>} />
-                        <Route path="/ui-lab/investments" element={<ProtectedRoute><UiLabInvestments /></ProtectedRoute>} />
                     </Routes>
                 </div>
             </div>
