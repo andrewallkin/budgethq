@@ -61,7 +61,7 @@ def _build_external_investments_response(db, current_user, summary: dict) -> dic
         as_of = datetime.now(timezone.utc).isoformat()
 
     value_bases = [account["value_base"] for account in accounts if account.get("value_base") is not None]
-    total_value_base = round(sum(value_bases), 2) if value_bases else summary.get("total_value_base_currency")
+    total_value_base = round(sum(value_bases), 2) if value_bases else 0.0
 
     return {
         "as_of": as_of,

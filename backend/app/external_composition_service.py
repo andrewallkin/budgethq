@@ -381,24 +381,34 @@ def _build_playwright_account(
     return builder(db, account, since_anchor)
 
 
+def _sygnia_playwright_summary(db: Session, account: models.SygniaAccount) -> dict:
+    native_value = _latest_portfolio_value(db, account.id, account.as_of_date)
+    product_type = account.product_type
+    return {
+        "name": account.name,
+        "slug": playwright_account_slug(SYGNIA_PLAYWRIGHT_SOURCE_ID, account.account_code),
+        "currency": "ZAR",
+        "value": _round(native_value),
+        "value_base": _round(native_value),
+        "is_retirement_annuity": product_type == "ra",
+        "source": PLAYWRIGHT_SOURCE,
+        "source_id": SYGNIA_PLAYWRIGHT_SOURCE_ID,
+        "product_type": product_type,
+    }
+
+
+_PLAYWRIGHT_SUMMARY_BUILDERS = {
+    SYGNIA_PLAYWRIGHT_SOURCE_ID: _sygnia_playwright_summary,
+}
+
+
 def build_playwright_summary_accounts(db: Session, user_id: int) -> list[dict]:
     summaries = []
     for source_id, account in load_playwright_accounts(db, user_id):
-        if source_id != SYGNIA_PLAYWRIGHT_SOURCE_ID:
+        builder = _PLAYWRIGHT_SUMMARY_BUILDERS.get(source_id)
+        if builder is None:
             continue
-        native_value = _latest_portfolio_value(db, account.id, account.as_of_date)
-        product_type = account.product_type
-        summaries.append({
-            "name": account.name,
-            "slug": playwright_account_slug(source_id, account.account_code),
-            "currency": "ZAR",
-            "value": _round(native_value),
-            "value_base": _round(native_value),
-            "is_retirement_annuity": product_type == "ra",
-            "source": PLAYWRIGHT_SOURCE,
-            "source_id": source_id,
-            "product_type": product_type,
-        })
+        summaries.append(builder(db, account))
     return summaries
 
 

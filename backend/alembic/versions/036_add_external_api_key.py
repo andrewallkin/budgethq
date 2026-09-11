@@ -1,7 +1,7 @@
 """add external api key fields to users
 
 Revision ID: c4f8a2e1b9d3
-Revises: e1b3c5d7f9a0
+Revises: b8e4d2f0a3c5
 Create Date: 2026-09-02
 
 """
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 revision = "c4f8a2e1b9d3"
-down_revision = "e1b3c5d7f9a0"
+down_revision = "b8e4d2f0a3c5"
 branch_labels = None
 depends_on = None
 

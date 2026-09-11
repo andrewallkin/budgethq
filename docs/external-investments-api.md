@@ -135,7 +135,7 @@ No query parameters.
 | `total_value_base` | Sum of all sleeves in `base_currency` |
 | `accounts` | One entry per sleeve |
 | `accounts[].name` | Display name |
-| `accounts[].slug` | Stable identifier (`tfsa`, `usd-account`, `ra`, etc.) |
+| `accounts[].slug` | Stable identifier (`tfsa`, `usd-account`, `sygnia_playwright-{account_code}`, etc.) |
 | `accounts[].currency` | Native currency of the sleeve |
 | `accounts[].value` | Total value in native currency |
 | `accounts[].value_base` | Total value converted to `base_currency` |
@@ -368,6 +368,7 @@ These endpoints are intentionally read-only and scoped:
 - No ISIN fields
 - No cash balance line items
 - No withdrawal tracking
+- No legacy manual RA sleeve (`RAValueHistory`). Connected Playwright RA accounts are included instead.
 
 ---
 
