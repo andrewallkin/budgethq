@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
-import { Routes, Route, Link, useLocation, Navigate } from 'react-router-dom'
+import { Routes, Route, Link, useLocation, Navigate, Outlet } from 'react-router-dom'
 import { LayoutDashboard, PieChart as PieChartIcon, Home, Moon, Sun, LogOut, Settings as SettingsIcon, ChevronLeft, ChevronRight, Calculator, Shield, TrendingUp, Menu, HelpCircle, Building2 } from 'lucide-react'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import BudgetDashboard from './pages/BudgetDashboard'
 import RATaxCalculator from './pages/RATaxCalculator'
 import RAPerformance from './pages/RAPerformance'
 import EmergencySavings from './pages/EmergencySavings'
+import { SHOW_EMERGENCY_SAVINGS_UI } from './config/featureFlags'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import Settings from './pages/Settings'
@@ -15,8 +16,11 @@ import BankTransactions from './pages/BankTransactions'
 import CategorizationRules from './pages/CategorizationRules'
 import BudgetAnalysis from './pages/BudgetAnalysis'
 import CategoryGuide from './pages/CategoryGuide'
-import InvestmentsLanding from './pages/InvestmentsLanding'
 import InvestmentPortfolioPage from './pages/InvestmentPortfolioPage'
+import InvestmentsV2Landing from './pages/investments-v2/InvestmentsV2Landing'
+import InvestmentsV2Detail from './pages/investments-v2/InvestmentsV2Detail'
+import InvestmentsV2RaCalculator from './pages/investments-v2/InvestmentsV2RaCalculator'
+import { InvestmentsV2Provider } from './investments-v2/InvestmentsV2Provider'
 import InvestecLanding from './pages/InvestecLanding'
 import HomeOverview from './pages/HomeOverview'
 
@@ -40,12 +44,27 @@ function RaSectionRoute({ children }) {
     return children
 }
 
+function InvestmentsV2Layout() {
+    return (
+        <InvestmentsV2Provider>
+            <Outlet />
+        </InvestmentsV2Provider>
+    )
+}
+
+function LegacyInvestmentsV2Redirect() {
+    const location = useLocation()
+    const suffix = location.pathname.replace(/^\/investments-v2/, '')
+    const nextPath = suffix === '/ra/calculator' ? '/investments/calculator' : `/investments${suffix || ''}`
+    return <Navigate to={`${nextPath}${location.search}${location.hash}`} replace />
+}
+
 function AppContent() {
     const location = useLocation()
     const { user, logout, showInvestecNav } = useAuth()
     const [darkMode, setDarkMode] = useState(() => {
         const saved = localStorage.getItem('darkMode')
-        return saved ? JSON.parse(saved) : window.matchMedia('(prefers-color-scheme: dark)').matches
+        return saved ? JSON.parse(saved) : false
     })
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
         const saved = localStorage.getItem('sidebarCollapsed')
@@ -72,22 +91,26 @@ function AppContent() {
 
     const navItems = [
         { path: '/', label: 'Home', icon: Home },
-        { path: '/salary', label: 'Payslip & Tax', icon: Calculator },
-        { path: '/budget', label: 'Budget Dashboard', icon: LayoutDashboard },
+        { path: '/salary', label: 'Payslip', icon: Calculator },
+        { path: '/budget', label: 'Budget', icon: LayoutDashboard },
         { path: '/investments', label: 'Investments', icon: PieChartIcon },
-        { path: '/emergency-savings', label: 'Emergency Savings', icon: Shield },
-        ...(showInvestecNav ? [{ path: '/investec', label: 'Investec Banking', icon: Building2 }] : []),
-        { path: '/category-guide', label: 'Budget Category Guide', icon: HelpCircle },
+        ...(SHOW_EMERGENCY_SAVINGS_UI
+            ? [{ path: '/emergency-savings', label: 'Emergency', icon: Shield }]
+            : []),
+        ...(showInvestecNav ? [{ path: '/investec', label: 'Banking', icon: Building2 }] : []),
+        { path: '/category-guide', label: 'Guide', icon: HelpCircle },
         { path: '/settings', label: 'Settings', icon: SettingsIcon },
     ]
 
     // Don't show sidebar on login/register pages
     if (location.pathname === '/login' || location.pathname === '/register') {
         return (
-            <Routes>
-                <Route path="/login" element={<Login />} />
-                <Route path="/register" element={<Register />} />
-            </Routes>
+            <div className="h-full overflow-y-auto">
+                <Routes>
+                    <Route path="/login" element={<Login />} />
+                    <Route path="/register" element={<Register />} />
+                </Routes>
+            </div>
         )
     }
 
@@ -95,7 +118,9 @@ function AppContent() {
         <>
             <div className={`p-6 flex ${collapsed && !isMobile ? 'justify-center' : 'justify-between'} items-center`}>
                 {(!collapsed || isMobile) && (
-                    <h1 className="text-xl font-bold text-gray-800 dark:text-white">📊 BudgetHQ</h1>
+                    <h1 className="text-xl font-semibold tracking-tight text-neutral-950 dark:text-white">
+                        BudgetHQ
+                    </h1>
                 )}
                 {!isMobile && (
                     <div className={`flex items-center gap-2 ${collapsed ? 'flex-col' : ''}`}>
@@ -120,7 +145,8 @@ function AppContent() {
                 {navItems.map((item) => {
                     const Icon = item.icon
                     const isActive = item.path === '/investments'
-                        ? location.pathname.startsWith('/investments') || location.pathname === '/portfolio'
+                        ? location.pathname.startsWith('/investments') ||
+                          location.pathname === '/portfolio'
                         : item.path === '/investec'
                         ? location.pathname.startsWith('/investec')
                         : location.pathname === item.path
@@ -128,10 +154,11 @@ function AppContent() {
                         <Link
                             key={item.path}
                             to={item.path}
-                            className={`flex items-center ${collapsed && !isMobile ? 'justify-center px-2' : 'px-4'} py-3 rounded-lg transition-colors ${isActive
-                                ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
-                                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                                }`}
+                            className={`flex items-center rounded-xl text-sm ${collapsed && !isMobile ? 'justify-center px-2' : 'px-4'} py-3 transition-colors ${
+                                isActive
+                                    ? 'bg-[var(--paper-card)] text-[var(--paper-ink)]'
+                                    : 'text-[var(--paper-muted)] hover:bg-[var(--paper-card)]/70'
+                            }`}
                             title={collapsed && !isMobile ? item.label : ''}
                         >
                             <Icon className={`w-5 h-5 ${collapsed && !isMobile ? '' : 'mr-3'}`} />
@@ -143,11 +170,11 @@ function AppContent() {
                 })}
             </nav>
             {user && (
-                <div className={`p-4 border-t border-gray-200 dark:border-gray-700 ${collapsed && !isMobile ? 'flex justify-center' : ''}`}>
+                <div className={`p-4 ${collapsed && !isMobile ? 'flex justify-center' : ''}`}>
                     <div className={`flex items-center ${collapsed && !isMobile ? 'justify-center' : 'justify-between'}`}>
                         {(!collapsed || isMobile) && (
                             <div className="text-sm">
-                                <p className="font-medium text-gray-900 dark:text-white truncate">{user.username}</p>
+                                <p className="font-medium text-neutral-900 dark:text-white truncate">{user.username}</p>
                             </div>
                         )}
                         <button
@@ -164,9 +191,9 @@ function AppContent() {
     )
 
     return (
-        <div className="flex h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
+        <div className="flex h-full overflow-hidden transition-colors duration-200 app-shell paper-shell">
             {/* Mobile header bar */}
-            <header className="lg:hidden fixed top-0 left-0 right-0 h-14 z-30 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between px-5 sm:px-6">
+            <header className="lg:hidden fixed top-0 left-0 right-0 h-14 z-30 flex items-center justify-between px-5 sm:px-6 bg-[var(--paper-canvas)]">
                 <button
                     onClick={() => setIsMobileMenuOpen(true)}
                     className="p-2 min-w-[44px] min-h-[44px] rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 transition-colors flex items-center justify-center"
@@ -174,7 +201,9 @@ function AppContent() {
                 >
                     <Menu className="w-6 h-6" />
                 </button>
-                <h1 className="text-lg font-bold text-gray-800 dark:text-white">📊 BudgetHQ</h1>
+                <h1 className="text-lg font-semibold tracking-tight text-neutral-950 dark:text-white">
+                    BudgetHQ
+                </h1>
                 <div className="flex items-center gap-1">
                     <button
                         onClick={() => setDarkMode(!darkMode)}
@@ -204,31 +233,53 @@ function AppContent() {
 
             {/* Mobile drawer */}
             <aside
-                className={`lg:hidden fixed inset-y-0 left-0 w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 z-50 flex flex-col transform transition-transform duration-300 ease-in-out ${
+                className={`lg:hidden fixed inset-y-0 left-0 w-64 z-50 flex flex-col transform transition-transform duration-300 ease-in-out ${
                     isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
-                }`}
+                } bg-[var(--paper-canvas)]`}
             >
                 <SidebarContent collapsed={false} isMobile />
             </aside>
 
             {/* Desktop sidebar */}
-            <aside className={`hidden lg:flex ${isSidebarCollapsed ? 'w-16' : 'w-64'} bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex-col transition-all duration-300 ease-in-out overflow-hidden shrink-0`}>
+            <aside className={`hidden lg:flex ${isSidebarCollapsed ? 'w-16' : 'w-64'} flex-col transition-all duration-300 ease-in-out overflow-hidden shrink-0 bg-[var(--paper-canvas)]`}>
                 <SidebarContent collapsed={isSidebarCollapsed} isMobile={false} />
             </aside>
 
-            {/* Main Content */}
-            <div className="flex-1 overflow-y-auto pt-14 lg:pt-0">
-                <div className="p-4 sm:p-6 lg:p-8">
+            {/* Main content */}
+            <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+                <div className="p-4 pt-[4.5rem] sm:p-6 sm:pt-20 lg:p-8">
                     <Routes>
                         <Route path="/" element={<ProtectedRoute><HomeOverview /></ProtectedRoute>} />
                         <Route path="/budget" element={<ProtectedRoute><BudgetDashboard /></ProtectedRoute>} />
                         <Route path="/salary" element={<ProtectedRoute><SalaryPage /></ProtectedRoute>} />
                         <Route path="/investments/ra/calculator" element={<ProtectedRoute><RaSectionRoute><RATaxCalculator /></RaSectionRoute></ProtectedRoute>} />
                         <Route path="/investments/ra" element={<ProtectedRoute><RaSectionRoute><RAPerformance /></RaSectionRoute></ProtectedRoute>} />
-                        <Route path="/investments" element={<ProtectedRoute><InvestmentsLanding /></ProtectedRoute>} />
-                        <Route path="/investments/:portfolioSlug" element={<ProtectedRoute><InvestmentPortfolioPage /></ProtectedRoute>} />
-                        <Route path="/portfolio" element={<Navigate to="/investments/tfsa" replace />} />
-                        <Route path="/emergency-savings" element={<ProtectedRoute><EmergencySavings /></ProtectedRoute>} />
+                        <Route
+                            path="/investments"
+                            element={
+                                <ProtectedRoute>
+                                    <InvestmentsV2Layout />
+                                </ProtectedRoute>
+                            }
+                        >
+                            <Route index element={<InvestmentsV2Landing />} />
+                            <Route path="calculator" element={<InvestmentsV2RaCalculator />} />
+                            <Route path="sheets/:portfolioSlug" element={<InvestmentPortfolioPage />} />
+                            <Route path=":accountId" element={<InvestmentsV2Detail />} />
+                        </Route>
+                        <Route path="/investments-v2" element={<ProtectedRoute><LegacyInvestmentsV2Redirect /></ProtectedRoute>} />
+                        <Route path="/investments-v2/*" element={<ProtectedRoute><LegacyInvestmentsV2Redirect /></ProtectedRoute>} />
+                        <Route path="/portfolio" element={<Navigate to="/investments/sheets/tfsa" replace />} />
+                        <Route
+                            path="/emergency-savings"
+                            element={
+                                SHOW_EMERGENCY_SAVINGS_UI ? (
+                                    <ProtectedRoute><EmergencySavings /></ProtectedRoute>
+                                ) : (
+                                    <Navigate to="/" replace />
+                                )
+                            }
+                        />
                         <Route path="/ra" element={<ProtectedRoute><Navigate to="/investments/ra" replace /></ProtectedRoute>} />
                         <Route path="/ra-calculator" element={<ProtectedRoute><Navigate to="/investments/ra/calculator" replace /></ProtectedRoute>} />
                         <Route path="/investec" element={<ProtectedRoute><InvestecLanding /></ProtectedRoute>} />
@@ -424,7 +475,7 @@ function HomePage() {
                     </div>
                 </div>
 
-                {/* Emergency Savings Card */}
+                {SHOW_EMERGENCY_SAVINGS_UI && (
                 <div className="flex flex-col h-full bg-gradient-to-br from-amber-50 to-amber-100 dark:from-amber-900/20 dark:to-amber-800/20 rounded-2xl shadow-lg border border-amber-200 dark:border-amber-800 overflow-hidden hover:shadow-xl transition-all">
                     <div className="p-4 sm:p-6 lg:p-8 flex-1 flex flex-col">
                         <div className="flex items-center mb-6">
@@ -478,6 +529,7 @@ function HomePage() {
                         </Link>
                     </div>
                 </div>
+                )}
 
                 {showRaUnderInvestments && (
                     <>

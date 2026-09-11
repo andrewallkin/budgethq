@@ -1,43 +1,23 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import axios from 'axios'
-import { ArrowUpRight, Landmark, LayoutDashboard, PieChart as PieChartIcon, Shield, Wallet } from 'lucide-react'
-import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts'
 import BlurredValue from '../components/BlurredValue'
 import { computeEffectiveEmergencyFund, getEmergencyFundAccount } from '../utils/emergencyFundSource'
-import { formatCurrency, formatDateSafe } from '../utils/numberFormatting'
-
-const BUDGET_COLORS = {
-    Needs: '#B91C1C',
-    Wants: '#1D4ED8',
-    Savings: '#15803D',
-    Unallocated: '#B45309',
-}
-
-const OVERVIEW_COLORS = ['#0D9488', '#2563EB', '#16A34A', '#F59E0B', '#7C3AED']
-
-const CARD_ACCENTS = {
-    blue: {
-        bar: 'from-blue-500 to-indigo-600',
-        icon: 'bg-blue-50 text-blue-700 dark:bg-blue-900/25 dark:text-blue-300',
-    },
-    emerald: {
-        bar: 'from-emerald-500 to-teal-600',
-        icon: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/25 dark:text-emerald-300',
-    },
-    amber: {
-        bar: 'from-amber-500 to-orange-600',
-        icon: 'bg-amber-50 text-amber-700 dark:bg-amber-900/25 dark:text-amber-300',
-    },
-    teal: {
-        bar: 'from-teal-500 to-cyan-600',
-        icon: 'bg-teal-50 text-teal-700 dark:bg-teal-900/25 dark:text-teal-300',
-    },
-}
-
-/** Matches dense budget tile height on md+ so all four overview tiles align to one size */
-const OVERVIEW_TILE_LINK_CLASS =
-    'group relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-5 sm:p-6 shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all md:min-h-[284px]'
+import { SHOW_EMERGENCY_SAVINGS_UI } from '../config/featureFlags'
+import { formatCurrency, formatDateSafe, formatPercent } from '../utils/numberFormatting'
+import { CATEGORY_LABELS } from '../utils/transactionCategories'
+import { summarizeAccountBalances } from '../utils/accountBalances'
+import { additionalIncomeTotal, hasAdditionalIncome, payslipMonthLabel } from '../utils/payslipBudget'
+import {
+    AllocationRow,
+    PAPER_BUDGET_COLORS,
+    PaperCard,
+    paperDivider,
+    paperEyebrow,
+    paperMoney,
+    paperMoneyTone,
+    paperTitle,
+} from '../components/appUi'
 
 const emptyOverview = {
     budget: {
@@ -48,6 +28,13 @@ const emptyOverview = {
         totalSavings: 0,
         remaining: 0,
         periodLabel: null,
+        payslipNet: null,
+        paye: null,
+        payslipLabel: null,
+        additionalIncome: 0,
+        hasAdditional: false,
+        salarySkippedAdditional: false,
+        salaryPayslipLabel: null,
     },
     investments: {
         totalValue: null,
@@ -62,15 +49,19 @@ const emptyOverview = {
         progress: null,
     },
     accounts: {
-        investecTotal: 0,
-        manualTotal: 0,
-        totalBalance: 0,
+        cashTotal: 0,
+        liabilityTotal: 0,
         count: 0,
+        loanCount: 0,
         lastSynced: null,
+        items: [],
+        loanItems: [],
     },
+    recentTransactions: [],
 }
 
-const sumAmounts = (items = []) => items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
+const sumAmounts = (items = []) =>
+    items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
 
 const formatCompactCurrency = (value, currency = 'ZAR') =>
     formatCurrency(value, {
@@ -79,12 +70,6 @@ const formatCompactCurrency = (value, currency = 'ZAR') =>
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
     })
-
-const getEmergencyProgressColor = (progress) => {
-    if (progress >= 100) return 'bg-green-600'
-    if (progress >= 75) return 'bg-yellow-500'
-    return 'bg-blue-600'
-}
 
 export default function HomeOverview() {
     const [loading, setLoading] = useState(true)
@@ -114,6 +99,7 @@ export default function HomeOverview() {
                 credentialsData,
                 investecAccountsData,
                 manualAccountsData,
+                transactionsData,
             ] = await Promise.all([
                 safeGet('/api/budget/default_user'),
                 safeGet('/api/budget/period/current'),
@@ -123,6 +109,7 @@ export default function HomeOverview() {
                 safeGet('/api/investec/credentials/status'),
                 safeGet('/api/investec/accounts'),
                 safeGet('/api/manual-accounts'),
+                safeGet('/api/investec/transactions?limit=8'),
             ])
 
             const needs = budgetData?.needs || []
@@ -138,6 +125,26 @@ export default function HomeOverview() {
                 payslipData?.gross_salary != null && payslipData.gross_salary !== ''
                     ? Number(payslipData.gross_salary)
                     : null
+
+            const payslipNet =
+                payslipData?.net_pay != null && payslipData.net_pay !== ''
+                    ? Number(payslipData.net_pay)
+                    : null
+            const paye =
+                payslipData?.paye != null && payslipData.paye !== ''
+                    ? Number(payslipData.paye)
+                    : null
+            const additionalIncome = additionalIncomeTotal(payslipData)
+            const hasAdditional = hasAdditionalIncome(payslipData)
+            const salarySkippedAdditional = Boolean(budgetData?.salary_skipped_additional)
+            const salaryPayslipLabel = payslipMonthLabel(
+                budgetData?.salary_payslip_year,
+                budgetData?.salary_payslip_month,
+                formatDateSafe,
+            )
+            const payslipLabel = payslipData?.year && payslipData?.month
+                ? formatDateSafe(`${payslipData.year}-${String(payslipData.month).padStart(2, '0')}-01`, { month: 'short', year: 'numeric' })
+                : null
 
             const startDay = budgetData?.budget_period_start_day ?? 1
             const periodLabel =
@@ -164,8 +171,7 @@ export default function HomeOverview() {
             const progress = targetValue > 0 ? (currentFund / targetValue) * 100 : null
 
             const activeInvestecAccounts = investecAccounts.filter((account) => account.is_active !== false)
-            const investecTotal = activeInvestecAccounts.reduce((sum, account) => sum + (Number(account.current_balance) || 0), 0)
-            const manualTotal = manualAccounts.reduce((sum, account) => sum + (Number(account.balance) || 0), 0)
+            const balances = summarizeAccountBalances(investecAccounts, manualAccounts)
             const lastSynced = activeInvestecAccounts.reduce((latest, account) => {
                 if (!account.last_synced) return latest
                 const accountDate = new Date(account.last_synced)
@@ -181,6 +187,13 @@ export default function HomeOverview() {
                     totalSavings,
                     remaining,
                     periodLabel,
+                    payslipNet: Number.isFinite(payslipNet) ? payslipNet : null,
+                    paye: Number.isFinite(paye) ? paye : null,
+                    payslipLabel,
+                    additionalIncome,
+                    hasAdditional,
+                    salarySkippedAdditional,
+                    salaryPayslipLabel,
                 },
                 investments: {
                     totalValue:
@@ -189,7 +202,7 @@ export default function HomeOverview() {
                             : null,
                     baseCurrency: investmentsData?.base_currency || 'ZAR',
                     fx: investmentsData?.fx || null,
-                    portfolios: investmentsData?.portfolios || [],
+                    portfolios: Array.isArray(investmentsData?.portfolios) ? investmentsData.portfolios : [],
                 },
                 emergency: {
                     currentFund,
@@ -198,12 +211,17 @@ export default function HomeOverview() {
                     progress,
                 },
                 accounts: {
-                    investecTotal,
-                    manualTotal,
-                    totalBalance: investecTotal + manualTotal,
-                    count: activeInvestecAccounts.length + manualAccounts.length,
-                    lastSynced,
+                    cashTotal: balances.cashTotal,
+                    liabilityTotal: balances.liabilityTotal,
+                    count: balances.cashAccounts.length,
+                    loanCount: balances.loanCount,
+                    lastSynced: lastSynced && !Number.isNaN(lastSynced.getTime())
+                        ? lastSynced.toISOString()
+                        : null,
+                    items: balances.cashAccounts,
+                    loanItems: balances.loanAccounts,
                 },
+                recentTransactions: Array.isArray(transactionsData) ? transactionsData.slice(0, 8) : [],
             })
 
             if (!budgetData && !investmentsData && !emergencyData && !manualAccountsData && !investecAccountsData) {
@@ -215,31 +233,6 @@ export default function HomeOverview() {
         fetchOverview()
     }, [])
 
-    const budgetChartData = [
-        { name: 'Needs', value: overview.budget.totalNeeds },
-        { name: 'Wants', value: overview.budget.totalWants },
-        { name: 'Savings', value: overview.budget.totalSavings },
-        { name: 'Unallocated', value: Math.max(0, overview.budget.remaining) },
-    ].filter((item) => item.value > 0)
-
-    const accountChartData = [
-        {
-            name: 'Investec',
-            value: overview.accounts.investecTotal,
-            barClass: 'bg-gradient-to-r from-teal-500 to-cyan-500',
-            tileClass: 'bg-teal-50 dark:bg-teal-900/20 border-teal-100 dark:border-teal-800/60',
-            dotClass: 'bg-teal-500',
-        },
-        {
-            name: 'Manual',
-            value: overview.accounts.manualTotal,
-            barClass: 'bg-gradient-to-r from-blue-500 to-indigo-500',
-            tileClass: 'bg-blue-50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-800/60',
-            dotClass: 'bg-blue-500',
-        },
-    ].filter((item) => item.value > 0)
-    const accountPeakValue = Math.max(...accountChartData.map((item) => item.value), 0)
-
     const portfolioBaseValue = (portfolio) => {
         const value = Number(portfolio.total_value) || 0
         const currency = portfolio.currency_code || 'ZAR'
@@ -250,371 +243,356 @@ export default function HomeOverview() {
     }
 
     const sortedPortfolios = [...overview.investments.portfolios]
-        .filter((portfolio) => portfolioBaseValue(portfolio) > 0)
         .sort((a, b) => portfolioBaseValue(b) - portfolioBaseValue(a))
-    const topPortfolios = sortedPortfolios.slice(0, 4).map((portfolio) => ({
-        name: portfolio.name,
-        value: portfolioBaseValue(portfolio),
-    }))
-    const otherPortfolioValue = sortedPortfolios
-        .slice(4)
-        .reduce((sum, portfolio) => sum + portfolioBaseValue(portfolio), 0)
-    const portfolioChartData = otherPortfolioValue > 0
-        ? [...topPortfolios, { name: 'Other', value: otherPortfolioValue }]
-        : topPortfolios
-
-    const metricCards = [
-        {
-            title: 'Investments',
-            value: overview.investments.totalValue,
-            currency: overview.investments.baseCurrency,
-            meta: `${overview.investments.portfolios.length} portfolios`,
-            to: '/investments',
-            icon: PieChartIcon,
-            accent: 'emerald',
-        },
-        {
-            title: 'Emergency',
-            value: overview.emergency.currentFund,
-            meta: overview.emergency.progress == null ? 'No target set' : `${Math.round(overview.emergency.progress)}% funded`,
-            to: '/emergency-savings',
-            icon: Shield,
-            accent: 'amber',
-        },
-        {
-            title: 'Accounts',
-            value: overview.accounts.totalBalance,
-            meta: `${overview.accounts.count} accounts`,
-            to: '/investec/accounts',
-            icon: Landmark,
-            accent: 'teal',
-        },
-    ]
-
-    const zarCurrencyTooltip = (value) =>
-        formatCurrency(value, {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-        })
-    const baseCurrencyTooltip = (value) =>
-        formatCurrency(value, {
-            currency: overview.investments.baseCurrency,
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-        })
 
     const totalBudgeted =
         overview.budget.totalNeeds + overview.budget.totalWants + overview.budget.totalSavings
+    const netPay = overview.budget.netIncome
+    const isOverBudget = overview.budget.remaining < 0
+    const takeHomeShare = overview.budget.hasAdditional
+        ? null
+        : overview.budget.grossSalary > 0
+            ? ((overview.budget.payslipNet ?? netPay) / overview.budget.grossSalary) * 100
+            : null
+    const invested = overview.investments.totalValue
+    const cash = overview.accounts.cashTotal
+    const investedForSum = typeof invested === 'number' ? invested : 0
+    const netWorth = (Number(cash) || 0) + investedForSum - (Number(overview.accounts.liabilityTotal) || 0)
+    const position = (Number(cash) || 0) + investedForSum
+    const emergencyPct = overview.emergency.progress == null
+        ? null
+        : Math.min(100, Math.max(0, overview.emergency.progress))
+
+    const allocation = [
+        { name: 'Needs', amount: overview.budget.totalNeeds, color: PAPER_BUDGET_COLORS.Needs },
+        { name: 'Wants', amount: overview.budget.totalWants, color: PAPER_BUDGET_COLORS.Wants },
+        { name: 'Savings', amount: overview.budget.totalSavings, color: PAPER_BUDGET_COLORS.Savings },
+        {
+            name: isOverBudget ? 'Over budget' : 'Unallocated',
+            amount: Math.abs(overview.budget.remaining),
+            color: isOverBudget ? 'var(--paper-brick)' : PAPER_BUDGET_COLORS.Unallocated,
+        },
+    ]
+
+    const periodText = overview.budget.periodLabel || overview.budget.payslipLabel || 'This period'
 
     return (
-        <div className="space-y-6 sm:space-y-8 max-w-7xl mx-auto">
-            <div>
-                <p className="text-sm font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">Home</p>
-                <h1 className="mt-1 text-3xl sm:text-4xl font-bold text-gray-900 dark:text-white">Financial Overview</h1>
-                {loading && (
-                    <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">Updating overview...</p>
-                )}
-            </div>
+        <div className="mx-auto max-w-[1080px] space-y-8">
+            <header className="flex items-end justify-between gap-4">
+                <div>
+                    <h1 className={paperTitle}>Home</h1>
+                    <p className={`mt-1 ${paperEyebrow}`}>{loading ? 'Updating…' : periodText}</p>
+                </div>
+            </header>
 
-            {error && (
-                <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200 border border-amber-200 dark:border-amber-800">
+            {error ? (
+                <PaperCard className="px-5 py-4 text-sm text-[var(--paper-brick)]">
                     {error}
+                </PaperCard>
+            ) : null}
+
+            <PaperCard className="overflow-hidden">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+                    <StripStat
+                        to="/salary"
+                        label="Take-home salary"
+                        value={formatCompactCurrency(netPay)}
+                        hint={
+                            overview.budget.salarySkippedAdditional
+                                ? `${overview.budget.salaryPayslipLabel || 'Last normal payslip'} · bonus excluded`
+                                : takeHomeShare != null
+                                    ? `${formatPercent(takeHomeShare, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} of gross`
+                                    : (overview.budget.payslipLabel || 'Latest payslip')
+                        }
+                    />
+                    <StripStat
+                        to="/investments"
+                        label="Assets"
+                        value={
+                            invested == null && cash === 0
+                                ? '—'
+                                : formatCompactCurrency(position, overview.investments.baseCurrency)
+                        }
+                    />
+                    <StripStat
+                        to="/investec/accounts"
+                        label="Liabilities"
+                        value={formatCompactCurrency(overview.accounts.liabilityTotal)}
+                        valueClassName="text-[var(--paper-brick)]"
+                    />
+                    <StripStat
+                        label="Net worth"
+                        value={formatCompactCurrency(netWorth, overview.investments.baseCurrency)}
+                        valueClassName={paperMoneyTone(netWorth)}
+                    />
                 </div>
-            )}
+            </PaperCard>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
-                <Link to="/budget" className={OVERVIEW_TILE_LINK_CLASS}>
-                    <div className={`absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r ${CARD_ACCENTS.blue.bar}`} />
-                    <div className="flex items-start justify-between gap-4">
-                        <div className={`p-3 rounded-xl ${CARD_ACCENTS.blue.icon}`}>
-                            <LayoutDashboard className="w-6 h-6" />
-                        </div>
-                        <ArrowUpRight className="w-5 h-5 text-gray-400 group-hover:text-gray-700 dark:group-hover:text-gray-200 transition-colors shrink-0" />
-                    </div>
-                    <div className="mt-2 border-t border-gray-100 dark:border-gray-700 pt-2">
-                        <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Salary</p>
-                        <div className="mt-1.5 flex flex-wrap items-baseline gap-x-4 gap-y-1">
-                            <div className="min-w-0">
-                                <span className="text-[11px] text-gray-500 dark:text-gray-400">Gross (payslip) </span>
-                                <BlurredValue>
-                                    <span className="text-sm font-bold text-gray-900 dark:text-white tabular-nums">
-                                        {overview.budget.grossSalary != null
-                                            ? formatCompactCurrency(overview.budget.grossSalary)
-                                            : '—'}
-                                    </span>
-                                </BlurredValue>
-                                {overview.budget.grossSalary == null && (
-                                    <span className="text-[10px] text-gray-500 dark:text-gray-400"> · Payslip & Tax</span>
-                                )}
-                            </div>
-                            <div className="min-w-0 sm:border-l border-gray-200/80 dark:border-gray-600 sm:pl-4">
-                                <span className="text-[11px] text-gray-500 dark:text-gray-400">Net (budget) </span>
-                                <BlurredValue>
-                                    <span className="text-sm font-bold text-gray-900 dark:text-white tabular-nums">
-                                        {formatCompactCurrency(overview.budget.netIncome)}
-                                    </span>
-                                </BlurredValue>
-                            </div>
-                        </div>
-                    </div>
-                    <div className="mt-3 flex min-h-0 flex-1 flex-col">
-                        <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Budget</p>
-                        <BlurredValue>
-                            <p className="mt-1.5 text-3xl font-bold tracking-tight text-gray-900 dark:text-white">
-                                {formatCompactCurrency(totalBudgeted)}
-                            </p>
-                        </BlurredValue>
-                        <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
-                            {loading ? '…' : overview.budget.periodLabel || 'Current snapshot'}
-                        </p>
-                        <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
-                            <span className="text-xs text-gray-500 dark:text-gray-400">Unallocated</span>
-                            <BlurredValue>
-                                <span
-                                    className={`text-xs font-semibold tabular-nums ${overview.budget.remaining < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white'}`}
-                                >
-                                    {overview.budget.remaining >= 0 ? 'Left ' : 'Over '}
-                                    {formatCompactCurrency(Math.abs(overview.budget.remaining))}
-                                </span>
-                            </BlurredValue>
-                        </div>
-                    </div>
-                </Link>
-                {metricCards.map((card) => {
-                    const Icon = card.icon
-                    const displayValue = card.value == null
-                        ? 'Not set'
-                        : formatCompactCurrency(Math.abs(card.value), card.currency || 'ZAR')
-
-                    return (
-                        <Link key={card.title} to={card.to} className={OVERVIEW_TILE_LINK_CLASS}>
-                            <div className={`absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r ${CARD_ACCENTS[card.accent].bar}`} />
-                            <div className="flex items-start justify-between gap-4">
-                                <div className={`p-3 rounded-xl ${CARD_ACCENTS[card.accent].icon}`}>
-                                    <Icon className="w-6 h-6" />
-                                </div>
-                                <ArrowUpRight className="w-5 h-5 text-gray-400 group-hover:text-gray-700 dark:group-hover:text-gray-200 transition-colors" />
-                            </div>
-                            <div className="mt-6 flex min-h-0 flex-1 flex-col">
-                                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{card.title}</p>
-                                <BlurredValue>
-                                    <p className="mt-2 text-3xl font-bold tracking-tight text-gray-900 dark:text-white">
-                                        {displayValue}
-                                    </p>
-                                </BlurredValue>
-                                <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">{card.meta}</p>
-                            </div>
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                <PaperCard className="p-5 sm:p-6">
+                    <div className="flex items-baseline justify-between gap-3">
+                        <h2 className="text-lg font-semibold text-[var(--paper-ink)]">Budget</h2>
+                        <Link to="/budget" className="cursor-pointer text-sm text-[var(--paper-muted)] hover:text-[var(--paper-ink)]">
+                            Open
                         </Link>
-                    )
-                })}
-                </div>
-
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-5 sm:gap-6">
-                <section className="xl:col-span-2 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 sm:p-6 shadow-sm">
-                    <div className="flex items-center justify-between gap-4 mb-5">
-                        <div>
-                            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Budget Split</h2>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">Needs, wants, savings</p>
-                        </div>
-                        <BlurredValue>
-                            <p className="text-lg font-bold text-gray-900 dark:text-white">
-                                {formatCompactCurrency(overview.budget.netIncome)}
-                            </p>
-                        </BlurredValue>
                     </div>
-                    {budgetChartData.length > 0 ? (
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
-                            <div className="h-72">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <PieChart>
-                                        <Pie data={budgetChartData} dataKey="value" nameKey="name" innerRadius="58%" outerRadius="82%" paddingAngle={3}>
-                                            {budgetChartData.map((entry) => (
-                                                <Cell key={entry.name} fill={BUDGET_COLORS[entry.name]} />
-                                            ))}
-                                        </Pie>
-                                        <Tooltip formatter={zarCurrencyTooltip} />
-                                    </PieChart>
-                                </ResponsiveContainer>
-                            </div>
-                            <div className="grid grid-cols-2 gap-3">
-                                {budgetChartData.map((item) => (
-                                    <div key={item.name} className="rounded-xl bg-gray-50 dark:bg-gray-900/50 p-4">
-                                        <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-                                            <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: BUDGET_COLORS[item.name] }} />
-                                            {item.name}
-                                        </div>
-                                        <BlurredValue>
-                                            <p className="mt-2 text-lg font-bold text-gray-900 dark:text-white">
-                                                {formatCompactCurrency(item.value)}
-                                            </p>
-                                        </BlurredValue>
-                                    </div>
-                                ))}
-                            </div>
+                    {netPay > 0 || totalBudgeted > 0 ? (
+                        <div className={`mt-2 ${paperDivider}`}>
+                            {allocation.map((row) => (
+                                <AllocationRow
+                                    key={row.name}
+                                    label={row.name}
+                                    amount={row.amount}
+                                    total={Math.max(netPay, totalBudgeted)}
+                                    color={row.color}
+                                    hint={netPay > 0 ? formatPercent((row.amount / netPay) * 100, { minimumFractionDigits: 0, maximumFractionDigits: 0 }) : null}
+                                    display={<BlurredValue>{formatCompactCurrency(row.amount)}</BlurredValue>}
+                                />
+                            ))}
                         </div>
                     ) : (
-                        <div className="h-72 flex items-center justify-center text-gray-500 dark:text-gray-400">Add budget data to see your split.</div>
+                        <p className="mt-6 text-sm text-[var(--paper-muted)]">Add a budget to see how net pay is split.</p>
                     )}
-                </section>
+                </PaperCard>
 
-                <section className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 sm:p-6 shadow-sm">
-                    <div className="flex items-center justify-between gap-4 mb-6">
-                        <div>
-                            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Emergency Fund</h2>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">Current vs target</p>
+                <PaperCard className="p-5 sm:p-6">
+                    <div className="flex items-baseline justify-between gap-3">
+                        <h2 className="text-lg font-semibold text-[var(--paper-ink)]">Payslip</h2>
+                        <Link to="/salary" className="cursor-pointer text-sm text-[var(--paper-muted)] hover:text-[var(--paper-ink)]">
+                            Open
+                        </Link>
+                    </div>
+                    <div className={`mt-2 ${paperDivider}`}>
+                        <MetaRow
+                            label="Gross"
+                            value={<BlurredValue>{overview.budget.grossSalary != null ? formatCompactCurrency(overview.budget.grossSalary) : '—'}</BlurredValue>}
+                        />
+                        {overview.budget.hasAdditional ? (
+                            <MetaRow
+                                label="Additional"
+                                hint="Not in monthly budget"
+                                value={<BlurredValue>{formatCompactCurrency(overview.budget.additionalIncome)}</BlurredValue>}
+                            />
+                        ) : null}
+                        <MetaRow
+                            label="PAYE"
+                            value={<BlurredValue>{overview.budget.paye != null ? formatCompactCurrency(overview.budget.paye) : '—'}</BlurredValue>}
+                        />
+                        <MetaRow
+                            label="Paid this month"
+                            hint={overview.budget.hasAdditional ? null : (takeHomeShare != null ? formatPercent(takeHomeShare, { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' take-home' : null)}
+                            value={<BlurredValue>{formatCompactCurrency(overview.budget.payslipNet ?? netPay)}</BlurredValue>}
+                        />
+                        {overview.budget.salarySkippedAdditional ? (
+                            <MetaRow
+                                label="For the budget"
+                                hint={overview.budget.salaryPayslipLabel ? `${overview.budget.salaryPayslipLabel} take-home` : 'Last payslip without a bonus'}
+                                value={<BlurredValue>{formatCompactCurrency(netPay)}</BlurredValue>}
+                            />
+                        ) : null}
+                    </div>
+                </PaperCard>
+            </div>
+
+            <div className={`grid grid-cols-1 gap-6 ${SHOW_EMERGENCY_SAVINGS_UI ? 'lg:grid-cols-2' : ''}`}>
+                <PaperCard className="p-5 sm:p-6">
+                    <div className="flex items-baseline justify-between gap-3">
+                        <h2 className="text-lg font-semibold text-[var(--paper-ink)]">Net worth</h2>
+                        <div className="flex gap-4 text-sm text-[var(--paper-muted)]">
+                            <Link to="/investec/accounts" className="cursor-pointer hover:text-[var(--paper-ink)]">Accounts</Link>
+                            <Link to="/investments" className="cursor-pointer hover:text-[var(--paper-ink)]">Investments</Link>
                         </div>
-                        <Wallet className="w-6 h-6 text-amber-600 dark:text-amber-400" />
                     </div>
                     <BlurredValue>
-                        <p className="text-4xl font-bold text-gray-900 dark:text-white">
-                            {formatCompactCurrency(overview.emergency.currentFund)}
+                        <p className={`mt-4 text-3xl ${paperMoney} ${paperMoneyTone(netWorth)}`}>
+                            {formatCompactCurrency(netWorth)}
                         </p>
                     </BlurredValue>
-                    <div className="mt-6">
-                        <div className="flex justify-between text-sm text-gray-500 dark:text-gray-400 mb-2">
-                            <span>Progress</span>
-                            <span>{overview.emergency.progress == null ? 'No target' : `${Math.round(overview.emergency.progress)}%`}</span>
-                        </div>
-                        <div className="h-4 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
-                            <div
-                                className={`h-full rounded-full transition-all ${getEmergencyProgressColor(overview.emergency.progress)}`}
-                                style={{ width: `${Math.min(100, overview.emergency.progress ?? 0)}%` }}
+                    <div className={`mt-2 ${paperDivider}`}>
+                        <MetaRow
+                            label="Cash"
+                            hint={
+                                overview.accounts.count
+                                    ? `${overview.accounts.count} account${overview.accounts.count === 1 ? '' : 's'}`
+                                    : null
+                            }
+                            value={<BlurredValue>{formatCompactCurrency(cash)}</BlurredValue>}
+                        />
+                        {overview.accounts.items.length > 0 ? (
+                            <HoldingLines
+                                items={overview.accounts.items.map((account) => ({
+                                    key: account.id,
+                                    name: account.name,
+                                    display: formatCompactCurrency(account.value),
+                                }))}
                             />
-                        </div>
-                    </div>
-                    <div className="mt-6 grid grid-cols-2 gap-3">
-                        <div className="rounded-xl bg-gray-50 dark:bg-gray-900/50 p-4">
-                            <p className="text-sm text-gray-500 dark:text-gray-400">Target</p>
-                            <BlurredValue>
-                                <p className="mt-2 text-lg font-bold text-gray-900 dark:text-white">
-                                    {overview.emergency.targetValue ? formatCompactCurrency(overview.emergency.targetValue) : 'Not set'}
-                                </p>
-                            </BlurredValue>
-                        </div>
-                        <div className="rounded-xl bg-gray-50 dark:bg-gray-900/50 p-4">
-                            <p className="text-sm text-gray-500 dark:text-gray-400">Monthly</p>
-                            <BlurredValue>
-                                <p className="mt-2 text-lg font-bold text-gray-900 dark:text-white">
-                                    {formatCompactCurrency(overview.emergency.monthlyDeposit)}
-                                </p>
-                            </BlurredValue>
-                        </div>
-                    </div>
-                </section>
-            </div>
-
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 sm:gap-6">
-                <section className="overflow-hidden bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
-                    <div className="p-5 sm:p-6 border-b border-gray-100 dark:border-gray-700 bg-gradient-to-br from-slate-50 to-teal-50 dark:from-gray-800 dark:to-teal-950/30">
-                        <div className="flex items-start justify-between gap-4">
-                            <div>
-                                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Bank Accounts</h2>
-                                <p className="text-sm text-gray-500 dark:text-gray-400">
-                                    {overview.accounts.lastSynced ? `Synced ${formatDateSafe(overview.accounts.lastSynced.toISOString(), { day: 'numeric', month: 'short' })}` : 'Investec and manual'}
-                                </p>
-                            </div>
-                            <BlurredValue>
-                                <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                                    {formatCompactCurrency(overview.accounts.totalBalance)}
-                                </p>
-                            </BlurredValue>
-                        </div>
-                    </div>
-
-                    <div className="p-5 sm:p-6">
-                        {accountChartData.length > 0 ? (
-                            <div className="space-y-4">
-                                {accountChartData.map((item) => {
-                                    const percentOfTotal = overview.accounts.totalBalance > 0
-                                        ? (item.value / overview.accounts.totalBalance) * 100
-                                        : 0
-                                    const relativeWidth = accountPeakValue > 0
-                                        ? Math.max(12, (item.value / accountPeakValue) * 100)
-                                        : 0
-
-                                    return (
-                                        <div key={item.name} className={`rounded-2xl border p-4 ${item.tileClass}`}>
-                                            <div className="flex items-center justify-between gap-4">
-                                                <div className="flex items-center gap-3">
-                                                    <span className={`h-3 w-3 rounded-full ${item.dotClass}`} />
-                                                    <div>
-                                                        <p className="font-semibold text-gray-900 dark:text-white">{item.name}</p>
-                                                        <p className="text-xs text-gray-500 dark:text-gray-400">{Math.round(percentOfTotal)}% of total</p>
-                                                    </div>
-                                                </div>
-                                                <BlurredValue>
-                                                    <p className="text-lg font-bold text-gray-900 dark:text-white">
-                                                        {formatCompactCurrency(item.value)}
-                                                    </p>
-                                                </BlurredValue>
-                                            </div>
-                                            <div className="mt-4 h-3 rounded-full bg-white/80 dark:bg-gray-950/50 overflow-hidden">
-                                                <div
-                                                    className={`h-full rounded-full ${item.barClass}`}
-                                                    style={{ width: `${relativeWidth}%` }}
-                                                />
-                                            </div>
-                                        </div>
-                                    )
-                                })}
-                            </div>
                         ) : (
-                            <div className="h-56 flex items-center justify-center rounded-2xl bg-gray-50 dark:bg-gray-900/50 text-gray-500 dark:text-gray-400">
-                                No accounts loaded yet.
-                            </div>
+                            <p className="py-2 pl-4 text-[13px] text-[var(--paper-muted)]">No bank accounts yet.</p>
                         )}
+                        <MetaRow
+                            label="Invested"
+                            hint={overview.investments.portfolios.length ? `${overview.investments.portfolios.length} portfolios` : null}
+                            value={(
+                                <BlurredValue>
+                                    {invested == null
+                                        ? 'Not set'
+                                        : formatCompactCurrency(invested, overview.investments.baseCurrency)}
+                                </BlurredValue>
+                            )}
+                        />
+                        {sortedPortfolios.length > 0 ? (
+                            <HoldingLines
+                                items={sortedPortfolios.map((portfolio) => ({
+                                    key: portfolio.id ?? portfolio.slug ?? portfolio.name,
+                                    name: portfolio.name,
+                                    display: formatCompactCurrency(
+                                        portfolioBaseValue(portfolio),
+                                        overview.investments.baseCurrency,
+                                    ),
+                                }))}
+                            />
+                        ) : (
+                            <p className="py-2 pl-4 text-[13px] text-[var(--paper-muted)]">No portfolio values yet.</p>
+                        )}
+                        <MetaRow
+                            label="Liabilities"
+                            hint={
+                                overview.accounts.loanCount > 0
+                                    ? `${overview.accounts.loanCount} loan${overview.accounts.loanCount === 1 ? '' : 's'}`
+                                    : null
+                            }
+                            value={(
+                                <BlurredValue>
+                                    <span className="text-[var(--paper-brick)]">
+                                        {formatCompactCurrency(overview.accounts.liabilityTotal)}
+                                    </span>
+                                </BlurredValue>
+                            )}
+                        />
+                        {overview.accounts.loanItems.length > 0 ? (
+                            <HoldingLines
+                                valueClassName="text-[var(--paper-brick)]"
+                                items={overview.accounts.loanItems.map((account) => ({
+                                    key: account.id,
+                                    name: account.name,
+                                    display: formatCompactCurrency(account.value),
+                                }))}
+                            />
+                        ) : null}
                     </div>
-                </section>
+                </PaperCard>
 
-                <section className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 sm:p-6 shadow-sm">
-                    <div className="flex items-center justify-between gap-4 mb-5">
-                        <div>
-                            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Portfolio Split</h2>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">Largest holdings</p>
-                        </div>
+                {SHOW_EMERGENCY_SAVINGS_UI ? (
+                    <Link to="/emergency-savings" className="paper-card block cursor-pointer p-5 transition-colors hover:bg-[var(--paper-canvas)]/40 sm:p-6">
+                        <h2 className="text-lg font-semibold text-[var(--paper-ink)]">Emergency fund</h2>
                         <BlurredValue>
-                            <p className="text-xl font-bold text-gray-900 dark:text-white">
-                                {overview.investments.totalValue == null
-                                    ? 'Not set'
-                                    : formatCompactCurrency(overview.investments.totalValue, overview.investments.baseCurrency)}
+                            <p className={`mt-4 text-3xl text-[var(--paper-ink)] ${paperMoney}`}>
+                                {formatCompactCurrency(overview.emergency.currentFund)}
                             </p>
                         </BlurredValue>
-                    </div>
-                    {portfolioChartData.length > 0 ? (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 items-center">
-                            <div className="h-72">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <PieChart>
-                                        <Pie data={portfolioChartData} dataKey="value" nameKey="name" innerRadius="55%" outerRadius="82%" paddingAngle={3}>
-                                            {portfolioChartData.map((entry, index) => (
-                                                <Cell key={entry.name} fill={OVERVIEW_COLORS[index % OVERVIEW_COLORS.length]} />
-                                            ))}
-                                        </Pie>
-                                        <Tooltip formatter={baseCurrencyTooltip} />
-                                    </PieChart>
-                                </ResponsiveContainer>
-                            </div>
-                            <div className="space-y-3">
-                                {portfolioChartData.map((item, index) => (
-                                    <div key={item.name} className="flex items-center justify-between gap-3 rounded-xl bg-gray-50 dark:bg-gray-900/50 p-3">
-                                        <div className="flex items-center gap-2 min-w-0">
-                                            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: OVERVIEW_COLORS[index % OVERVIEW_COLORS.length] }} />
-                                            <span className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate">{item.name}</span>
-                                        </div>
-                                        <BlurredValue>
-                                            <span className="text-sm font-bold text-gray-900 dark:text-white">
-                                                {formatCompactCurrency(item.value, overview.investments.baseCurrency)}
-                                            </span>
-                                        </BlurredValue>
-                                    </div>
-                                ))}
-                            </div>
+                        <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-[var(--paper-line)]" aria-hidden="true">
+                            <div
+                                className="h-full rounded-full bg-[var(--paper-olive)]"
+                                style={{ width: `${emergencyPct ?? 0}%` }}
+                            />
                         </div>
-                    ) : (
-                        <div className="h-72 flex items-center justify-center text-gray-500 dark:text-gray-400">No portfolio values yet.</div>
-                    )}
-                </section>
+                        <p className="mt-3 text-sm text-[var(--paper-muted)]">
+                            {overview.emergency.targetValue
+                                ? `${emergencyPct == null ? '—' : Math.round(overview.emergency.progress)}% of ${formatCompactCurrency(overview.emergency.targetValue)}`
+                                : 'No target set'}
+                            {overview.emergency.monthlyDeposit
+                                ? ` · ${formatCompactCurrency(overview.emergency.monthlyDeposit)} / month`
+                                : ''}
+                        </p>
+                    </Link>
+                ) : null}
             </div>
+
+            <PaperCard className="p-5 sm:p-6">
+                <div className="flex items-baseline justify-between gap-3">
+                    <h2 className="text-lg font-semibold text-[var(--paper-ink)]">Recent activity</h2>
+                    <Link to="/investec/transactions" className="cursor-pointer text-sm text-[var(--paper-muted)] hover:text-[var(--paper-ink)]">
+                        View all
+                    </Link>
+                </div>
+                {overview.recentTransactions.length > 0 ? (
+                    <ul className={`mt-2 ${paperDivider}`}>
+                        {overview.recentTransactions.map((txn) => {
+                            const isCredit = txn.transaction_type === 'CREDIT'
+                            const signedAmount = isCredit ? Math.abs(Number(txn.amount) || 0) : -Math.abs(Number(txn.amount) || 0)
+                            const categoryKey = txn.category || 'uncategorized'
+                            const categoryLabel = CATEGORY_LABELS[categoryKey] || 'Uncategorized'
+                            const dateLabel = formatDateSafe(txn.transaction_date, { day: 'numeric', month: 'short' })
+
+                            return (
+                                <li key={txn.id} className="grid grid-cols-[4.25rem_1fr_auto] items-baseline gap-4 py-3">
+                                    <p className="text-xs tabular-nums text-[var(--paper-muted)]">{dateLabel}</p>
+                                    <div className="min-w-0">
+                                        <p className="truncate text-sm text-[var(--paper-ink)]">{txn.description || 'Transaction'}</p>
+                                        <p className="mt-0.5 text-xs text-[var(--paper-muted)]">{categoryLabel}</p>
+                                    </div>
+                                    <BlurredValue>
+                                        <p className={`text-right text-sm font-medium tabular-nums ${paperMoneyTone(signedAmount)}`}>
+                                            {signedAmount > 0 ? '+' : ''}
+                                            {formatCompactCurrency(signedAmount)}
+                                        </p>
+                                    </BlurredValue>
+                                </li>
+                            )
+                        })}
+                    </ul>
+                ) : (
+                    <p className="mt-6 text-sm text-[var(--paper-muted)]">No transactions loaded yet.</p>
+                )}
+            </PaperCard>
+        </div>
+    )
+}
+
+const stripCellClass =
+    'min-w-0 block border-b border-[var(--paper-line)] p-5 last:border-b-0 sm:p-6 sm:[&:nth-child(odd)]:border-r sm:[&:nth-child(n+3)]:border-b-0 lg:border-b-0 lg:border-r lg:last:border-r-0'
+
+function StripStat({ to, label, value, hint, valueClassName = 'text-[var(--paper-ink)]' }) {
+    const inner = (
+        <>
+            <p className={paperEyebrow}>{label}</p>
+            <BlurredValue>
+                <p className={`mt-3 text-2xl xl:text-3xl ${paperMoney} ${valueClassName}`}>{value}</p>
+            </BlurredValue>
+            {hint ? <p className="mt-2 text-sm text-[var(--paper-muted)]">{hint}</p> : null}
+        </>
+    )
+
+    if (to) {
+        return (
+            <Link to={to} className={`cursor-pointer transition-colors hover:bg-[var(--paper-canvas)]/50 ${stripCellClass}`}>
+                {inner}
+            </Link>
+        )
+    }
+
+    return <div className={stripCellClass}>{inner}</div>
+}
+
+function HoldingLines({ items, valueClassName = 'text-[var(--paper-ink)]' }) {
+    return items.map((item) => (
+        <div key={item.key} className="flex items-baseline justify-between gap-4 py-2 pl-4">
+            <p className="truncate text-[13px] text-[var(--paper-muted)]">{item.name}</p>
+            <BlurredValue>
+                <p className={`text-[13px] font-normal tabular-nums ${valueClassName}`}>{item.display}</p>
+            </BlurredValue>
+        </div>
+    ))
+}
+
+function MetaRow({ label, hint, value }) {
+    return (
+        <div className="flex items-baseline justify-between gap-4 py-3">
+            <div className="min-w-0">
+                <p className="text-sm font-semibold text-[var(--paper-ink)]">{label}</p>
+                {hint ? <p className="mt-0.5 text-xs font-normal text-[var(--paper-muted)]">{hint}</p> : null}
+            </div>
+            <p className="shrink-0 text-right text-sm font-semibold tabular-nums text-[var(--paper-ink)]">{value}</p>
         </div>
     )
 }

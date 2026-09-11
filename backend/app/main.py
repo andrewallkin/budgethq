@@ -31,6 +31,7 @@ from .routers.salary import router as salary_router
 from .routers.investec import router as investec_router
 from .routers.manual_accounts import router as manual_accounts_router
 from .routers.investments import router as investments_router
+from .routers.investments_v2 import router as investments_v2_router
 from .routers.external import router as external_router
 
 from . import database  # noqa: E402
@@ -110,5 +111,6 @@ app.include_router(salary_router, prefix="/api")
 app.include_router(investec_router)
 app.include_router(manual_accounts_router, prefix="/api")
 app.include_router(investments_router, prefix="/api")
+app.include_router(investments_v2_router, prefix="/api")
 app.include_router(external_router, prefix="/api")
 

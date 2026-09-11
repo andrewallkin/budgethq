@@ -2,6 +2,104 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --paper-canvas: #f3ebe0;
+  --paper-card: #fff8ef;
+  --paper-ink: #2c2416;
+  --paper-muted: #7a6d5c;
+  --paper-line: #e2d5c2;
+  --paper-accent: #8b5e34;
+  --paper-olive: #5f6f4e;
+  --paper-brick: #8f4a3c;
+  --paper-shadow: 0 1px 0 rgba(44, 36, 22, 0.04);
+}
+
+.dark {
+  --paper-canvas: #1a1612;
+  --paper-card: #241f1a;
+  --paper-ink: #f3ebe0;
+  --paper-muted: #a89884;
+  --paper-line: #3c342a;
+  --paper-accent: #c4a06a;
+  --paper-olive: #8fa07a;
+  --paper-brick: #c47868;
+  --paper-shadow: none;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Pin Tailwind sr-only so position:absolute does not extend the page scrollport. */
+.sr-only {
+  top: 0;
+  left: 0;
+}
+
 body {
-  @apply bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-white transition-colors duration-200;
+  @apply transition-colors duration-200;
+  background: var(--paper-canvas);
+  color: var(--paper-ink);
+}
+
+.app-shell {
+  font-family: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --lab-lime: #c6e63a;
+  --lab-orange: #f4a261;
+  --lab-yellow: #f4d35e;
+  --lab-ink: #171717;
+  --lab-muted: #737373;
+  --lab-canvas: #f3f4f6;
+  --lab-shadow: 0 12px 40px rgba(17, 17, 17, 0.06);
+}
+
+.paper-shell {
+  background: var(--paper-canvas);
+  color: var(--paper-ink);
+}
+
+.paper-card {
+  background: var(--paper-card);
+  border: 1px solid var(--paper-line);
+  border-radius: 0.75rem;
+  box-shadow: var(--paper-shadow);
+}
+
+.app-shell .tabular-nums,
+.app-shell .font-mono {
+  font-family: "Geist Mono", ui-monospace, monospace;
+}
+
+.ui-lab-card {
+  background: #fff;
+  border-radius: 1.5rem;
+  box-shadow: var(--lab-shadow);
+}
+
+.dark .ui-lab-card {
+  background: #171717;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.28);
+}
+
+.app-shell input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.app-shell input[type='number']::-webkit-inner-spin-button,
+.app-shell input[type='number']::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.banking-nav-scroll {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.banking-nav-scroll::-webkit-scrollbar {
+  display: none;
 }

@@ -1,8 +1,16 @@
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { X, PenLine, Plus, Trash2, AlertCircle } from 'lucide-react'
 import axios from 'axios'
 import BlurredValue from './BlurredValue'
 import { formatCurrency } from '../utils/numberFormatting'
+import { paperEyebrow, paperMoney, paperMoneyTone } from './appUi'
+
+const btnBase = 'inline-flex min-h-[40px] cursor-pointer items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-50'
+const btnPrimary = `${btnBase} bg-[var(--paper-ink)] text-[var(--paper-card)] hover:opacity-90`
+const btnGhost = `${btnBase} border border-[var(--paper-line)] bg-[var(--paper-card)] text-[var(--paper-ink)] hover:bg-[var(--paper-canvas)]`
+const fieldInput = 'w-full rounded-md border border-[var(--paper-line)] bg-[var(--paper-card)] px-3 py-2.5 text-sm text-[var(--paper-ink)] outline-none transition-colors focus:ring-2 focus:ring-[var(--paper-accent)]/20'
+const hideNumberSpinners = '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none'
 
 export default function ManualPayslipModal({ isOpen, onClose, onSuccess, initialMonth, initialYear }) {
     const currentDate = new Date()
@@ -120,55 +128,65 @@ export default function ManualPayslipModal({ isOpen, onClose, onSuccess, initial
     const currentYear = new Date().getFullYear()
     const years = Array.from({ length: 10 }, (_, i) => currentYear - i)
 
-    return (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-5xl w-full mx-4 sm:mx-auto max-h-[90vh] overflow-hidden flex flex-col">
+    return createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4">
+            <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="manual-payslip-title"
+                className="mx-4 flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-md border border-[var(--paper-line)] bg-[var(--paper-card)] sm:mx-auto"
+            >
                 {/* Header */}
-                <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20">
+                <div className="flex items-center justify-between border-b border-[var(--paper-line)] px-5 py-4 sm:px-6">
                     <div className="flex items-center gap-3">
-                        <PenLine className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+                        <PenLine className="h-5 w-5 text-[var(--paper-muted)]" aria-hidden="true" />
                         <div>
-                            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                            <h2 id="manual-payslip-title" className="text-lg font-semibold text-[var(--paper-ink)]">
                                 Enter Payslip Manually
                             </h2>
-                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                            <p className={paperEyebrow}>
                                 Fill in your payslip details directly
                             </p>
                         </div>
                     </div>
                     <button
+                        type="button"
                         onClick={handleClose}
-                        className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                        aria-label="Close"
                         disabled={submitting}
+                        className="inline-flex min-h-[40px] min-w-[40px] cursor-pointer items-center justify-center text-[var(--paper-muted)] transition-colors hover:text-[var(--paper-ink)] disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                        <X className="w-5 h-5" />
+                        <X className="h-5 w-5" aria-hidden="true" />
                     </button>
                 </div>
 
                 {/* Content */}
-                <div className="p-4 sm:p-6 space-y-6 overflow-y-auto flex-1 min-h-0">
+                <div className="min-h-0 flex-1 space-y-6 overflow-y-auto p-5 text-[var(--paper-ink)] sm:p-6">
                     {/* Error */}
                     {error && (
-                        <div className="flex items-start gap-3 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-                            <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-                            <p className="text-sm text-red-900 dark:text-red-200">{error}</p>
+                        <div
+                            role="alert"
+                            className="flex items-start gap-3 rounded-md border border-[var(--paper-line)] bg-[var(--paper-canvas)] p-4"
+                        >
+                            <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-[var(--paper-brick)]" aria-hidden="true" />
+                            <p className="text-sm text-[var(--paper-brick)]">{error}</p>
                         </div>
                     )}
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
                         {/* LEFT COLUMN */}
-                        <div className="lg:col-span-2 space-y-6">
+                        <div className="space-y-6 lg:col-span-2">
                             {/* Month & Year */}
                             <Section title="Month & Year">
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
-                                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                                        <label className="mb-1 block text-sm text-[var(--paper-ink)]">
                                             Month
                                         </label>
                                         <select
                                             value={month}
                                             onChange={(e) => setMonth(parseInt(e.target.value))}
-                                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                                            className={fieldInput}
                                         >
                                             {monthNames.map((name, idx) => (
                                                 <option key={idx + 1} value={idx + 1}>{name}</option>
@@ -176,13 +194,13 @@ export default function ManualPayslipModal({ isOpen, onClose, onSuccess, initial
                                         </select>
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                                        <label className="mb-1 block text-sm text-[var(--paper-ink)]">
                                             Year
                                         </label>
                                         <select
                                             value={year}
                                             onChange={(e) => setYear(parseInt(e.target.value))}
-                                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                                            className={fieldInput}
                                         >
                                             {years.map((y) => (
                                                 <option key={y} value={y}>{y}</option>
@@ -222,11 +240,11 @@ export default function ManualPayslipModal({ isOpen, onClose, onSuccess, initial
 
                             {/* Company Contributions */}
                             <Section title="Company Contributions">
-                                <div className="mb-3 p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
-                                    <p className="text-sm text-purple-900 dark:text-purple-100 font-medium">
-                                        ℹ️ Company contributions increase Cost to Company
+                                <div className="mb-3 rounded-md border border-[var(--paper-line)] bg-[var(--paper-canvas)] p-3">
+                                    <p className="text-sm font-medium text-[var(--paper-ink)]">
+                                        Company contributions increase Cost to Company
                                     </p>
-                                    <p className="text-xs text-purple-700 dark:text-purple-300 mt-1">
+                                    <p className="mt-1 text-xs text-[var(--paper-muted)]">
                                         These are paid by your employer (not to you) but increase your taxable income.
                                     </p>
                                 </div>
@@ -259,69 +277,77 @@ export default function ManualPayslipModal({ isOpen, onClose, onSuccess, initial
 
                         {/* RIGHT COLUMN - Summary */}
                         <div className="lg:col-span-1">
-                            <div className="sticky top-0 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700">
-                                <div className="bg-gray-50 dark:bg-gray-900/50 p-4 border-b border-gray-200 dark:border-gray-700">
-                                    <h3 className="font-bold text-gray-900 dark:text-white">Summary</h3>
+                            <div className="sticky top-0 rounded-md border border-[var(--paper-line)] bg-[var(--paper-card)]">
+                                <div className="border-b border-[var(--paper-line)] p-4">
+                                    <h3 className="font-semibold text-[var(--paper-ink)]">Summary</h3>
                                 </div>
-                                <div className="p-4 space-y-3 text-sm">
-                                    <SummaryRow label="Gross Salary" value={grossVal} isGreen />
-                                    <SummaryRow label="Additional Income" value={totalAdditionalIncome} isGreen />
+                                <div className="space-y-3 p-4 text-sm">
+                                    <SummaryRow label="Gross Salary" value={grossVal} tone="positive" />
+                                    <SummaryRow label="Additional Income" value={totalAdditionalIncome} tone="positive" />
 
-                                    <div className="border-t border-gray-200 dark:border-gray-700 my-2"></div>
+                                    <div className="my-2 border-t border-[var(--paper-line)]" />
 
                                     {totalCompanyContrib > 0 && (
                                         <div className="space-y-1">
-                                            <SummaryRow label="Company Contributions" value={totalCompanyContrib} isInfo />
-                                            <p className="text-xs text-gray-500 dark:text-gray-400 italic pl-1">
+                                            <SummaryRow label="Company Contributions" value={totalCompanyContrib} tone="ink" />
+                                            <p className="pl-1 text-xs italic text-[var(--paper-muted)]">
                                                 (Paid by employer, increases taxable income)
                                             </p>
-                                            <div className="border-t border-dashed border-gray-300 dark:border-gray-600 my-2"></div>
+                                            <div className="my-2 border-t border-dashed border-[var(--paper-line)]" />
                                         </div>
                                     )}
 
-                                    <div className="flex justify-between text-purple-700 dark:text-purple-400 font-semibold">
+                                    <div className="flex justify-between font-semibold text-[var(--paper-ink)]">
                                         <span>Cost to Company</span>
-                                        <BlurredValue><span>{formatCurrency(costToCompany)}</span></BlurredValue>
+                                        <BlurredValue>
+                                            <span className={paperMoney}>{formatCurrency(costToCompany)}</span>
+                                        </BlurredValue>
                                     </div>
 
-                                    <div className="border-t border-gray-200 dark:border-gray-700 my-2"></div>
+                                    <div className="my-2 border-t border-[var(--paper-line)]" />
 
-                                    <SummaryRow label="PAYE (Tax)" value={payeVal} isRed />
-                                    <SummaryRow label="UIF" value={uifVal} isRed />
-                                    <SummaryRow label="Personal Deductions" value={totalPersonalDeduct} isRed />
+                                    <SummaryRow label="PAYE (Tax)" value={payeVal} tone="negative" />
+                                    <SummaryRow label="UIF" value={uifVal} tone="negative" />
+                                    <SummaryRow label="Personal Deductions" value={totalPersonalDeduct} tone="negative" />
 
-                                    <div className="border-t-2 border-gray-200 dark:border-gray-700 my-3"></div>
+                                    <div className="my-3 border-t-2 border-[var(--paper-line)]" />
 
                                     {/* Net Pay — editable */}
                                     <div className="space-y-2">
-                                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">
+                                        <label className="block text-sm text-[var(--paper-ink)]">
                                             Net Pay / Take Home *
                                         </label>
                                         <div className="relative">
-                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-bold">R</span>
+                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 font-semibold text-[var(--paper-muted)]">R</span>
                                             <input
                                                 type="number"
                                                 value={netPay}
                                                 onChange={(e) => setNetPay(e.target.value)}
                                                 placeholder="0.00"
-                                                className="w-full pl-8 pr-3 py-2 text-lg font-bold border-2 border-blue-500 dark:border-blue-400 rounded-lg bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 focus:ring-2 focus:ring-blue-500"
+                                                className={`${fieldInput} ${hideNumberSpinners} pl-8 text-base font-semibold`}
                                             />
                                         </div>
 
                                         {/* Warn if entered net pay differs from calculated */}
                                         {netPay && Math.abs(netPayVal - calculatedNetPay) > 0.01 && (
-                                            <div className="text-xs text-amber-600 dark:text-amber-400 flex items-start gap-1">
-                                                <AlertCircle className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                                            <div className="flex items-start gap-1 text-xs text-[var(--paper-muted)]">
+                                                <AlertCircle className="mt-0.5 h-3 w-3 flex-shrink-0" aria-hidden="true" />
                                                 <span>
                                                     Calculated: <BlurredValue>{formatCurrency(calculatedNetPay)}</BlurredValue>
-                                                    <br />Difference: <BlurredValue>{formatCurrency(Math.abs(netPayVal - calculatedNetPay))}</BlurredValue>
+                                                    <br />
+                                                    Difference:{' '}
+                                                    <BlurredValue>
+                                                        <span className="text-[var(--paper-brick)]">
+                                                            {formatCurrency(Math.abs(netPayVal - calculatedNetPay))}
+                                                        </span>
+                                                    </BlurredValue>
                                                 </span>
                                             </div>
                                         )}
 
                                         {/* Show calculated as hint when field is empty */}
                                         {!netPay && calculatedNetPay > 0 && (
-                                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                                            <p className="text-xs text-[var(--paper-muted)]">
                                                 Calculated: <BlurredValue>{formatCurrency(calculatedNetPay)}</BlurredValue>
                                             </p>
                                         )}
@@ -333,25 +359,28 @@ export default function ManualPayslipModal({ isOpen, onClose, onSuccess, initial
                 </div>
 
                 {/* Footer */}
-                <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
+                <div className="flex items-center justify-end gap-3 border-t border-[var(--paper-line)] bg-[var(--paper-card)] px-5 py-4 sm:px-6">
                     <button
+                        type="button"
                         onClick={handleClose}
                         disabled={submitting}
-                        className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-50"
+                        className={btnGhost}
                     >
                         Cancel
                     </button>
                     <button
+                        type="button"
                         onClick={handleSubmit}
                         disabled={submitting}
-                        className="px-6 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+                        className={btnPrimary}
                     >
-                        <PenLine className="w-4 h-4" />
+                        <PenLine className="h-4 w-4" aria-hidden="true" />
                         {submitting ? 'Saving...' : 'Save Payslip'}
                     </button>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     )
 }
 
@@ -359,8 +388,8 @@ export default function ManualPayslipModal({ isOpen, onClose, onSuccess, initial
 
 function Section({ title, children }) {
     return (
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
-            <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">{title}</h3>
+        <div className="rounded-md border border-[var(--paper-line)] bg-[var(--paper-canvas)] p-4">
+            <h3 className="mb-3 text-sm font-semibold text-[var(--paper-ink)]">{title}</h3>
             <div className="space-y-3">
                 {children}
             </div>
@@ -371,7 +400,7 @@ function Section({ title, children }) {
 function EditField({ label, value, onChange, placeholder }) {
     return (
         <div>
-            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+            <label className="mb-1 block text-sm text-[var(--paper-ink)]">
                 {label}
             </label>
             <input
@@ -379,7 +408,7 @@ function EditField({ label, value, onChange, placeholder }) {
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
                 placeholder={placeholder}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                className={fieldInput}
             />
         </div>
     )
@@ -388,33 +417,36 @@ function EditField({ label, value, onChange, placeholder }) {
 function NumericField({ label, value, onChange }) {
     return (
         <div>
-            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+            <label className="mb-1 block text-sm text-[var(--paper-ink)]">
                 {label}
             </label>
             <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">R</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--paper-muted)]">R</span>
                 <input
                     type="number"
                     value={value}
                     onChange={(e) => onChange(e.target.value)}
                     placeholder="0.00"
-                    className="w-full pl-8 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                    className={`${fieldInput} ${hideNumberSpinners} pl-8`}
                 />
             </div>
         </div>
     )
 }
 
+const itemFieldInput = 'rounded-md border border-[var(--paper-line)] bg-[var(--paper-card)] px-2 py-1.5 text-sm text-[var(--paper-ink)] outline-none transition-colors focus:ring-2 focus:ring-[var(--paper-accent)]/20'
+
 function ItemList({ items, onUpdate, onDelete, onAdd, placeholder }) {
     if (items.length === 0) {
         return (
-            <div className="text-center py-4">
-                <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">No items</p>
+            <div className="py-4 text-center">
+                <p className="mb-2 text-sm text-[var(--paper-muted)]">No items</p>
                 <button
+                    type="button"
                     onClick={onAdd}
-                    className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 font-medium flex items-center gap-1 mx-auto"
+                    className="mx-auto inline-flex min-h-[40px] items-center gap-1 text-xs font-medium text-[var(--paper-ink)] hover:underline"
                 >
-                    <Plus className="w-3 h-3" />
+                    <Plus className="h-3 w-3" aria-hidden="true" />
                     Add Item
                 </button>
             </div>
@@ -424,55 +456,59 @@ function ItemList({ items, onUpdate, onDelete, onAdd, placeholder }) {
     return (
         <div className="space-y-2">
             {items.map((item, idx) => (
-                <div key={idx} className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-700 rounded-lg group">
+                <div key={idx} className="group flex items-center gap-2 rounded-md border border-[var(--paper-line)] bg-[var(--paper-card)] p-2">
                     <input
                         type="text"
                         value={item.description}
                         onChange={(e) => onUpdate(idx, 'description', e.target.value)}
                         placeholder={placeholder}
-                        className="flex-1 px-2 py-1 text-sm bg-white dark:bg-gray-600 border border-gray-200 dark:border-gray-500 rounded text-gray-900 dark:text-white"
+                        className={`${itemFieldInput} flex-1`}
                     />
                     <div className="relative w-28">
-                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-500 text-xs">R</span>
+                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-[var(--paper-muted)]">R</span>
                         <input
                             type="number"
                             value={item.amount}
                             onChange={(e) => onUpdate(idx, 'amount', e.target.value)}
                             placeholder="0.00"
-                            className="w-full pl-6 pr-2 py-1 text-sm bg-white dark:bg-gray-600 border border-gray-200 dark:border-gray-500 rounded text-right text-gray-900 dark:text-white"
+                            className={`${itemFieldInput} ${hideNumberSpinners} w-full pl-6 pr-2 text-right`}
                         />
                     </div>
                     <button
+                        type="button"
                         onClick={() => onDelete(idx)}
-                        className="p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                        aria-label="Remove item"
+                        className="inline-flex min-h-[40px] min-w-[40px] cursor-pointer items-center justify-center text-[var(--paper-muted)] opacity-0 transition-opacity hover:text-[var(--paper-brick)] group-hover:opacity-100"
                     >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="h-4 w-4" aria-hidden="true" />
                     </button>
                 </div>
             ))}
             <button
+                type="button"
                 onClick={onAdd}
-                className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 font-medium flex items-center gap-1"
+                className="inline-flex min-h-[40px] items-center gap-1 text-xs font-medium text-[var(--paper-ink)] hover:underline"
             >
-                <Plus className="w-3 h-3" />
+                <Plus className="h-3 w-3" aria-hidden="true" />
                 Add Item
             </button>
         </div>
     )
 }
 
-function SummaryRow({ label, value, isGreen, isRed, isInfo }) {
-    let colorClass = ''
-    if (isGreen) colorClass = 'text-green-600 dark:text-green-400'
-    else if (isRed) colorClass = 'text-red-600 dark:text-red-400'
-    else if (isInfo) colorClass = 'text-purple-600 dark:text-purple-400'
+function SummaryRow({ label, value, tone = 'muted' }) {
+    let valueClass = 'text-[var(--paper-ink)]'
+    if (tone === 'positive') valueClass = paperMoneyTone(1)
+    else if (tone === 'negative') valueClass = paperMoneyTone(-1)
 
     return (
-        <div className="flex justify-between items-center">
-            <span className="text-gray-600 dark:text-gray-400">{label}</span>
-            <BlurredValue><span className={`font-medium ${colorClass}`}>
-                {isRed && '- '}{formatCurrency(value || 0)}
-            </span></BlurredValue>
+        <div className="flex items-center justify-between">
+            <span className="text-[var(--paper-muted)]">{label}</span>
+            <BlurredValue>
+                <span className={`${paperMoney} ${valueClass}`}>
+                    {tone === 'negative' && '- '}{formatCurrency(value || 0)}
+                </span>
+            </BlurredValue>
         </div>
     )
 }

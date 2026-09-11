@@ -1,59 +1,159 @@
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import axios from 'axios'
 import { CreditCard, Receipt, Tag, TrendingUp } from 'lucide-react'
+import BlurredValue from '../components/BlurredValue'
+import { BankingPageHeader } from '../components/BankingNav'
+import { summarizeAccountBalances } from '../utils/accountBalances'
+import { formatCurrency, formatDateSafe } from '../utils/numberFormatting'
+import { PaperCard, paperMoney } from '../components/appUi'
 
 const CARDS = [
     {
         path: '/investec/accounts',
-        title: 'Bank Accounts',
-        description: 'Sync balances, set primary and emergency fund accounts, and manage manual accounts.',
+        label: 'Accounts',
+        title: 'Review balances',
+        description: 'Sync accounts, set primary and emergency fund, and manage manual accounts.',
         icon: CreditCard,
     },
     {
         path: '/investec/transactions',
-        title: 'Transactions',
-        description: 'Review Investec transactions and categorization.',
+        label: 'Transactions',
+        title: 'Review spend',
+        description: 'Browse transactions, categorize spending, and export statements.',
         icon: Receipt,
     },
     {
         path: '/investec/budget-analysis',
-        title: 'Budget Analysis',
-        description: 'Compare actual spending to your budget by category.',
+        label: 'Analysis',
+        title: 'Compare to budget',
+        description: 'See how actual spending tracks against your monthly budget.',
         icon: TrendingUp,
     },
     {
         path: '/investec/rules',
-        title: 'Categorization Rules',
-        description: 'Create rules to override automatic transaction categories.',
+        label: 'Rules',
+        title: 'Fix categories',
+        description: 'Create rules so recurring merchants get the right category automatically.',
         icon: Tag,
     },
 ]
 
 export default function InvestecLanding() {
-    return (
-        <div className="space-y-6">
-            <div className="bg-gradient-to-r from-teal-600 to-slate-700 p-7 md:p-8 rounded-xl shadow-lg">
-                <h1 className="text-3xl font-bold text-white">Investec Banking</h1>
-                <p className="text-teal-100 mt-2 max-w-3xl text-base leading-relaxed">
-                    Manage your Investec banking from one place: accounts, transactions, budget analysis, and categorization rules.
-                </p>
-            </div>
+    const [status, setStatus] = useState({
+        loading: true,
+        connected: false,
+        accountCount: 0,
+        totalCash: 0,
+        liabilityTotal: 0,
+        loanCount: 0,
+        lastSynced: null,
+    })
 
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-2 gap-6">
-                {CARDS.map(({ path, title, description, icon: Icon }) => (
+    useEffect(() => {
+        const load = async () => {
+            const safeGet = async (url) => {
+                try {
+                    const response = await axios.get(url)
+                    return response.data
+                } catch {
+                    return null
+                }
+            }
+
+            const [credentialsData, investecAccountsData, manualAccountsData] = await Promise.all([
+                safeGet('/api/investec/credentials/status'),
+                safeGet('/api/investec/accounts'),
+                safeGet('/api/manual-accounts'),
+            ])
+
+            const investecAccounts = Array.isArray(investecAccountsData) ? investecAccountsData : []
+            const manualAccounts = Array.isArray(manualAccountsData) ? manualAccountsData : []
+            const activeInvestec = investecAccounts.filter((a) => a.is_active !== false)
+            const balances = summarizeAccountBalances(investecAccounts, manualAccounts)
+
+            const lastSynced = activeInvestec.reduce((latest, account) => {
+                if (!account.last_synced) return latest
+                const accountDate = new Date(account.last_synced)
+                return !latest || accountDate > latest ? accountDate : latest
+            }, null)
+
+            setStatus({
+                loading: false,
+                connected: Boolean(credentialsData?.is_connected),
+                accountCount: activeInvestec.length + manualAccounts.length,
+                totalCash: balances.cashTotal,
+                liabilityTotal: balances.liabilityTotal,
+                loanCount: balances.loanCount,
+                lastSynced: lastSynced && !Number.isNaN(lastSynced.getTime()) ? lastSynced : null,
+            })
+        }
+
+        load()
+    }, [])
+
+    return (
+        <div className="mx-auto max-w-[1080px] space-y-6">
+            <BankingPageHeader
+                title="Overview"
+                description="Accounts, transactions, budget analysis, and categorization — in one place."
+            />
+
+            {!status.loading && (
+                <PaperCard className="flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 sm:px-5">
+                    <span className="text-sm text-[var(--paper-muted)]">
+                        {status.connected ? (
+                            <span className="text-[var(--paper-olive)]">Connected</span>
+                        ) : (
+                            <span>Not connected</span>
+                        )}
+                    </span>
+                    <span className="text-sm text-[var(--paper-muted)]">
+                        {status.accountCount} account{status.accountCount !== 1 ? 's' : ''}
+                    </span>
+                    <span className="text-sm text-[var(--paper-muted)]">
+                        Last synced{' '}
+                        {status.lastSynced
+                            ? formatDateSafe(status.lastSynced.toISOString(), {
+                                  day: 'numeric',
+                                  month: 'short',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                              })
+                            : '—'}
+                    </span>
+                    <span className="ml-auto text-right text-sm text-[var(--paper-ink)]">
+                        <span className="block">
+                            Total cash{' '}
+                            <BlurredValue>
+                                <span className={paperMoney}>{formatCurrency(status.totalCash)}</span>
+                            </BlurredValue>
+                        </span>
+                        {status.loanCount > 0 ? (
+                            <span className="mt-0.5 block text-xs text-[var(--paper-brick)]">
+                                Liabilities{' '}
+                                <BlurredValue>
+                                    <span className={paperMoney}>{formatCurrency(status.liabilityTotal)}</span>
+                                </BlurredValue>
+                            </span>
+                        ) : null}
+                    </span>
+                </PaperCard>
+            )}
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                {CARDS.map(({ path, label, title, description, icon: Icon }) => (
                     <Link
                         key={path}
                         to={path}
-                        className="bg-white dark:bg-gray-800 p-7 md:p-8 min-h-[9.5rem] md:min-h-[10.5rem] rounded-xl border border-gray-200 dark:border-gray-600 shadow-sm hover:border-teal-400 dark:hover:border-teal-500 focus-visible:border-teal-400 dark:focus-visible:border-teal-500 transition-colors flex flex-col gap-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 dark:focus-visible:ring-teal-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-900"
+                        className="paper-card group block cursor-pointer p-5 transition-colors hover:bg-[var(--paper-canvas)]/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--paper-accent)]/30 sm:p-6"
                     >
-                        <div className="flex items-start gap-4 md:gap-5">
-                            <div className="p-3 rounded-xl bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300 shrink-0">
-                                <Icon className="w-8 h-8 md:w-9 md:h-9" />
-                            </div>
-                            <div className="min-w-0">
-                                <h2 className="text-xl md:text-2xl font-semibold text-gray-900 dark:text-white">{title}</h2>
-                                <p className="text-base text-gray-600 dark:text-gray-400 mt-2 leading-relaxed">{description}</p>
-                            </div>
+                        <div className="flex items-center gap-2 text-[var(--paper-muted)]">
+                            <Icon className="h-4 w-4" aria-hidden />
+                            <span className="text-xs font-medium uppercase tracking-[0.12em]">{label}</span>
                         </div>
+                        <h2 className="mt-3 text-lg font-semibold text-[var(--paper-ink)]">{title}</h2>
+                        <p className="mt-2 text-sm leading-relaxed text-[var(--paper-muted)]">{description}</p>
                     </Link>
                 ))}
             </div>

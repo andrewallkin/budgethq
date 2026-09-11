@@ -6,14 +6,21 @@ from datetime import date, datetime, time, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy import func, or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from . import models
 from .fx_service import FxRatesResult, amount_in_base, get_fx_rates_cached
 from .portfolio_service import ensure_default_tfsa_portfolio
 from .routers.investments import _fx_public_snapshot, _portfolio_value
+from .routers.investments_v2 import _latest_portfolio_value
+from .services.sygnia.extract import parse_zar_amount
 from .tax_engine import get_tax_config
 from .utils import get_sa_financial_year_start, get_sast_now
+
+SHEETS_SOURCE = "sheets"
+SHEETS_SOURCE_ID = "google_sheets"
+PLAYWRIGHT_SOURCE = "playwright"
+SYGNIA_PLAYWRIGHT_SOURCE_ID = "sygnia_playwright"
 
 
 def _parse_since_param(since_raw: Optional[str]) -> Optional[datetime]:
@@ -123,33 +130,71 @@ def _foreign_cashflows_since(
     }
 
 
-def _ra_cashflows(db: Session, user_id: int, since_anchor: datetime) -> dict:
+def playwright_account_slug(source_id: str, account_code: str) -> str:
+    return f"{source_id}-{account_code}"
+
+
+def load_playwright_accounts(
+    db: Session,
+    user_id: int,
+    *,
+    with_children: bool = False,
+) -> list[tuple[str, object]]:
+    """Every connected Playwright account, across adapters.
+
+    Investments 2.0 groups brokers as sourceKind `playwright`. Sygnia is the
+    only live adapter today; append more loaders here when new brokers land.
+    """
+    accounts: list[tuple[str, object]] = []
+    accounts.extend(_load_sygnia_playwright_accounts(db, user_id, with_children=with_children))
+    return accounts
+
+
+def _query_rows(query) -> list:
+    rows = query.all()
+    return rows if isinstance(rows, list) else []
+
+
+def _load_sygnia_playwright_accounts(
+    db: Session,
+    user_id: int,
+    *,
+    with_children: bool,
+) -> list[tuple[str, models.SygniaAccount]]:
+    query = db.query(models.SygniaAccount).filter(models.SygniaAccount.user_id == user_id)
+    if with_children:
+        query = query.options(selectinload(models.SygniaAccount.holdings))
+    query = query.order_by(models.SygniaAccount.name.asc())
+    return [(SYGNIA_PLAYWRIGHT_SOURCE_ID, account) for account in _query_rows(query)]
+
+
+def _sygnia_contribution_cashflows(db: Session, account_id: int, since_anchor: datetime) -> dict:
     fy_start_year = get_sa_financial_year_start()
     fy_start_date = date(fy_start_year, 3, 1)
     fy_end_date = date(fy_start_year + 1, 2, 28)
 
     contributions_this_fy = float(
-        db.query(func.coalesce(func.sum(models.RAContribution.amount), 0))
+        db.query(func.coalesce(func.sum(models.SygniaContribution.amount), 0))
         .filter(
-            models.RAContribution.user_id == user_id,
-            models.RAContribution.contribution_date >= fy_start_date,
-            models.RAContribution.contribution_date <= fy_end_date,
+            models.SygniaContribution.account_id == account_id,
+            models.SygniaContribution.contribution_date >= fy_start_date,
+            models.SygniaContribution.contribution_date <= fy_end_date,
         )
         .scalar()
         or 0
     )
     contributions_since = float(
-        db.query(func.coalesce(func.sum(models.RAContribution.amount), 0))
+        db.query(func.coalesce(func.sum(models.SygniaContribution.amount), 0))
         .filter(
-            models.RAContribution.user_id == user_id,
-            models.RAContribution.contribution_date >= since_anchor.date(),
+            models.SygniaContribution.account_id == account_id,
+            models.SygniaContribution.contribution_date >= since_anchor.date(),
         )
         .scalar()
         or 0
     )
     cumulative_contributions = float(
-        db.query(func.coalesce(func.sum(models.RAContribution.amount), 0))
-        .filter(models.RAContribution.user_id == user_id)
+        db.query(func.coalesce(func.sum(models.SygniaContribution.amount), 0))
+        .filter(models.SygniaContribution.account_id == account_id)
         .scalar()
         or 0
     )
@@ -158,15 +203,6 @@ def _ra_cashflows(db: Session, user_id: int, since_anchor: datetime) -> dict:
         "contributions_since": _round(contributions_since),
         "cumulative_contributions": _round(cumulative_contributions),
     }
-
-
-def _latest_ra_snapshot(db: Session, user_id: int) -> Optional[models.RAValueHistory]:
-    return (
-        db.query(models.RAValueHistory)
-        .filter(models.RAValueHistory.user_id == user_id)
-        .order_by(models.RAValueHistory.record_date.desc())
-        .first()
-    )
 
 
 def _build_holdings(
@@ -262,7 +298,8 @@ def _build_sheets_account(
         "name": portfolio.name,
         "slug": portfolio.slug,
         "currency": currency,
-        "source": "sheets",
+        "source": SHEETS_SOURCE,
+        "source_id": SHEETS_SOURCE_ID,
         "composition_available": True,
         "value": _round(native_value),
         "value_base": _round(value_base),
@@ -283,23 +320,96 @@ def _build_sheets_account(
     return account
 
 
-def _build_ra_account(db: Session, user_id: int, since_anchor: datetime) -> dict:
-    latest = _latest_ra_snapshot(db, user_id)
-    native_value = round(latest.portfolio_value or 0, 2) if latest else 0.0
-    as_of = latest.record_date.isoformat() if latest else None
+def _build_sygnia_playwright_holdings(account: models.SygniaAccount, sleeve_total: float) -> list[dict]:
+    holdings = []
+    for holding in account.holdings or []:
+        native_value = parse_zar_amount(holding.market_value)
+        weight = parse_zar_amount(holding.percentage)
+        if weight is None and native_value is not None and sleeve_total > 0:
+            weight = round((native_value / sleeve_total) * 100, 2)
+        holdings.append({
+            "ticker": holding.investment_code,
+            "name": holding.investment_name,
+            "shares": parse_zar_amount(holding.units),
+            "price": parse_zar_amount(holding.unit_price),
+            "value": _round(native_value),
+            "value_base": _round(native_value),
+            "weight_actual": round(weight, 2) if weight is not None else None,
+        })
+    return holdings
 
+
+def _build_sygnia_playwright_account(
+    db: Session,
+    account: models.SygniaAccount,
+    since_anchor: datetime,
+) -> dict:
+    native_value = _latest_portfolio_value(db, account.id, account.as_of_date)
+    as_of = account.as_of_date.isoformat() if account.as_of_date else None
+    product_type = account.product_type
     return {
-        "name": "Retirement Annuity",
-        "slug": "ra",
+        "name": account.name,
+        "slug": playwright_account_slug(SYGNIA_PLAYWRIGHT_SOURCE_ID, account.account_code),
         "currency": "ZAR",
-        "source": "ra_manual",
-        "composition_available": False,
-        "value": native_value,
-        "value_base": native_value,
+        "source": PLAYWRIGHT_SOURCE,
+        "source_id": SYGNIA_PLAYWRIGHT_SOURCE_ID,
+        "product_type": product_type,
+        "composition_available": True,
+        "value": _round(native_value),
+        "value_base": _round(native_value),
         "as_of": as_of,
-        "is_retirement_annuity": True,
-        "cashflows": _ra_cashflows(db, user_id, since_anchor),
+        "is_retirement_annuity": product_type == "ra",
+        "holdings": _build_sygnia_playwright_holdings(account, native_value),
+        "cashflows": _sygnia_contribution_cashflows(db, account.id, since_anchor),
     }
+
+
+_PLAYWRIGHT_ACCOUNT_BUILDERS = {
+    SYGNIA_PLAYWRIGHT_SOURCE_ID: _build_sygnia_playwright_account,
+}
+
+
+def _build_playwright_account(
+    db: Session,
+    source_id: str,
+    account,
+    since_anchor: datetime,
+) -> dict | None:
+    builder = _PLAYWRIGHT_ACCOUNT_BUILDERS.get(source_id)
+    if builder is None:
+        return None
+    return builder(db, account, since_anchor)
+
+
+def _sygnia_playwright_summary(db: Session, account: models.SygniaAccount) -> dict:
+    native_value = _latest_portfolio_value(db, account.id, account.as_of_date)
+    product_type = account.product_type
+    return {
+        "name": account.name,
+        "slug": playwright_account_slug(SYGNIA_PLAYWRIGHT_SOURCE_ID, account.account_code),
+        "currency": "ZAR",
+        "value": _round(native_value),
+        "value_base": _round(native_value),
+        "is_retirement_annuity": product_type == "ra",
+        "source": PLAYWRIGHT_SOURCE,
+        "source_id": SYGNIA_PLAYWRIGHT_SOURCE_ID,
+        "product_type": product_type,
+    }
+
+
+_PLAYWRIGHT_SUMMARY_BUILDERS = {
+    SYGNIA_PLAYWRIGHT_SOURCE_ID: _sygnia_playwright_summary,
+}
+
+
+def build_playwright_summary_accounts(db: Session, user_id: int) -> list[dict]:
+    summaries = []
+    for source_id, account in load_playwright_accounts(db, user_id):
+        builder = _PLAYWRIGHT_SUMMARY_BUILDERS.get(source_id)
+        if builder is None:
+            continue
+        summaries.append(builder(db, account))
+    return summaries
 
 
 def build_external_composition(
@@ -325,15 +435,15 @@ def build_external_composition(
         )
         .all()
     )
+    if not isinstance(portfolios, list):
+        portfolios = []
 
     accounts = [_build_sheets_account(db, user, portfolio, fx, since_anchor) for portfolio in portfolios]
 
-    if bool(getattr(user, "show_ra_under_investments", None)):
-        ra_account = _build_ra_account(db, user.id, since_anchor)
-        if accounts and accounts[0].get("slug") == "tfsa":
-            accounts.insert(1, ra_account)
-        else:
-            accounts.insert(0, ra_account)
+    for source_id, account in load_playwright_accounts(db, user.id, with_children=True):
+        payload = _build_playwright_account(db, source_id, account, since_anchor)
+        if payload is not None:
+            accounts.append(payload)
 
     as_of_values = [account["as_of"] for account in accounts if account.get("as_of")]
     response_as_of = max(as_of_values) if as_of_values else None

@@ -53,6 +53,8 @@ class User(Base):
     bank_transactions = relationship("BankTransaction", back_populates="owner", cascade="all, delete-orphan")
     categorization_rules = relationship("CategorizationRule", back_populates="owner", cascade="all, delete-orphan")
     emergency_fund_account = relationship("InvestecAccount", foreign_keys=[emergency_fund_account_id], post_update=True)
+    sygnia_logins = relationship("SygniaLogin", back_populates="owner", cascade="all, delete-orphan")
+    sygnia_accounts = relationship("SygniaAccount", back_populates="owner", cascade="all, delete-orphan")
 
 
 class InvestmentPortfolio(Base):
@@ -171,8 +173,7 @@ class BudgetCategory(Base):
     name = Column(String)
     amount = Column(Float)
     transaction_category = Column(String, nullable=True, default='uncategorized')  # Links to BankTransaction.category
-    excluded = Column(Boolean, default=False)  # If true, entry is visible but not counted in totals
-    cadence = Column(String, nullable=False, server_default='monthly')  # 'monthly', 'annual', or 'tracking'
+    excluded = Column(Boolean, default=False)  # If true, entry is visible but not counted in Budget Analysis
 
     budget = relationship("Budget", back_populates="categories")
 
@@ -619,3 +620,183 @@ class CategorizationRule(Base):
 
     # Relationships
     owner = relationship("User", back_populates="categorization_rules")
+
+
+# =====================================================
+# Investments 2.0 — Live Sygnia
+# =====================================================
+
+class SygniaLogin(Base):
+    """Encrypted Sygnia portal credentials; one login may own many connected accounts."""
+    __tablename__ = "sygnia_logins"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
+    username_encrypted = Column(String, nullable=False)
+    password_encrypted = Column(String, nullable=False)
+    created_at = Column(DateTime, default=get_sast_now)
+    updated_at = Column(DateTime, default=get_sast_now, onupdate=get_sast_now)
+
+    owner = relationship("User", back_populates="sygnia_logins")
+    accounts = relationship("SygniaAccount", back_populates="login", cascade="all, delete-orphan")
+
+
+class SygniaAccount(Base):
+    """Connected Sygnia account; current-state child rows replaced on sync when changed."""
+    __tablename__ = "sygnia_accounts"
+    __table_args__ = (
+        UniqueConstraint("user_id", "account_code", name="uq_sygnia_accounts_user_account_code"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
+    login_id = Column(Integer, ForeignKey("sygnia_logins.id"), index=True, nullable=False)
+    account_code = Column(String, nullable=False)
+    name = Column(String, nullable=False)
+    product_type = Column(String, nullable=True)  # ra | tfsa | offshore
+    account_type_name = Column(String, nullable=True)
+    account_type_code = Column(String, nullable=True)
+    foreign_allocation = Column(Float, nullable=True)
+    reg28_compliant = Column(Boolean, nullable=True)
+    as_of_date = Column(Date, nullable=True)
+    last_synced_at = Column(DateTime, nullable=True)
+    last_sync_status = Column(String, nullable=True)
+    last_sync_error = Column(Text, nullable=True)
+    holdings_total_market_value = Column(String, nullable=True)
+    holdings_total_percentage = Column(String, nullable=True)
+    retirement_account_market_value = Column(String, nullable=True)
+    created_at = Column(DateTime, default=get_sast_now)
+    updated_at = Column(DateTime, default=get_sast_now, onupdate=get_sast_now)
+
+    owner = relationship("User", back_populates="sygnia_accounts")
+    login = relationship("SygniaLogin", back_populates="accounts")
+    holdings = relationship("SygniaHolding", back_populates="account", cascade="all, delete-orphan")
+    retirement_components = relationship(
+        "SygniaRetirementComponent", back_populates="account", cascade="all, delete-orphan"
+    )
+    beneficiaries = relationship("SygniaBeneficiary", back_populates="account", cascade="all, delete-orphan")
+    debit_order = relationship(
+        "SygniaDebitOrder", back_populates="account", uselist=False, cascade="all, delete-orphan"
+    )
+    value_history = relationship("SygniaValueHistory", back_populates="account", cascade="all, delete-orphan")
+    contributions = relationship("SygniaContribution", back_populates="account", cascade="all, delete-orphan")
+
+
+class SygniaHolding(Base):
+    """Investment summary row from the Sygnia portal (portal-formatted strings)."""
+    __tablename__ = "sygnia_holdings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    account_id = Column(Integer, ForeignKey("sygnia_accounts.id", ondelete="CASCADE"), index=True, nullable=False)
+    investment_code = Column(String, nullable=False)
+    investment_name = Column(String, nullable=False)
+    units = Column(String, nullable=True)
+    unit_price = Column(String, nullable=True)
+    market_value = Column(String, nullable=True)
+    percentage = Column(String, nullable=True)
+
+    account = relationship("SygniaAccount", back_populates="holdings")
+
+
+class SygniaRetirementComponent(Base):
+    """Retirement fund component row (empty for non-RA accounts)."""
+    __tablename__ = "sygnia_retirement_components"
+
+    id = Column(Integer, primary_key=True, index=True)
+    account_id = Column(Integer, ForeignKey("sygnia_accounts.id", ondelete="CASCADE"), index=True, nullable=False)
+    component = Column(String, nullable=False)
+    market_value = Column(String, nullable=True)
+    benefit_lines = Column(Text, nullable=True)
+
+    account = relationship("SygniaAccount", back_populates="retirement_components")
+
+
+class SygniaBeneficiary(Base):
+    """Beneficiary row from the Sygnia portal (may be empty)."""
+    __tablename__ = "sygnia_beneficiaries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    account_id = Column(Integer, ForeignKey("sygnia_accounts.id", ondelete="CASCADE"), index=True, nullable=False)
+    name = Column(String, nullable=False)
+    beneficiary_relationship = Column("relationship", String, nullable=True)
+    allocation = Column(String, nullable=True)
+
+    account = relationship("SygniaAccount", back_populates="beneficiaries")
+
+
+class SygniaDebitOrder(Base):
+    """Debit order details — at most one row per account."""
+    __tablename__ = "sygnia_debit_orders"
+    __table_args__ = (
+        UniqueConstraint("account_id", name="uq_sygnia_debit_orders_account_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    account_id = Column(Integer, ForeignKey("sygnia_accounts.id", ondelete="CASCADE"), index=True, nullable=False)
+    debit_order_amount = Column(String, nullable=True)
+    escalation_rate = Column(String, nullable=True)
+    escalation_month = Column(String, nullable=True)
+    day_of_month = Column(String, nullable=True)
+    effective_date = Column(String, nullable=True)
+    linked_bank = Column(String, nullable=True)
+    created_at = Column(DateTime, default=get_sast_now)
+    updated_at = Column(DateTime, default=get_sast_now, onupdate=get_sast_now)
+
+    account = relationship("SygniaAccount", back_populates="debit_order")
+    allocations = relationship(
+        "SygniaDebitOrderAllocation", back_populates="debit_order", cascade="all, delete-orphan"
+    )
+
+
+class SygniaDebitOrderAllocation(Base):
+    """Fund allocation row for a debit order."""
+    __tablename__ = "sygnia_debit_order_allocations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    debit_order_id = Column(
+        Integer, ForeignKey("sygnia_debit_orders.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    investment_code = Column(String, nullable=True)
+    investment_name = Column(String, nullable=True)
+    allocation = Column(String, nullable=True)
+
+    debit_order = relationship("SygniaDebitOrder", back_populates="allocations")
+
+
+class SygniaValueHistory(Base):
+    """Daily portfolio value snapshot (T−1 from sync or month-end manual entry)."""
+    __tablename__ = "sygnia_value_history"
+    __table_args__ = (
+        UniqueConstraint("account_id", "record_date", name="uq_sygnia_value_history_account_record_date"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    account_id = Column(Integer, ForeignKey("sygnia_accounts.id", ondelete="CASCADE"), index=True, nullable=False)
+    record_date = Column(Date, index=True, nullable=False)
+    portfolio_value = Column(Float, nullable=False, default=0)
+    source = Column(String, nullable=False)
+    created_at = Column(DateTime, default=get_sast_now)
+    updated_at = Column(DateTime, default=get_sast_now, onupdate=get_sast_now)
+
+    account = relationship("SygniaAccount", back_populates="value_history")
+
+
+class SygniaContribution(Base):
+    """Manual deposit/contribution for a Sygnia account (RA-style month entries)."""
+    __tablename__ = "sygnia_contributions"
+    __table_args__ = (
+        UniqueConstraint(
+            "account_id",
+            "contribution_date",
+            name="uq_sygnia_contributions_account_contribution_date",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    account_id = Column(Integer, ForeignKey("sygnia_accounts.id", ondelete="CASCADE"), index=True, nullable=False)
+    contribution_date = Column(Date, index=True, nullable=False)
+    amount = Column(Float, nullable=False, default=0)
+    created_at = Column(DateTime, default=get_sast_now)
+    updated_at = Column(DateTime, default=get_sast_now, onupdate=get_sast_now)
+
+    account = relationship("SygniaAccount", back_populates="contributions")

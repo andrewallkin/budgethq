@@ -14,6 +14,18 @@ BudgetHQ is a personal finance dashboard for South African users. It combines:
 
 Core product areas include budgeting, salary and tax calculations, emergency savings, TFSA and investment portfolio tracking, Investec integration, Google Sheets ETF price syncing, and authenticated per-user data.
 
+Product docs:
+
+- [Monthly budget income from payslips](docs/monthly-budget-income.md) (bonus months, PAYE display)
+- [Budget Analysis after monthly pots](docs/future-budget-analysis-pots.md) (later: banking comparison vs pot contributions)
+- [Paper UI and banking chrome](docs/ui.md)
+
+## Always use the UI/UX Pro Max skill
+
+Before designing, building, reviewing, or fixing any interface — pages, components, layout, styling, interaction, accessibility, typography, colour, charts, loading states, or responsive behaviour — you **must** read and follow the `ui-ux-pro-max` skill (`~/.cursor/skills/ui-ux-pro-max/SKILL.md`).
+
+This is mandatory for every UI task in this repo, including small copy or spacing changes. Do not skip it because the change looks simple. Follow that skill's search workflow (design system, domain, or stack) and apply the result. Repository rules and the user's request still win if they conflict with skill suggestions.
+
 ## Critical Local Verification Rule
 
 Do not build or run the frontend or backend locally to verify changes unless the user explicitly asks for it.
@@ -36,6 +48,7 @@ Prefer static inspection, targeted code reading, and editor diagnostics. If veri
 - `backend/app/routers/` contains API route modules grouped by feature.
 - `backend/alembic/versions/` contains database migrations.
 - `tests/` contains Python tests.
+- `docs/` contains product behaviour and UI conventions.
 - `openapi.json` is the checked-in API schema snapshot.
 
 ## Frontend Conventions
@@ -43,8 +56,10 @@ Prefer static inspection, targeted code reading, and editor diagnostics. If veri
 - Follow the existing React component style in nearby files.
 - Use existing utility functions from `frontend/src/utils/` before adding new formatting or calculation helpers.
 - Keep UI changes scoped to the relevant page/component unless a shared component is clearly already used for that pattern.
-- Preserve existing dark-mode Tailwind classes and responsive behavior when editing UI.
-- Be careful with financial display logic: currency formatting, percentages, signs, and South African financial year behavior are product-sensitive.
+- On Home, Payslip, Budget, Investments, Banking, Guide, and Settings, use the paper tokens and `appUi.jsx` helpers in [docs/ui.md](docs/ui.md). Preserve dark-mode paper tokens and responsive behaviour.
+- Keep Banking nav visible during loading (`BankingLoading`). Do not flash a blank loading page.
+- Be careful with financial display logic: currency formatting, percentages, signs, and South African financial year behaviour are product-sensitive.
+- Monthly budget income must follow [docs/monthly-budget-income.md](docs/monthly-budget-income.md). Do not treat bonus/additional income as monthly budget money, and do not invent a PAYE split.
 
 ## Backend Conventions
 
@@ -53,6 +68,7 @@ Prefer static inspection, targeted code reading, and editor diagnostics. If veri
 - Shared database/session/auth/config behavior lives in `backend/app/database.py`, `backend/app/auth.py`, and `backend/app/config.py`.
 - Prefer adding service/helper logic near existing feature services rather than placing large business logic directly in routers.
 - Keep API response shapes stable unless the user specifically requests a breaking change.
+- Payslip → monthly budget income lives in `backend/app/payslip_budget.py`. Both `/api/budget/default_user` and budget-vs-actual must use it.
 
 ## Database And Migrations
 

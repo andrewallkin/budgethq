@@ -306,15 +306,28 @@ class TestExternalInvestmentsCompositionEndpoint:
                     },
                 },
                 {
-                    "name": "Retirement Annuity",
-                    "slug": "ra",
+                    "name": "Sygnia RA",
+                    "slug": "sygnia_playwright-123456",
                     "currency": "ZAR",
-                    "source": "ra_manual",
-                    "composition_available": False,
+                    "source": "playwright",
+                    "source_id": "sygnia_playwright",
+                    "product_type": "ra",
+                    "composition_available": True,
                     "value": 200000.0,
                     "value_base": 200000.0,
                     "as_of": "2026-09-01",
                     "is_retirement_annuity": True,
+                    "holdings": [
+                        {
+                            "ticker": "SYG500",
+                            "name": "Sygnia Itrix S&P 500",
+                            "shares": 10.0,
+                            "price": 200.0,
+                            "value": 2000.0,
+                            "value_base": 2000.0,
+                            "weight_actual": 1.0,
+                        }
+                    ],
                     "cashflows": {
                         "contributions_this_fy": 5000.0,
                         "contributions_since": 2000.0,
@@ -342,8 +355,9 @@ class TestExternalInvestmentsCompositionEndpoint:
         assert body["accounts"][0]["holdings"][0]["ticker"] == "JSE:STX40"
         assert "weight_target" in body["accounts"][0]["holdings"][0]
         assert "weight_target" not in body["accounts"][1]["holdings"]
-        assert body["accounts"][2]["composition_available"] is False
-        assert "holdings" not in body["accounts"][2]
+        assert body["accounts"][2]["composition_available"] is True
+        assert body["accounts"][2]["source"] == "playwright"
+        assert body["accounts"][2]["holdings"][0]["ticker"] == "SYG500"
 
     def test_composition_endpoint_requires_auth_when_not_overridden(self):
         client = _make_external_client(MagicMock())

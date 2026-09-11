@@ -1,9 +1,17 @@
-import { X, TrendingUp, TrendingDown, Target, Calendar, Edit2, Check, X as XIcon, Trash2, AlertCircle } from 'lucide-react'
-import GainLossIndicator from './GainLossIndicator'
-import BlurredValue from './BlurredValue'
+import { X, TrendingUp, TrendingDown, Calendar, Edit2, Check, X as XIcon, Trash2, AlertCircle } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import axios from 'axios'
+import BlurredValue from './BlurredValue'
 import { formatCurrency as formatMoney } from '../utils/numberFormatting'
+import { ModalPortal, paperEyebrow, paperMoney, paperMoneyTone } from './appUi'
+
+const btnBase =
+    'inline-flex min-h-[40px] cursor-pointer items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors duration-200 focus:ring-2 focus:ring-[var(--paper-accent)]/20'
+const btnPrimary = `${btnBase} bg-[var(--paper-ink)] text-[var(--paper-card)] hover:opacity-90`
+const btnGhost = `${btnBase} border border-[var(--paper-line)] bg-[var(--paper-card)] text-[var(--paper-ink)] hover:bg-[var(--paper-canvas)]`
+const btnBrick = `${btnBase} bg-[var(--paper-brick)] text-[var(--paper-card)] hover:opacity-90`
+const fieldInput =
+    'w-24 rounded-md border border-[var(--paper-line)] bg-[var(--paper-card)] px-2 py-1 text-sm text-[var(--paper-ink)] outline-none transition-colors focus:ring-2 focus:ring-[var(--paper-accent)]/20'
 
 export default function HoldingDetailsModal({
     isOpen,
@@ -31,6 +39,7 @@ export default function HoldingDetailsModal({
     if (!isOpen || !holding) return null
 
     const isPositive = holding.gain_loss_percentage >= 0
+    const titleId = 'holding-details-title'
 
     const formatCurrency = (value) => {
         if (value === null || value === undefined || Number.isNaN(Number(value))) return '—'
@@ -65,16 +74,14 @@ export default function HoldingDetailsModal({
                 portfolioId ? { params: { portfolio_id: portfolioId } } : undefined
             )
 
-            // Update the holding with new values
             if (onHoldingUpdate) {
                 onHoldingUpdate(holding.id, {
                     cost_basis: response.data.cost_basis,
                     gain_loss_percentage: response.data.gain_loss_percentage,
-                    gain_loss_amount: response.data.gain_loss_amount
+                    gain_loss_amount: response.data.gain_loss_amount,
                 })
             }
 
-            // Close edit mode
             setIsEditingCostBasis(false)
             setEditedCostBasis('')
         } catch (error) {
@@ -96,249 +103,278 @@ export default function HoldingDetailsModal({
         return `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`
     }
 
+    const gainTone = paperMoneyTone(holding.gain_loss_percentage)
+
     return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-2xl w-full mx-4 sm:mx-auto max-h-[90vh] overflow-y-auto">
-                {/* Header */}
-                <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-                    <div className="flex items-center gap-3">
-                        <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-                            {holding.etf_name}
-                        </h2>
-                    </div>
+        <ModalPortal>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby={titleId}
+                className="mx-4 flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-md border border-[var(--paper-line)] bg-[var(--paper-card)] sm:mx-auto"
+            >
+                <div className="flex items-center justify-between border-b border-[var(--paper-line)] px-5 py-4 sm:px-6">
+                    <h2 id={titleId} className="text-lg font-semibold text-[var(--paper-ink)]">
+                        {holding.etf_name}
+                    </h2>
                     <button
+                        type="button"
                         onClick={onClose}
-                        className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                        aria-label="Close"
+                        className="inline-flex min-h-[40px] min-w-[40px] cursor-pointer items-center justify-center text-[var(--paper-muted)] transition-colors hover:text-[var(--paper-ink)] focus:ring-2 focus:ring-[var(--paper-accent)]/20"
                     >
-                        <X className="w-5 h-5" />
+                        <X className="h-5 w-5" aria-hidden="true" />
                     </button>
                 </div>
 
-                {/* Content */}
-                <div className="p-6 space-y-6">
+                <div className="min-h-0 flex-1 space-y-6 overflow-y-auto p-5 sm:p-6">
                     {saveError && (
-                        <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200 rounded-lg flex items-center gap-2">
-                            <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                        <div
+                            role="alert"
+                            className="flex items-center gap-2 rounded-md border border-[var(--paper-brick)]/30 bg-[var(--paper-brick)]/10 p-3 text-[var(--paper-brick)]"
+                        >
+                            <AlertCircle className="h-5 w-5 shrink-0" aria-hidden="true" />
                             <span>{saveError}</span>
                         </div>
                     )}
-                    {/* Current Value & Performance */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="bg-gray-50 dark:bg-gray-700/50 p-6 rounded-lg text-left">
-                            <div className="flex items-center gap-2 mb-3">
-                                <span className="text-lg">💰</span>
-                                <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Current Value</span>
-                            </div>
-                            <BlurredValue><div className="text-3xl font-bold text-gray-900 dark:text-white">
-                                {formatCurrency(holding.total_value)}
-                            </div></BlurredValue>
+
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <div className="rounded-md border border-[var(--paper-line)] bg-[var(--paper-canvas)] p-6 text-left">
+                            <p className={`mb-3 ${paperEyebrow}`}>Current Value</p>
+                            <BlurredValue>
+                                <div className={`text-3xl ${paperMoney} text-[var(--paper-ink)]`}>
+                                    {formatCurrency(holding.total_value)}
+                                </div>
+                            </BlurredValue>
                         </div>
 
-                        <div className="bg-gray-50 dark:bg-gray-700/50 p-6 rounded-lg text-left">
-                            <div className="flex items-center gap-2 mb-3">
+                        <div className="rounded-md border border-[var(--paper-line)] bg-[var(--paper-canvas)] p-6 text-left">
+                            <div className="mb-3 flex items-center gap-2">
                                 {isPositive ? (
-                                    <TrendingUp className="w-5 h-5 text-green-500" />
+                                    <TrendingUp className="h-5 w-5 text-[var(--paper-olive)]" aria-hidden="true" />
                                 ) : (
-                                    <TrendingDown className="w-5 h-5 text-red-500" />
+                                    <TrendingDown className="h-5 w-5 text-[var(--paper-brick)]" aria-hidden="true" />
                                 )}
-                                <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Gain/Loss</span>
+                                <span className={paperEyebrow}>Gain/Loss</span>
                             </div>
-                            <BlurredValue><div className="space-y-1">
-                                <div className={`text-2xl font-bold ${isPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                                    {formatPercentage(holding.gain_loss_percentage)}
+                            <BlurredValue>
+                                <div className="space-y-1">
+                                    <div className={`text-2xl font-bold ${gainTone}`}>
+                                        {formatPercentage(holding.gain_loss_percentage)}
+                                    </div>
+                                    <div className={`text-lg font-semibold ${gainTone}`}>
+                                        {formatCurrency(holding.gain_loss_amount)}
+                                    </div>
                                 </div>
-                                <div className={`text-lg font-semibold ${isPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                                    {formatCurrency(holding.gain_loss_amount)}
-                                </div>
-                            </div></BlurredValue>
+                            </BlurredValue>
                         </div>
                     </div>
 
-                    {/* Action buttons - visible on mobile when table actions are hidden */}
                     {(onEdit || onBuySell || onDelete) && (
                         <div className="flex flex-wrap gap-2 sm:hidden">
                             {onEdit && (
                                 <button
-                                    onClick={() => { onClose(); onEdit(holding); }}
-                                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                                    type="button"
+                                    onClick={() => {
+                                        onClose()
+                                        onEdit(holding)
+                                    }}
+                                    className={btnPrimary}
                                 >
-                                    <Edit2 className="w-4 h-4" />
+                                    <Edit2 className="h-4 w-4" aria-hidden="true" />
                                     Edit Target
                                 </button>
                             )}
                             {onBuySell && (
                                 <button
-                                    onClick={() => { onClose(); onBuySell(holding); }}
-                                    className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
+                                    type="button"
+                                    onClick={() => {
+                                        onClose()
+                                        onBuySell(holding)
+                                    }}
+                                    className={btnGhost}
                                 >
-                                    <TrendingUp className="w-4 h-4" />
+                                    <TrendingUp className="h-4 w-4" aria-hidden="true" />
                                     Buy/Sell
                                 </button>
                             )}
                             {onDelete && (
                                 <button
-                                    onClick={() => { onClose(); onDelete(holding); }}
-                                    className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium"
+                                    type="button"
+                                    onClick={() => {
+                                        onClose()
+                                        onDelete(holding)
+                                    }}
+                                    className={btnBrick}
                                 >
-                                    <Trash2 className="w-4 h-4" />
+                                    <Trash2 className="h-4 w-4" aria-hidden="true" />
                                     Delete
                                 </button>
                             )}
                         </div>
                     )}
 
-                    {/* Detailed Information */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {/* Left Column */}
+                    <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                         <div className="space-y-4">
-                            <h3 className="text-lg font-medium text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2">
+                            <h3 className="border-b border-[var(--paper-line)] pb-2 text-base font-medium text-[var(--paper-ink)]">
                                 Holding Details
                             </h3>
-
-                            <div className="space-y-3">
+                            <div className="space-y-3 text-sm">
                                 <div className="flex justify-between">
-                                    <span className="text-gray-600 dark:text-gray-400">Type:</span>
-                                    <span className="font-medium text-gray-900 dark:text-white">
+                                    <span className="text-[var(--paper-muted)]">Type:</span>
+                                    <span className="font-medium text-[var(--paper-ink)]">
                                         {(holding.instrument_type || 'etf') === 'stock' ? 'Stock' : 'ETF'}
                                     </span>
                                 </div>
-
                                 <div className="flex justify-between">
-                                    <span className="text-gray-600 dark:text-gray-400">Name:</span>
-                                    <span className="font-medium text-gray-900 dark:text-white">
-                                        {holding.etf_name}
-                                    </span>
+                                    <span className="text-[var(--paper-muted)]">Name:</span>
+                                    <span className="font-medium text-[var(--paper-ink)]">{holding.etf_name}</span>
                                 </div>
-
                                 <div className="flex justify-between">
-                                    <span className="text-gray-600 dark:text-gray-400">Ticker:</span>
-                                    <span className="font-medium text-gray-900 dark:text-white font-mono">
+                                    <span className="text-[var(--paper-muted)]">Ticker:</span>
+                                    <span className="font-mono font-medium text-[var(--paper-ink)]">
                                         {holding.jse_ticker || '—'}
                                     </span>
                                 </div>
-
                                 <div className="flex justify-between">
-                                    <span className="text-gray-600 dark:text-gray-400">Shares:</span>
-                                    <BlurredValue><span className="font-medium text-gray-900 dark:text-white">
-                                        {holding.shares?.toFixed(4) || '—'}
-                                    </span></BlurredValue>
+                                    <span className="text-[var(--paper-muted)]">Shares:</span>
+                                    <BlurredValue>
+                                        <span className="font-medium text-[var(--paper-ink)]">
+                                            {holding.shares?.toFixed(4) || '—'}
+                                        </span>
+                                    </BlurredValue>
                                 </div>
-
                                 <div className="flex justify-between">
-                                    <span className="text-gray-600 dark:text-gray-400">Price:</span>
-                                    <BlurredValue><span className="font-medium text-gray-900 dark:text-white">
-                                        {holding.current_price ? formatCurrency(holding.current_price) : '—'}
-                                    </span></BlurredValue>
+                                    <span className="text-[var(--paper-muted)]">Price:</span>
+                                    <BlurredValue>
+                                        <span className="font-medium text-[var(--paper-ink)]">
+                                            {holding.current_price ? formatCurrency(holding.current_price) : '—'}
+                                        </span>
+                                    </BlurredValue>
                                 </div>
-
                                 <div className="flex justify-between">
-                                    <span className="text-gray-600 dark:text-gray-400">Region:</span>
-                                    <span className="font-medium text-gray-900 dark:text-white">
-                                        {holding.region}
-                                    </span>
+                                    <span className="text-[var(--paper-muted)]">Region:</span>
+                                    <span className="font-medium text-[var(--paper-ink)]">{holding.region}</span>
                                 </div>
                             </div>
                         </div>
 
-                        {/* Right Column */}
                         <div className="space-y-4">
-                            <h3 className="text-lg font-medium text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2">
+                            <h3 className="border-b border-[var(--paper-line)] pb-2 text-base font-medium text-[var(--paper-ink)]">
                                 Financial Summary
                             </h3>
-
-                            <div className="space-y-3">
-                                <div className="flex justify-between items-center">
-                                    <span className="text-gray-600 dark:text-gray-400">Cost Basis:</span>
+                            <div className="space-y-3 text-sm">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-[var(--paper-muted)]">Cost Basis:</span>
                                     {isEditingCostBasis ? (
                                         <div className="flex items-center gap-2">
                                             <div className="flex items-center">
-                                                <span className="mr-1 text-gray-500 dark:text-gray-400 text-sm">{costBasisAffix}</span>
+                                                <span className="mr-1 text-sm text-[var(--paper-muted)]">
+                                                    {costBasisAffix}
+                                                </span>
                                                 <input
                                                     type="number"
                                                     inputMode="decimal"
                                                     value={editedCostBasis}
                                                     onChange={(e) => setEditedCostBasis(e.target.value)}
-                                                    className="w-24 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                                    className={fieldInput}
                                                     disabled={isSaving}
                                                     step="0.01"
                                                     min="0"
                                                     autoFocus
+                                                    aria-label="Cost basis"
                                                 />
                                             </div>
                                             <button
+                                                type="button"
                                                 onClick={handleSaveCostBasis}
                                                 disabled={isSaving}
-                                                className="p-1 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/30 rounded transition-colors disabled:opacity-50"
+                                                className="cursor-pointer rounded-md p-1 text-[var(--paper-olive)] transition-colors hover:bg-[var(--paper-olive)]/10 focus:ring-2 focus:ring-[var(--paper-accent)]/20 disabled:opacity-50"
                                                 title="Save"
+                                                aria-label="Save cost basis"
                                             >
-                                                <Check className="w-4 h-4" />
+                                                <Check className="h-4 w-4" aria-hidden="true" />
                                             </button>
                                             <button
+                                                type="button"
                                                 onClick={handleCancelEdit}
                                                 disabled={isSaving}
-                                                className="p-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors disabled:opacity-50"
+                                                className="cursor-pointer rounded-md p-1 text-[var(--paper-brick)] transition-colors hover:bg-[var(--paper-brick)]/10 focus:ring-2 focus:ring-[var(--paper-accent)]/20 disabled:opacity-50"
                                                 title="Cancel"
+                                                aria-label="Cancel editing cost basis"
                                             >
-                                                <XIcon className="w-4 h-4" />
+                                                <XIcon className="h-4 w-4" aria-hidden="true" />
                                             </button>
                                         </div>
                                     ) : (
-                                        <BlurredValue><span
-                                            className="font-medium text-gray-900 dark:text-white cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/30 px-2 py-1 rounded transition-colors"
-                                            onClick={handleEditCostBasis}
-                                            title="Click to edit cost basis"
-                                        >
-                                            {formatCurrency(holding.cost_basis)}
-                                        </span></BlurredValue>
+                                        <BlurredValue>
+                                            <button
+                                                type="button"
+                                                className="cursor-pointer rounded-md px-2 py-1 font-medium text-[var(--paper-ink)] transition-colors hover:bg-[var(--paper-canvas)] focus:ring-2 focus:ring-[var(--paper-accent)]/20"
+                                                onClick={handleEditCostBasis}
+                                                title="Click to edit cost basis"
+                                            >
+                                                {formatCurrency(holding.cost_basis)}
+                                            </button>
+                                        </BlurredValue>
                                     )}
                                 </div>
-
                                 <div className="flex justify-between">
-                                    <span className="text-gray-600 dark:text-gray-400">Actual %:</span>
-                                    <BlurredValue><span className="font-medium text-gray-900 dark:text-white">
-                                        {totalPortfolioValue > 0
-                                            ? ((holding.total_value || 0) / totalPortfolioValue * 100).toFixed(1)
-                                            : '0.0'}%
-                                    </span></BlurredValue>
+                                    <span className="text-[var(--paper-muted)]">Actual %:</span>
+                                    <BlurredValue>
+                                        <span className="font-medium text-[var(--paper-ink)]">
+                                            {totalPortfolioValue > 0
+                                                ? (((holding.total_value || 0) / totalPortfolioValue) * 100).toFixed(1)
+                                                : '0.0'}
+                                            %
+                                        </span>
+                                    </BlurredValue>
                                 </div>
-
                                 {showTargetAllocation && (
                                     <div className="flex justify-between">
-                                        <span className="text-gray-600 dark:text-gray-400">Target %:</span>
-                                        <BlurredValue><span className="font-medium text-gray-900 dark:text-white">
-                                            {(Number(holding.target_percentage) || 0).toFixed(1)}%
-                                        </span></BlurredValue>
+                                        <span className="text-[var(--paper-muted)]">Target %:</span>
+                                        <BlurredValue>
+                                            <span className="font-medium text-[var(--paper-ink)]">
+                                                {(Number(holding.target_percentage) || 0).toFixed(1)}%
+                                            </span>
+                                        </BlurredValue>
                                     </div>
                                 )}
-
                                 <div className="flex justify-between">
-                                    <span className="text-gray-600 dark:text-gray-400">Gain/Loss %:</span>
-                                    <BlurredValue><span className={`font-medium ${isPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                                        {formatPercentage(holding.gain_loss_percentage)}
-                                    </span></BlurredValue>
+                                    <span className="text-[var(--paper-muted)]">Gain/Loss %:</span>
+                                    <BlurredValue>
+                                        <span className={`font-medium ${gainTone}`}>
+                                            {formatPercentage(holding.gain_loss_percentage)}
+                                        </span>
+                                    </BlurredValue>
                                 </div>
-
                                 <div className="flex justify-between">
-                                    <span className="text-gray-600 dark:text-gray-400">Gain/Loss Amount:</span>
-                                    <BlurredValue><span className={`font-medium ${isPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                                        {formatCurrency(holding.gain_loss_amount)}
-                                    </span></BlurredValue>
+                                    <span className="text-[var(--paper-muted)]">Gain/Loss Amount:</span>
+                                    <BlurredValue>
+                                        <span className={`font-medium ${gainTone}`}>
+                                            {formatCurrency(holding.gain_loss_amount)}
+                                        </span>
+                                    </BlurredValue>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    {/* Additional Info */}
                     {holding.price_updated_at && (
-                        <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
-                            <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-                                <Calendar className="w-4 h-4" />
-                                <span>Last price update: {new Date(holding.price_updated_at).toLocaleString('en-ZA')}</span>
+                        <div className="border-t border-[var(--paper-line)] pt-4">
+                            <div className="flex items-center gap-2 text-sm text-[var(--paper-muted)]">
+                                <Calendar className="h-4 w-4" aria-hidden="true" />
+                                <span>
+                                    Last price update:{' '}
+                                    {new Date(holding.price_updated_at).toLocaleString('en-ZA')}
+                                </span>
                             </div>
                         </div>
                     )}
                 </div>
             </div>
         </div>
+        </ModalPortal>
     )
 }

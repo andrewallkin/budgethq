@@ -1,10 +1,11 @@
 import { AlertTriangle, X } from 'lucide-react'
+import { createPortal } from 'react-dom'
 
 export default function ConfirmDeleteModal({ isOpen, onClose, onConfirm, title, message, monthYear, actionError }) {
     if (!isOpen) return null
 
-    return (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    return createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full mx-4 sm:mx-auto overflow-hidden">
                 {/* Header */}
                 <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
@@ -73,6 +74,7 @@ export default function ConfirmDeleteModal({ isOpen, onClose, onConfirm, title, 
                     </button>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     )
 }

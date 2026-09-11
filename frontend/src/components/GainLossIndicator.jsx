@@ -1,36 +1,37 @@
 import { TrendingUp, TrendingDown } from 'lucide-react'
 import { formatCurrency, formatPercent } from '../utils/numberFormatting'
 import BlurredValue from './BlurredValue'
+import { paperMoney, paperMoneyTone } from './appUi'
 
 export default function GainLossIndicator({ percentage, amount, size = 'sm', formatCurrencyOpts = {} }) {
-    // Handle cases where we don't have valid data
     if (percentage === null || percentage === undefined || amount === null || amount === undefined) {
         return (
-            <div className="text-gray-400 dark:text-gray-500 text-center">
-                <div className="text-xs">—</div>
-                <div className="text-xs">—</div>
-            </div>
+            <span className="text-xs text-[var(--paper-muted)]">—</span>
         )
     }
 
     const isPositive = percentage >= 0
+    const isFlat = percentage === 0 && amount === 0
     const Icon = isPositive ? TrendingUp : TrendingDown
-    const colorClass = isPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+    const colorClass = isFlat ? 'text-[var(--paper-muted)]' : paperMoneyTone(percentage)
 
-    const iconSize = size === 'lg' ? 'w-4 h-4' : 'w-3 h-3'
+    const iconSize = size === 'lg' ? 'h-3.5 w-3.5' : 'h-3 w-3'
     const textSize = size === 'lg' ? 'text-sm' : 'text-xs'
 
     return (
-        <div className={`${colorClass} flex items-center justify-center gap-1 ${textSize === 'sm' ? 'text-sm' : 'text-base'}`}>
-            <Icon className={iconSize} />
-            <div className="text-center">
-                <BlurredValue><div className={`font-semibold flex items-center gap-1 ${textSize === 'sm' ? 'text-sm' : 'text-base'}`}>
-                    <span>{formatPercent(percentage)}</span>
-                    <span className={colorClass}>
-                        ({formatCurrency(amount, formatCurrencyOpts)})
+        <div className={`flex items-center justify-end gap-1 ${colorClass} ${textSize}`}>
+            {!isFlat && <Icon className={iconSize} aria-hidden="true" />}
+            <BlurredValue>
+                <span className={`tabular-nums ${paperMoney} ${textSize}`}>
+                    {formatPercent(percentage)}
+                    <span className="ml-1 font-normal opacity-80">
+                        ({formatCurrency(amount, {
+                            ...formatCurrencyOpts,
+                            signDisplay: isFlat ? 'auto' : 'exceptZero',
+                        })})
                     </span>
-                </div></BlurredValue>
-            </div>
+                </span>
+            </BlurredValue>
         </div>
     )
 }

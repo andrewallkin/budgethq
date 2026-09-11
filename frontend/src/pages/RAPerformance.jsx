@@ -11,12 +11,20 @@ import {
     Legend,
     ResponsiveContainer,
 } from 'recharts'
-import { TrendingUp, Edit2, Trash2, Calculator } from 'lucide-react'
+import { Edit2, Trash2 } from 'lucide-react'
 import ConfirmModal from '../components/ConfirmModal'
 import BlurredValue from '../components/BlurredValue'
 import HubBackLink from '../components/HubBackLink'
 import { useAuth } from '../context/AuthContext'
 import { formatCurrency, formatDateSafe } from '../utils/numberFormatting'
+import {
+    CARD_BAND,
+    AppCard,
+    LedgerRow,
+    eyebrowClass,
+    dividerClass,
+    OVERVIEW_COLORS,
+} from '../components/appUi'
 
 const TIME_RANGES = [
     { key: '1y', label: '1Y' },
@@ -296,79 +304,66 @@ export default function RAPerformance() {
     const monthlyRows = Object.values(monthlyMap).sort((a, b) => a.monthKey.localeCompare(b.monthKey)).reverse()
 
     if (loading && valueSnapshots.length === 0 && contributions.length === 0) {
-        return <div className="p-8 text-center text-gray-500 dark:text-gray-400">Loading...</div>
+        return <div className="mx-auto max-w-[1400px] p-8 text-center text-neutral-400">Loading...</div>
     }
 
     return (
-        <div className="space-y-6 sm:space-y-8 pb-6">
+        <div className="mx-auto max-w-[1400px] space-y-5 pb-6">
             <HubBackLink to="/investments" label="Investments" className="mb-1" />
-            <div>
-                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-2">📈 RA Performance</h1>
-                <p className="text-gray-600 dark:text-gray-400">
+            <AppCard band={CARD_BAND.investments} className="p-6">
+                <p className={eyebrowClass}>Retirement annuity</p>
+                <h1 className="mt-1 text-2xl sm:text-3xl font-semibold tracking-tight text-neutral-950 dark:text-white">
+                    RA Performance
+                </h1>
+                <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">
                     Track your retirement annuity portfolio value and contributions over time.
                 </p>
                 <div className="mt-4">
                     <Link
                         to="/investments/ra/calculator"
-                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 text-sm font-medium transition-colors"
+                        className="inline-flex items-center px-4 py-2.5 rounded-full border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-neutral-950 dark:text-white text-sm font-medium hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors"
                     >
-                        <Calculator className="w-4 h-4 shrink-0" />
                         RA tax calculator
                     </Link>
                 </div>
-            </div>
+            </AppCard>
 
-            {/* Overview */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3 sm:p-4">
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Portfolio value</p>
-                    <BlurredValue><p className="text-xl font-semibold text-gray-900 dark:text-white">
-                        {formatCurrencyLocal(portfolioValueNum)}
-                    </p></BlurredValue>
+            <AppCard band={CARD_BAND.investments} className="p-6">
+                <p className={eyebrowClass}>Overview</p>
+                <div className={`mt-4 ${dividerClass}`}>
+                    <LedgerRow
+                        label="Portfolio value"
+                        value={<BlurredValue>{formatCurrencyLocal(portfolioValueNum)}</BlurredValue>}
+                    />
+                    <LedgerRow
+                        label="Total contributions"
+                        value={<BlurredValue>{formatCurrencyLocal(totalContributionsNum)}</BlurredValue>}
+                    />
+                    <LedgerRow
+                        label="Growth"
+                        hint={growthPercent !== null ? `${growthPercent.toFixed(2)}%` : undefined}
+                        tone={growth >= 0 ? 'text-neutral-950 dark:text-white' : 'text-red-600 dark:text-red-400'}
+                        value={<BlurredValue>{formatCurrencyLocal(growth)}</BlurredValue>}
+                    />
+                    <LedgerRow
+                        label={`Contributions this financial year${financialYearLabel ? ` (${financialYearLabel})` : ''}`}
+                        value={<BlurredValue>{formatCurrencyLocal(contributionsCurrentFy)}</BlurredValue>}
+                    />
                 </div>
-                <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3 sm:p-4">
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Total contributions</p>
-                    <BlurredValue><p className="text-xl font-semibold text-gray-900 dark:text-white">
-                        {formatCurrencyLocal(totalContributionsNum)}
-                    </p></BlurredValue>
-                </div>
-                <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3 sm:p-4">
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Growth</p>
-                    <BlurredValue><p className={`text-xl font-semibold ${growth >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                        {formatCurrencyLocal(growth)}
-                    </p>
-                    {growthPercent !== null && (
-                        <p className={`text-sm font-medium ${growth >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                            {growthPercent.toFixed(2)}%
-                        </p>
-                    )}</BlurredValue>
-                </div>
-                <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3 sm:p-4">
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
-                        Contributions this financial year ({financialYearLabel})
-                    </p>
-                    <BlurredValue><p className="text-xl font-semibold text-gray-900 dark:text-white">
-                        {formatCurrencyLocal(contributionsCurrentFy)}
-                    </p></BlurredValue>
-                </div>
-            </div>
+            </AppCard>
 
-            {/* Chart */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <AppCard band={CARD_BAND.investments} className="overflow-hidden">
                 <div className="flex flex-wrap items-center justify-between gap-4 p-4 sm:p-6 pb-2">
-                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                        <TrendingUp className="w-5 h-5 shrink-0" />
-                        <span>Portfolio value & contributions over time</span>
-                    </h2>
+                    <h2 className={eyebrowClass}>Portfolio value & contributions over time</h2>
                     <div className="flex flex-wrap gap-2">
                         {TIME_RANGES.map(({ key, label }) => (
                             <button
                                 key={key}
                                 onClick={() => setSelectedRange(key)}
-                                className={`px-4 py-2.5 min-h-[44px] rounded-lg text-sm font-medium transition-colors ${
+                                className={`px-4 py-2.5 min-h-[44px] rounded-full text-sm font-medium transition-colors ${
                                     selectedRange === key
-                                        ? 'bg-blue-600 text-white'
-                                        : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                                        ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-950'
+                                        : 'border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-neutral-950 dark:text-white hover:bg-neutral-50 dark:hover:bg-neutral-800'
                                 }`}
                             >
                                 {label}
@@ -377,24 +372,24 @@ export default function RAPerformance() {
                     </div>
                 </div>
                 {!hasChartData ? (
-                    <p className="text-gray-500 dark:text-gray-400 py-8 text-center px-4">
+                    <p className="text-neutral-400 py-8 text-center px-4 text-sm">
                         Add value snapshots and contributions above to see the chart.
                     </p>
                 ) : (
-                    <div className={`w-full -mx-2 sm:mx-0 px-0 sm:px-4 pb-4 ${blurSensitiveValues ? 'blur-[5px] select-none' : ''}`}>
+                    <div className={`w-full -mx-2 sm:mx-0 px-0 sm:px-4 pb-4 sm:pb-6 ${blurSensitiveValues ? 'blur-[5px] select-none' : ''}`}>
                         <ResponsiveContainer width="100%" height={360}>
                             <LineChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
-                                <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-600" />
+                                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" className="dark:stroke-neutral-700" />
                                 <XAxis
                                     dataKey="date"
                                     tickFormatter={formatChartDate}
-                                    className="text-gray-600 dark:text-gray-400"
-                                    tick={{ fontSize: 12 }}
+                                    stroke="#9CA3AF"
+                                    tick={{ fontSize: 12, fill: '#9CA3AF' }}
                                 />
                                 <YAxis
                                     tickFormatter={(v) => `R ${(v / 1000).toFixed(0)}k`}
-                                    className="text-gray-600 dark:text-gray-400"
-                                    tick={{ fontSize: 12 }}
+                                    stroke="#9CA3AF"
+                                    tick={{ fontSize: 12, fill: '#9CA3AF' }}
                                 />
                                 <Tooltip
                                     formatter={(value) => [value != null ? formatCurrency(value) : '—']}
@@ -407,7 +402,7 @@ export default function RAPerformance() {
                                     type="monotone"
                                     dataKey="portfolio_value"
                                     name="Portfolio value"
-                                    stroke="#2563eb"
+                                    stroke={OVERVIEW_COLORS[0]}
                                     strokeWidth={2}
                                     dot={{ r: 5 }}
                                     activeDot={{ r: 8 }}
@@ -417,7 +412,7 @@ export default function RAPerformance() {
                                     type="monotone"
                                     dataKey="cumulative_contributions"
                                     name="Contributions (cumulative)"
-                                    stroke="#16a34a"
+                                    stroke={OVERVIEW_COLORS[1]}
                                     strokeWidth={2}
                                     dot={{ r: 5 }}
                                     activeDot={{ r: 8 }}
@@ -426,22 +421,20 @@ export default function RAPerformance() {
                         </ResponsiveContainer>
                     </div>
                 )}
-            </div>
+            </AppCard>
 
-            {/* Monthly snapshots & contributions */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Monthly snapshots & contributions</h2>
+            <AppCard band={CARD_BAND.investments} className="p-6">
+                <h2 className={eyebrowClass}>Monthly snapshots & contributions</h2>
 
-                {/* Centered combined month/value/contribution editor */}
-                <div className="mb-6 flex justify-center">
+                <div className="mb-6 mt-4 flex justify-center">
                     <form
                         onSubmit={handleSaveMonth}
-                        className="w-full max-w-3xl bg-gray-50 dark:bg-gray-900/40 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-4 md:px-6 md:py-5 shadow-sm space-y-3"
+                        className="w-full max-w-3xl bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-200 dark:border-neutral-700 rounded-xl px-4 py-4 md:px-6 md:py-5 space-y-3"
                     >
                         <div className="flex flex-wrap items-baseline justify-between gap-2">
-                            <p className="text-sm font-semibold text-gray-900 dark:text-white">Add or edit month</p>
+                            <p className="text-sm font-semibold text-neutral-950 dark:text-white">Add or edit month</p>
                             {editingMonthKey && (
-                                <p className="text-xs text-blue-600 dark:text-blue-400">
+                                <p className="text-xs text-neutral-400">
                                     Editing {new Date(`${editingMonthKey}-01T00:00:00Z`).toLocaleDateString('en-ZA', {
                                         month: 'short',
                                         year: 'numeric',
@@ -451,16 +444,16 @@ export default function RAPerformance() {
                         </div>
                         <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 overflow-hidden">
                             <div className="flex flex-col gap-1 min-w-0">
-                                <label className="text-xs font-medium text-gray-700 dark:text-gray-300">Month</label>
+                                <label className="text-xs font-medium text-neutral-700 dark:text-neutral-300">Month</label>
                                 <input
                                     type="month"
                                     value={entryMonth}
                                     onChange={(e) => setEntryMonth(e.target.value)}
-                                    className="w-full max-w-full min-w-0 px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                    className="w-full max-w-full min-w-0 px-3 py-2.5 border border-neutral-200 dark:border-neutral-700 rounded-xl focus:ring-2 focus:ring-neutral-400 bg-white dark:bg-neutral-900 text-neutral-950 dark:text-white"
                                 />
                             </div>
                             <div className="flex flex-col gap-1 min-w-0">
-                                <label className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                                <label className="text-xs font-medium text-neutral-700 dark:text-neutral-300">
                                     Portfolio value (R)
                                 </label>
                                 <BlurredValue as="div">
@@ -472,7 +465,7 @@ export default function RAPerformance() {
                                     placeholder=""
                                     value={portfolioValue}
                                     onChange={(e) => setPortfolioValue(e.target.value)}
-                                    className="w-full min-w-0 px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
+                                    className="w-full min-w-0 px-3 py-2.5 border border-neutral-200 dark:border-neutral-700 rounded-xl focus:ring-2 focus:ring-neutral-400 bg-white dark:bg-neutral-900 text-neutral-950 dark:text-white placeholder:text-neutral-400 dark:placeholder:text-neutral-500"
                                 />
                                 </BlurredValue>
                                 {snapshotError && (
@@ -480,7 +473,7 @@ export default function RAPerformance() {
                                 )}
                             </div>
                             <div className="flex flex-col gap-1 min-w-0">
-                                <label className="text-xs font-medium text-gray-700 dark:text-gray-300">Contributions (R)</label>
+                                <label className="text-xs font-medium text-neutral-700 dark:text-neutral-300">Contributions (R)</label>
                                 <BlurredValue as="div">
                                 <input
                                     type="number"
@@ -490,7 +483,7 @@ export default function RAPerformance() {
                                     placeholder=""
                                     value={contributionAmount}
                                     onChange={(e) => setContributionAmount(e.target.value)}
-                                    className="w-full min-w-0 px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
+                                    className="w-full min-w-0 px-3 py-2.5 border border-neutral-200 dark:border-neutral-700 rounded-xl focus:ring-2 focus:ring-neutral-400 bg-white dark:bg-neutral-900 text-neutral-950 dark:text-white placeholder:text-neutral-400 dark:placeholder:text-neutral-500"
                                 />
                                 </BlurredValue>
                                 {contributionError && (
@@ -503,7 +496,7 @@ export default function RAPerformance() {
                                 <button
                                     type="button"
                                     onClick={handleCancelEditMonth}
-                                    className="w-full sm:w-auto px-3 py-2.5 min-h-[44px] border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 text-sm rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
+                                    className="w-full sm:w-auto px-3 py-2.5 min-h-[44px] border border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 text-sm rounded-full hover:bg-neutral-50 dark:hover:bg-neutral-800"
                                 >
                                     Cancel
                                 </button>
@@ -511,7 +504,7 @@ export default function RAPerformance() {
                             <button
                                 type="submit"
                                 disabled={isSaving}
-                                className="w-full sm:w-auto px-3 py-2.5 min-h-[44px] bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white text-sm font-medium rounded-lg transition-colors"
+                                className="w-full sm:w-auto px-3 py-2.5 min-h-[44px] bg-neutral-900 hover:bg-neutral-800 disabled:opacity-50 text-white text-sm font-medium rounded-full transition-colors dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-100"
                             >
                                 {isSaving ? 'Saving...' : editingMonthKey ? 'Update month' : 'Add month'}
                             </button>
@@ -521,9 +514,9 @@ export default function RAPerformance() {
 
                 {monthlyRows.length > 0 ? (
                     <div className="overflow-x-auto -mx-4 px-4 sm:mx-auto sm:px-0 max-w-3xl">
-                        <table className="w-full text-sm text-left text-gray-700 dark:text-gray-300">
+                        <table className="w-full text-sm text-left text-neutral-700 dark:text-neutral-300">
                             <thead>
-                                <tr className="border-b border-gray-200 dark:border-gray-600">
+                                <tr className="border-b border-neutral-200 dark:border-neutral-700">
                                     <th className="py-2 pr-4 font-medium">Month</th>
                                     <th className="py-2 pr-4 font-medium">Portfolio value</th>
                                     <th className="py-2 pr-4 font-medium">Contributions</th>
@@ -532,7 +525,7 @@ export default function RAPerformance() {
                             </thead>
                             <tbody>
                                 {monthlyRows.map((row) => (
-                                    <tr key={row.monthKey} className="border-b border-gray-100 dark:border-gray-700">
+                                    <tr key={row.monthKey} className="border-b border-neutral-100 dark:border-neutral-800">
                                         <td className="py-2 pr-4">{formatTableMonth(row.date)}</td>
                                         <td className="py-2 pr-4"><BlurredValue>{row.portfolio_value != null ? formatCurrencyLocal(row.portfolio_value) : '—'}</BlurredValue></td>
                                         <td className="py-2 pr-4"><BlurredValue>{row.contribution_total ? formatCurrencyLocal(row.contribution_total) : '—'}</BlurredValue></td>
@@ -541,7 +534,7 @@ export default function RAPerformance() {
                                                 <button
                                                     type="button"
                                                     onClick={() => handleEditMonth(row)}
-                                                    className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400"
+                                                    className="p-1 rounded hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-500 dark:text-neutral-400"
                                                     title="Edit month"
                                                 >
                                                     <Edit2 className="w-4 h-4" />
@@ -562,9 +555,9 @@ export default function RAPerformance() {
                         </table>
                     </div>
                 ) : (
-                    <p className="text-gray-500 dark:text-gray-400 text-sm">No monthly data yet. Add a value or contribution above.</p>
+                    <p className="text-neutral-400 text-sm">No monthly data yet. Add a value or contribution above.</p>
                 )}
-            </div>
+            </AppCard>
 
             <ConfirmModal
                 isOpen={deleteConfirm.open}

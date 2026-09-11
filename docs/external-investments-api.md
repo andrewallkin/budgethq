@@ -93,7 +93,9 @@ No query parameters.
       "currency": "ZAR",
       "value": 450000.0,
       "value_base": 450000.0,
-      "is_retirement_annuity": false
+      "is_retirement_annuity": false,
+      "source": "sheets",
+      "source_id": "google_sheets"
     },
     {
       "name": "US Account",
@@ -101,15 +103,20 @@ No query parameters.
       "currency": "USD",
       "value": 12000.0,
       "value_base": 216000.0,
-      "is_retirement_annuity": false
+      "is_retirement_annuity": false,
+      "source": "sheets",
+      "source_id": "google_sheets"
     },
     {
-      "name": "Retirement Annuity",
-      "slug": "ra",
+      "name": "Sygnia RA",
+      "slug": "sygnia_playwright-123456",
       "currency": "ZAR",
       "value": 584000.0,
       "value_base": 584000.0,
-      "is_retirement_annuity": true
+      "is_retirement_annuity": true,
+      "source": "playwright",
+      "source_id": "sygnia_playwright",
+      "product_type": "ra"
     }
   ],
   "fx": {
@@ -128,20 +135,23 @@ No query parameters.
 | `total_value_base` | Sum of all sleeves in `base_currency` |
 | `accounts` | One entry per sleeve |
 | `accounts[].name` | Display name |
-| `accounts[].slug` | Stable identifier (`tfsa`, `usd-account`, `ra`, etc.) |
+| `accounts[].slug` | Stable identifier (`tfsa`, `usd-account`, `sygnia_playwright-{account_code}`, etc.) |
 | `accounts[].currency` | Native currency of the sleeve |
 | `accounts[].value` | Total value in native currency |
 | `accounts[].value_base` | Total value converted to `base_currency` |
-| `accounts[].is_retirement_annuity` | `true` for the RA sleeve |
+| `accounts[].is_retirement_annuity` | `true` when `product_type` is `ra` |
+| `accounts[].source` | `"sheets"` or `"playwright"` |
+| `accounts[].source_id` | Adapter id (`google_sheets`, `sygnia_playwright`, …) |
+| `accounts[].product_type` | Playwright only: `ra`, `tfsa`, or `offshore` |
 | `fx.configured` | Whether FX rates are set up in Google Sheets |
 | `fx.aggregate_error` | `null` if all conversions succeeded; otherwise a short error string |
 
 ### Notes
 
-- **RA inclusion:** The RA sleeve appears only if you enabled **RA tools under Investments** in Settings.
+- **Playwright inclusion:** Every connected Playwright account is listed, for every adapter (Sygnia today; other brokers use the same `source: "playwright"` with a different `source_id`).
 - **FX on summary:** This endpoint reports whether FX is configured and if aggregation failed. It does **not** include individual FX rates. Use `/composition` for rates.
 - **Sheets sleeves:** Values are live holdings (shares × latest synced Google Sheets prices).
-- **RA:** Value is your latest manually entered RA snapshot.
+- **Playwright:** Value is the same figure as the Investments hub card (latest scrape / history).
 
 ---
 
@@ -219,12 +229,14 @@ Every account includes these fields:
 | `name` | Display name |
 | `slug` | Stable identifier |
 | `currency` | Native currency |
-| `source` | `"sheets"` or `"ra_manual"` |
-| `composition_available` | `true` if holdings are exposed; `false` for RA |
+| `source` | `"sheets"` or `"playwright"` |
+| `source_id` | Adapter id (`google_sheets`, `sygnia_playwright`, …) |
+| `composition_available` | `true` if holdings are exposed |
 | `value` | Total in native currency |
 | `value_base` | Total in `base_currency` |
 | `as_of` | Freshness for this sleeve |
-| `is_retirement_annuity` | `true` for RA |
+| `is_retirement_annuity` | `true` when the account is an RA |
+| `product_type` | Playwright only |
 | `cashflows` | Sleeve-specific — see below |
 
 ---
@@ -281,23 +293,33 @@ Foreign sleeves use recorded ETF buy/sell transactions, not TFSA-style deposit t
 
 ---
 
-### RA (`source: "ra_manual"`)
+### Playwright sleeves (`source: "playwright"`)
 
-Manual retirement annuity totals. No holdings breakdown.
+Connected broker accounts synced by Playwright. `source_id` names the adapter (`sygnia_playwright` today). **Every connected Playwright account is included**, not only Sygnia and not only RA.
 
-- `composition_available` is `false`
-- No `holdings` key
-- Do not attribute RA moves to individual tickers or news
+`composition_available` is `true`. Holdings are fund/instrument rows from that adapter.
 
-#### Cashflows — RA
+#### Holdings fields (Playwright)
 
 | Field | Description |
 |-------|-------------|
-| `contributions_this_fy` | RA contributions in the current SA financial year |
-| `contributions_since` | Contributions on or after `since` date |
-| `cumulative_contributions` | All-time sum of logged RA contributions |
+| `ticker` | Provider instrument code |
+| `name` | Instrument name |
+| `shares` | Units |
+| `price` | Unit price in sleeve currency |
+| `value` | Market value in native currency |
+| `value_base` | Same as `value` for ZAR sleeves |
+| `weight_actual` | Holding weight as % of sleeve total |
 
-RA value comes from your latest `RAValueHistory` snapshot. A Sygnia debit logged as a contribution should not be mistaken for a market rally when you subtract `contributions_since` from the value change.
+#### Cashflows — Playwright
+
+| Field | Description |
+|-------|-------------|
+| `contributions_this_fy` | Logged contributions in the current SA financial year |
+| `contributions_since` | Contributions on or after `since` date |
+| `cumulative_contributions` | All-time sum of logged contributions |
+
+Subtract `contributions_since` from the value change before treating a move as market growth.
 
 ---
 
@@ -305,9 +327,9 @@ RA value comes from your latest `RAValueHistory` snapshot. A Sygnia debit logged
 
 | Sleeve | Field | Comparison rule |
 |--------|-------|-----------------|
-| TFSA | `deposits_since` | Deposit date `>= since.date()` |
-| RA | `contributions_since` | Contribution date `>= since.date()` |
-| Foreign | `buys_since`, `sells_since` | Transaction datetime `> since` |
+| TFSA (sheets) | `deposits_since` | Deposit date `>= since.date()` |
+| Playwright | `contributions_since` | Contribution date `>= since.date()` |
+| Foreign sheets | `buys_since`, `sells_since` | Transaction datetime `> since` |
 
 When `since` is omitted, the anchor is end of the previous daily EOD day (from portfolio history), and `since_source` is `"previous_daily_eod"`.
 
@@ -320,17 +342,17 @@ When `since` is omitted, the anchor is end of the previous daily EOD day (from p
 3. **Rank movers yourself** using `holdings[].value_base`, `weight_actual`, and price changes between notes (store the prior composition response if you need a baseline).
 4. **Split FX vs price** on USD sleeves using `fx.rates.USD` and native vs ZAR values.
 5. **Subtract cashflows** before calling a move “the market”:
-   - TFSA: check `deposits_since`
-   - RA: check `contributions_since` (sleeve-level only)
-   - USD: check `net_invested_since`
-6. **News lookup** — only for tickers from sheets sleeves where `composition_available` is `true`. Skip RA.
+   - Sheets TFSA: check `deposits_since`
+   - Playwright: check `contributions_since`
+   - Foreign sheets: check `net_invested_since`
+6. **News lookup** — for tickers where `composition_available` is `true` (Sheets and Playwright).
 
 Example Grok prompt context:
 
 ```
 At 08:00 SAST, call summary then composition with since= yesterday's 08:00 ISO time.
-Report sleeve moves in ZAR. For each foreign sleeve, state whether the move was
-FX, new buys, or holding price. Do not attribute RA to individual stocks.
+Report sleeve moves in ZAR. For each foreign Sheets sleeve, state whether the move was
+FX, new buys, or holding price. For Playwright sleeves, use holdings and contributions_since.
 ```
 
 ---
@@ -346,17 +368,17 @@ These endpoints are intentionally read-only and scoped:
 - No ISIN fields
 - No cash balance line items
 - No withdrawal tracking
-- No RA fund-level composition
+- No legacy manual RA sleeve (`RAValueHistory`). Connected Playwright RA accounts are included instead.
 
 ---
 
 ## Sleeve reference
 
-| Sleeve | `slug` | `source` | Holdings | Cashflow model |
-|--------|--------|----------|----------|----------------|
-| TFSA | `tfsa` | `sheets` | Yes + targets | FY deposits |
-| USD / EUR / GBP | user-defined | `sheets` | Yes | Buy/sell since anchor |
-| RA | `ra` | `ra_manual` | No | FY + cumulative contributions |
+| Sleeve | `slug` | `source` | `source_id` | Holdings | Cashflow model |
+|--------|--------|----------|-------------|----------|----------------|
+| TFSA | `tfsa` | `sheets` | `google_sheets` | Yes + targets | FY deposits |
+| USD / EUR / GBP | user-defined | `sheets` | `google_sheets` | Yes | Buy/sell since anchor |
+| Playwright (any broker) | `{source_id}-{account_code}` | `playwright` | adapter id | Yes | FY + cumulative contributions |
 
 ---
 
@@ -383,7 +405,7 @@ Persist `since` from each successful note call and pass it on the next run.
 | Setting | Effect on API |
 |---------|----------------|
 | External API key | Required for both endpoints |
-| RA tools under Investments | Controls whether `ra` appears in responses |
 | Google Sheets + FX tab | Required for live prices and `fx.rates` on foreign sleeves |
+| Connected Playwright accounts | Each connected adapter account appears with `source: "playwright"` |
 
 Key management UI: **Settings → External API key**.

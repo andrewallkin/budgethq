@@ -1,16 +1,12 @@
 import { useState, useEffect } from 'react'
 import axios from 'axios'
-import { Search, X } from 'lucide-react'
+import { Search } from 'lucide-react'
 import BlurredValue from './BlurredValue'
 import { formatCurrency, formatDateSafe } from '../utils/numberFormatting'
-import CategoryBadge from './CategoryBadge'
+import { CATEGORY_LABELS } from '../utils/transactionCategories'
+import { PaperDialog, paperEyebrow, paperField, paperMoney, paperMoneyTone } from './appUi'
 
-export default function TransactionLinkPicker({
-    isOpen,
-    onClose,
-    sourceTransaction,
-    onLinked,
-}) {
+export default function TransactionLinkPicker({ isOpen, onClose, sourceTransaction, onLinked }) {
     const [candidates, setCandidates] = useState([])
     const [loading, setLoading] = useState(false)
     const [linkingId, setLinkingId] = useState(null)
@@ -44,7 +40,7 @@ export default function TransactionLinkPicker({
             params.append('transaction_type', isDebit ? 'CREDIT' : 'DEBIT')
 
             const response = await axios.get(`/api/investec/transactions?${params.toString()}`)
-            const filtered = response.data.filter(txn => {
+            const filtered = response.data.filter((txn) => {
                 if (txn.id === sourceTransaction.id) return false
                 if (isDebit) {
                     return ['refund', 'reimbursements'].includes(txn.category) && !txn.linked_debit
@@ -76,95 +72,92 @@ export default function TransactionLinkPicker({
         }
     }
 
-    const filteredCandidates = candidates.filter(txn => {
+    const filteredCandidates = candidates.filter((txn) => {
         if (!search.trim()) return true
         return txn.description.toLowerCase().includes(search.trim().toLowerCase())
     })
 
-    if (!isOpen || !sourceTransaction) return null
-
     return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[60]">
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-lg w-full mx-4 max-h-[85vh] flex flex-col">
-                <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                        {isDebit ? 'Link credit' : 'Link to expense'}
-                    </h3>
-                    <button
-                        onClick={onClose}
-                        className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                    >
-                        <X className="w-5 h-5" />
-                    </button>
-                </div>
+        <PaperDialog
+            open={isOpen && Boolean(sourceTransaction)}
+            onClose={onClose}
+            title={isDebit ? 'Link credit' : 'Link to expense'}
+            description={
+                isDebit
+                    ? 'Choose an unlinked refund or reimbursement to offset this expense.'
+                    : 'Choose the original expense this credit offsets.'
+            }
+            maxWidth="max-w-lg"
+            zClass="z-[60]"
+            disableClose={Boolean(linkingId)}
+        >
+            <div className="relative mb-4">
+                <Search
+                    className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--paper-muted)]"
+                    aria-hidden="true"
+                />
+                <input
+                    type="search"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search descriptions…"
+                    className={`${paperField} pl-9`}
+                />
+            </div>
 
-                <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-                    <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                        <input
-                            type="text"
-                            value={search}
-                            onChange={(e) => setSearch(e.target.value)}
-                            placeholder="Search description..."
-                            className="w-full pl-9 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                        />
-                    </div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                        {isDebit
-                            ? 'Select an unlinked refund or reimbursement credit to offset this expense.'
-                            : 'Select the original debit expense this credit offsets.'}
+            {error && (
+                <p role="alert" className="mb-4 text-sm text-[var(--paper-brick)]">
+                    {error}
+                </p>
+            )}
+
+            <div className="max-h-[48vh] space-y-2 overflow-y-auto">
+                {loading ? (
+                    <p className="py-10 text-center text-sm text-[var(--paper-muted)]">Loading…</p>
+                ) : filteredCandidates.length === 0 ? (
+                    <p className="py-10 text-center text-sm text-[var(--paper-muted)]">
+                        No matching transactions in the last 90 days.
                     </p>
-                </div>
-
-                {error && (
-                    <div className="mx-4 mt-4 p-3 bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200 rounded-lg text-sm">
-                        {error}
-                    </div>
-                )}
-
-                <div className="flex-1 overflow-y-auto p-4 space-y-2">
-                    {loading ? (
-                        <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-8">Loading...</p>
-                    ) : filteredCandidates.length === 0 ? (
-                        <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-8">
-                            No matching transactions found in the last 90 days.
-                        </p>
-                    ) : (
-                        filteredCandidates.map(txn => (
+                ) : (
+                    filteredCandidates.map((txn) => {
+                        const signed =
+                            txn.transaction_type === 'CREDIT'
+                                ? Math.abs(Number(txn.amount) || 0)
+                                : -Math.abs(Number(txn.amount) || 0)
+                        return (
                             <button
                                 key={txn.id}
+                                type="button"
                                 onClick={() => handleLink(txn)}
                                 disabled={linkingId === txn.id}
-                                className="w-full text-left p-3 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700/50 disabled:opacity-50 transition-colors"
+                                className="w-full cursor-pointer rounded-md border border-[var(--paper-line)] p-3 text-left transition-colors hover:bg-[var(--paper-canvas)] disabled:opacity-50"
                             >
                                 <div className="flex items-start justify-between gap-3">
-                                    <div className="min-w-0 flex-1">
-                                        <p className="text-sm font-medium text-gray-900 dark:text-white break-words">
+                                    <div className="min-w-0">
+                                        <p className="break-words text-sm text-[var(--paper-ink)]">
                                             {txn.description}
                                         </p>
-                                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                            {formatDateSafe(txn.transaction_date, { day: 'numeric', month: 'short', year: 'numeric' })}
+                                        <p className={`${paperEyebrow} mt-1`}>
+                                            {formatDateSafe(txn.transaction_date, {
+                                                day: 'numeric',
+                                                month: 'short',
+                                                year: 'numeric',
+                                            })}
+                                            {txn.category
+                                                ? ` · ${CATEGORY_LABELS[txn.category] || txn.category}`
+                                                : ''}
                                         </p>
-                                        {txn.category && (
-                                            <div className="mt-1">
-                                                <CategoryBadge category={txn.category} />
-                                            </div>
-                                        )}
                                     </div>
-                                    <p className={`text-sm font-semibold whitespace-nowrap ${
-                                        txn.transaction_type === 'CREDIT'
-                                            ? 'text-green-600 dark:text-green-400'
-                                            : 'text-red-600 dark:text-red-400'
-                                    }`}>
-                                        {txn.transaction_type === 'CREDIT' ? '+' : '-'}
+                                    <p className={`shrink-0 text-sm ${paperMoney} ${paperMoneyTone(signed)}`}>
+                                        {signed > 0 ? '+' : ''}
                                         <BlurredValue>{formatCurrency(Math.abs(txn.amount))}</BlurredValue>
                                     </p>
                                 </div>
                             </button>
-                        ))
-                    )}
-                </div>
+                        )
+                    })
+                )}
             </div>
-        </div>
+        </PaperDialog>
     )
 }

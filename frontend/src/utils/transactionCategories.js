@@ -27,14 +27,6 @@ export const CATEGORIES = [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES, ...NEUTR
 /** Categories that budget entries can map to (expense + transfers + uncategorized) */
 export const BUDGET_TRANSACTION_CATEGORIES = [...EXPENSE_CATEGORIES, 'transfers', 'uncategorized']
 
-/** Budget cadence options for a budget line item */
-export const BUDGET_CADENCES = ['monthly', 'annual', 'tracking']
-export const CADENCE_LABELS = {
-    monthly: 'Monthly',
-    annual: 'Annual',
-    tracking: 'Tracking only',
-}
-
 export const CATEGORY_LABELS = {
     income: 'Income',
     salary: 'Salary',

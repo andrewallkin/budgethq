@@ -7,7 +7,9 @@ from unittest.mock import MagicMock
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend"))
 
 from app.external_composition_service import (  # noqa: E402
+    SYGNIA_PLAYWRIGHT_SOURCE_ID,
     _parse_since_param,
+    playwright_account_slug,
     resolve_since_anchor,
 )
 
@@ -33,3 +35,13 @@ class TestSinceAnchorResolution:
         anchor, source = resolve_since_anchor(db, user_id=1, since_param=None)
         assert anchor == datetime(2026, 9, 1, 23, 59, 59)
         assert source == "previous_daily_eod"
+
+
+class TestPlaywrightAccountIdentity:
+    def test_slug_uses_adapter_source_id_not_a_generic_sygnia_prefix(self):
+        slug = playwright_account_slug(SYGNIA_PLAYWRIGHT_SOURCE_ID, "ABC123")
+        assert slug == "sygnia_playwright-ABC123"
+
+    def test_slug_stays_stable_for_a_future_playwright_adapter(self):
+        slug = playwright_account_slug("other_playwright", "XYZ")
+        assert slug == "other_playwright-XYZ"

@@ -1,11 +1,17 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import axios from 'axios'
-import { Calculator, ChevronRight, Info, TrendingUp } from 'lucide-react'
+import { ChevronRight, Info } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import BlurredValue from '../components/BlurredValue'
 import { useAuth } from '../context/AuthContext'
 import { formatCurrency } from '../utils/numberFormatting'
+import {
+    CARD_BAND,
+    AppCard,
+    eyebrowClass,
+    OVERVIEW_COLORS,
+} from '../components/appUi'
 
 export default function RATaxCalculator() {
     const { blurSensitiveValues } = useAuth()
@@ -257,35 +263,35 @@ export default function RATaxCalculator() {
 
     if (loading) {
         return (
-            <div className="flex items-center justify-center h-64">
-                <div className="text-gray-600 dark:text-gray-400">Loading...</div>
-            </div>
+            <div className="mx-auto max-w-[1400px] p-8 text-center text-neutral-400">Loading...</div>
         )
     }
 
     return (
-        <div className="space-y-6 sm:space-y-8">
+        <div className="mx-auto max-w-[1400px] space-y-5">
             <Link
                 to="/investments/ra"
-                className="inline-flex items-center gap-2 text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline w-fit"
+                className="inline-flex items-center gap-1 text-sm font-medium text-neutral-600 dark:text-neutral-300 hover:text-neutral-950 dark:hover:text-white w-fit"
             >
-                <TrendingUp className="w-4 h-4 shrink-0" />
                 Back to RA performance
             </Link>
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
-                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">🏦 Retirement Annuity Tax Calculator</h1>
-                <div className="flex items-center gap-4">
-                    <div className="text-sm text-gray-500 dark:text-gray-400">
-                        {isSaving ? 'Saving...' : 'All changes saved'}
-                    </div>
+                <div>
+                    <p className={eyebrowClass}>Retirement annuity</p>
+                    <h1 className="mt-1 text-2xl sm:text-3xl font-semibold tracking-tight text-neutral-950 dark:text-white">
+                        Tax calculator
+                    </h1>
+                </div>
+                <div className="text-sm text-neutral-400">
+                    {isSaving ? 'Saving...' : 'All changes saved'}
                 </div>
             </div>
 
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
-                <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Input Details</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
+            <AppCard band={CARD_BAND.investments} className="p-6">
+                <h2 className={eyebrowClass}>Input details</h2>
+                <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                        <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-200 mb-1">
                             Monthly Gross Salary (R)
                         </label>
                         <BlurredValue as="div">
@@ -293,13 +299,13 @@ export default function RATaxCalculator() {
                             type="text"
                             value={formatCurrency(salary)}
                             readOnly
-                            className="w-full min-h-[44px] px-3 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white cursor-not-allowed"
+                            className="w-full min-h-[44px] px-3 py-3 border border-neutral-200 dark:border-neutral-700 rounded-xl bg-neutral-50 dark:bg-neutral-800/50 text-neutral-950 dark:text-white cursor-not-allowed"
                         />
                         </BlurredValue>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">From your latest payslip (gross + company contributions + additional income)</p>
+                        <p className="text-xs text-neutral-400 mt-1">From your latest payslip (gross + company contributions + additional income)</p>
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                        <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-200 mb-1">
                             Current RA Value (R)
                         </label>
                         <BlurredValue as="div">
@@ -307,29 +313,29 @@ export default function RATaxCalculator() {
                             type="text"
                             value={formatCurrency(currentRAValue)}
                             readOnly
-                            className="w-full min-h-[44px] px-3 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white cursor-not-allowed"
+                            className="w-full min-h-[44px] px-3 py-3 border border-neutral-200 dark:border-neutral-700 rounded-xl bg-neutral-50 dark:bg-neutral-800/50 text-neutral-950 dark:text-white cursor-not-allowed"
                             placeholder="0"
                         />
                         </BlurredValue>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        <p className="text-xs text-neutral-400 mt-1">
                             From your RA performance history (latest month)
                         </p>
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                        <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-200 mb-1">
                             Monthly RA Contribution (R)
                         </label>
                         <BlurredValue as="div" className="relative">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400 pointer-events-none">R</span>
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 dark:text-neutral-400 pointer-events-none">R</span>
                             <input
                                 type="number"
                                 inputMode="decimal"
                                 value={monthlyRAContribution}
                                 onChange={(e) => updateMonthlyRAContribution(e.target.value)}
                                 onFocus={(e) => e.target.select()}
-                                className={`w-full min-h-[44px] pl-8 pr-3 py-3 border rounded-lg focus:ring-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors ${monthlyRAContribution > 0 && !isRAContributionValid
+                                className={`w-full min-h-[44px] pl-8 pr-3 py-3 border rounded-xl focus:ring-2 bg-white dark:bg-neutral-900 text-neutral-950 dark:text-white transition-colors ${monthlyRAContribution > 0 && !isRAContributionValid
                                     ? 'border-red-500 dark:border-red-500 focus:ring-red-500'
-                                    : 'border-gray-300 dark:border-gray-600 focus:ring-blue-500'
+                                    : 'border-neutral-200 dark:border-neutral-700 focus:ring-neutral-400'
                                     }`}
                                 placeholder="0"
                             />
@@ -341,14 +347,17 @@ export default function RATaxCalculator() {
                         )}
                     </div>
                 </div>
-            </div>
+            </AppCard>
 
             {calculationResult && (
-                <div ref={resultsSectionRef} className="space-y-6">
-                    {/* Summary */}
-                    <div id="calculator-result" className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 scroll-mt-24 pb-8">
-                        <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Calculator Result</h2>
-                        <p className="text-gray-700 dark:text-gray-200 mb-2 tabular-nums">
+                <div ref={resultsSectionRef} className="space-y-5">
+                    <AppCard
+                        id="calculator-result"
+                        band={CARD_BAND.investments}
+                        className="p-6 scroll-mt-24 pb-8"
+                    >
+                        <h2 className={eyebrowClass}>Calculator result</h2>
+                        <p className="mt-4 text-neutral-700 dark:text-neutral-200 tabular-nums text-sm">
                             On a salary of <BlurredValue>{formatCurrency(calculationResult.monthly_salary)}</BlurredValue> per month,{' '}
                             <BlurredValue>{formatCurrency(calculationResult.annual_salary)}</BlurredValue> per year, you can expect to pay{' '}
                             <BlurredValue><span className="font-semibold text-red-600 dark:text-red-400">
@@ -356,25 +365,24 @@ export default function RATaxCalculator() {
                             </span></BlurredValue>{' '}
                             in income tax per year.
                         </p>
-                        <p className="text-gray-700 dark:text-gray-200">
+                        <p className="mt-2 text-neutral-700 dark:text-neutral-200 text-sm">
                             Here is how your contribution can lower your income tax and potentially increase your tax refund:
                         </p>
-                    </div>
+                    </AppCard>
 
-                    {/* Results Table */}
-                    <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-x-auto">
+                    <AppCard band={CARD_BAND.investments} className="p-4 sm:p-6 overflow-x-auto">
                         <div className="flex items-center gap-2 mb-2 sm:hidden">
-                            <ChevronRight className="w-4 h-4 text-gray-500 dark:text-gray-400 flex-shrink-0" />
-                            <p className="text-xs text-gray-500 dark:text-gray-400">Swipe horizontally to see all scenarios</p>
+                            <ChevronRight className="w-4 h-4 text-neutral-400 flex-shrink-0" />
+                            <p className="text-xs text-neutral-400">Swipe horizontally to see all scenarios</p>
                         </div>
                         <table className="w-full min-w-[800px]">
                             <thead>
-                                <tr className="border-b border-gray-200 dark:border-gray-700">
-                                    <th className="text-left py-3 px-4 font-semibold text-gray-900 dark:text-white"></th>
+                                <tr className="border-b border-neutral-200 dark:border-neutral-700">
+                                    <th className="text-left py-3 px-4 font-semibold text-neutral-950 dark:text-white"></th>
                                     {calculationResult.scenarios.map((scenario, index) => (
                                         <th
                                             key={index}
-                                            className={`text-center py-3 px-4 font-semibold text-gray-900 dark:text-white border-l border-gray-200 dark:border-gray-600 ${index % 2 === 1 ? 'bg-gray-50/50 dark:bg-gray-700/30' : ''}`}
+                                            className={`text-center py-3 px-4 font-semibold text-neutral-950 dark:text-white border-l border-neutral-200 dark:border-neutral-700 ${index % 2 === 1 ? 'bg-neutral-50/50 dark:bg-neutral-800/30' : ''}`}
                                         >
                                             {scenario.label}
                                         </th>
@@ -383,56 +391,56 @@ export default function RATaxCalculator() {
                             </thead>
                             <tbody>
                                 {/* Net Income (monthly) */}
-                                <tr className="border-b border-gray-100 dark:border-gray-700">
+                                <tr className="border-b border-neutral-100 dark:border-neutral-800">
                                     <td className="py-3 px-4">
                                         <div className="flex items-center gap-2">
-                                            <span className="text-gray-700 dark:text-gray-200">Net income (monthly)</span>
-                                            <button type="button" className="p-2 -m-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 ml-2" aria-label="More info">
-                                                <Info className="w-4 h-4 text-gray-400 dark:text-gray-500" />
+                                            <span className="text-neutral-700 dark:text-neutral-200">Net income (monthly)</span>
+                                            <button type="button" className="p-2 -m-2 rounded-full hover:bg-neutral-100 dark:hover:bg-neutral-800 ml-2" aria-label="More info">
+                                                <Info className="w-4 h-4 text-neutral-400 dark:text-neutral-500" />
                                             </button>
                                         </div>
                                     </td>
                                     {calculationResult.scenarios.map((scenario, index) => (
-                                        <td key={index} className={`text-center py-3 px-4 text-gray-900 dark:text-white tabular-nums border-l border-gray-200 dark:border-gray-600 ${index % 2 === 1 ? 'bg-gray-50/50 dark:bg-gray-700/30' : ''}`}>
+                                        <td key={index} className={`text-center py-3 px-4 text-neutral-950 dark:text-white tabular-nums border-l border-neutral-200 dark:border-neutral-700 ${index % 2 === 1 ? 'bg-neutral-50/50 dark:bg-neutral-800/30' : ''}`}>
                                             <BlurredValue>{formatCurrency(calculationResult.net_income_monthly)}</BlurredValue>
                                         </td>
                                     ))}
                                 </tr>
 
                                 {/* RA Contributions */}
-                                <tr className="border-b border-gray-100 dark:border-gray-700">
-                                    <td className="py-4 px-4 text-gray-700 dark:text-gray-200">RA contributions</td>
+                                <tr className="border-b border-neutral-100 dark:border-neutral-800">
+                                    <td className="py-4 px-4 text-neutral-700 dark:text-neutral-200">RA contributions</td>
                                     {calculationResult.scenarios.map((scenario, index) => (
-                                        <td key={index} className={`text-center py-4 px-4 text-gray-900 dark:text-white tabular-nums leading-relaxed border-l border-gray-200 dark:border-gray-600 ${index % 2 === 1 ? 'bg-gray-50/50 dark:bg-gray-700/30' : ''}`}>
+                                        <td key={index} className={`text-center py-4 px-4 text-neutral-950 dark:text-white tabular-nums leading-relaxed border-l border-neutral-200 dark:border-neutral-700 ${index % 2 === 1 ? 'bg-neutral-50/50 dark:bg-neutral-800/30' : ''}`}>
                                             <BlurredValue>{formatCurrency(scenario.ra_contribution_annual)} yr / {formatCurrency(scenario.ra_contribution_monthly)} mo</BlurredValue>
                                         </td>
                                     ))}
                                 </tr>
 
                                 {/* Adjusted Income (monthly) */}
-                                <tr className="border-b border-gray-100 dark:border-gray-700">
+                                <tr className="border-b border-neutral-100 dark:border-neutral-800">
                                     <td className="py-3 px-4">
                                         <div className="flex items-center gap-2">
-                                            <span className="text-gray-700 dark:text-gray-200">Adjusted income (monthly)</span>
-                                            <button type="button" className="p-2 -m-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 ml-2" aria-label="More info">
-                                                <Info className="w-4 h-4 text-gray-400 dark:text-gray-500" />
+                                            <span className="text-neutral-700 dark:text-neutral-200">Adjusted income (monthly)</span>
+                                            <button type="button" className="p-2 -m-2 rounded-full hover:bg-neutral-100 dark:hover:bg-neutral-800 ml-2" aria-label="More info">
+                                                <Info className="w-4 h-4 text-neutral-400 dark:text-neutral-500" />
                                             </button>
                                         </div>
                                     </td>
                                     {calculationResult.scenarios.map((scenario, index) => (
-                                        <td key={index} className={`text-center py-3 px-4 text-gray-900 dark:text-white tabular-nums border-l border-gray-200 dark:border-gray-600 ${index % 2 === 1 ? 'bg-gray-50/50 dark:bg-gray-700/30' : ''}`}>
+                                        <td key={index} className={`text-center py-3 px-4 text-neutral-950 dark:text-white tabular-nums border-l border-neutral-200 dark:border-neutral-700 ${index % 2 === 1 ? 'bg-neutral-50/50 dark:bg-neutral-800/30' : ''}`}>
                                             <BlurredValue>{formatCurrency(scenario.adjusted_income_monthly)}</BlurredValue>
                                         </td>
                                     ))}
                                 </tr>
 
                                 {/* Income Tax (annual) */}
-                                <tr className="border-b border-gray-100 dark:border-gray-700">
-                                    <td className="py-3 px-4 text-gray-700 dark:text-gray-200">Income tax (annual)</td>
+                                <tr className="border-b border-neutral-100 dark:border-neutral-800">
+                                    <td className="py-3 px-4 text-neutral-700 dark:text-neutral-200">Income tax (annual)</td>
                                     {calculationResult.scenarios.map((scenario, index) => (
                                         <td
                                             key={index}
-                                            className={`text-center py-3 px-4 font-semibold text-red-600 dark:text-red-400 tabular-nums border-l border-gray-200 dark:border-gray-600 ${index % 2 === 1 ? 'bg-gray-50/50 dark:bg-gray-700/30' : ''}`}
+                                            className={`text-center py-3 px-4 font-semibold text-red-600 dark:text-red-400 tabular-nums border-l border-neutral-200 dark:border-neutral-700 ${index % 2 === 1 ? 'bg-neutral-50/50 dark:bg-neutral-800/30' : ''}`}
                                         >
                                             <BlurredValue>{formatCurrency(scenario.income_tax_annual)}</BlurredValue>
                                         </td>
@@ -440,19 +448,20 @@ export default function RATaxCalculator() {
                                 </tr>
 
                                 {/* Potential Tax Saved (annual) */}
-                                <tr className="border-b border-gray-100 dark:border-gray-700">
+                                <tr className="border-b border-neutral-100 dark:border-neutral-800">
                                     <td className="py-3 px-4">
                                         <div className="flex items-center gap-2">
-                                            <span className="text-gray-700 dark:text-gray-200">Potential tax saved (annual)</span>
-                                            <button type="button" className="p-2 -m-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 ml-2" aria-label="More info">
-                                                <Info className="w-4 h-4 text-gray-400 dark:text-gray-500" />
+                                            <span className="text-neutral-700 dark:text-neutral-200">Potential tax saved (annual)</span>
+                                            <button type="button" className="p-2 -m-2 rounded-full hover:bg-neutral-100 dark:hover:bg-neutral-800 ml-2" aria-label="More info">
+                                                <Info className="w-4 h-4 text-neutral-400 dark:text-neutral-500" />
                                             </button>
                                         </div>
                                     </td>
                                     {calculationResult.scenarios.map((scenario, index) => (
                                         <td
                                             key={index}
-                                            className={`text-center py-3 px-4 font-semibold text-blue-600 dark:text-blue-400 tabular-nums border-l border-gray-200 dark:border-gray-600 ${index % 2 === 1 ? 'bg-gray-50/50 dark:bg-gray-700/30' : ''}`}
+                                            className={`text-center py-3 px-4 font-semibold tabular-nums border-l border-neutral-200 dark:border-neutral-700 ${index % 2 === 1 ? 'bg-neutral-50/50 dark:bg-neutral-800/30' : ''}`}
+                                            style={{ color: OVERVIEW_COLORS[0] }}
                                         >
                                             <BlurredValue>{formatCurrency(scenario.tax_saved_annual)}</BlurredValue>
                                         </td>
@@ -463,16 +472,17 @@ export default function RATaxCalculator() {
                                 <tr>
                                     <td className="py-3 px-4">
                                         <div className="flex items-center gap-2">
-                                            <span className="text-gray-700 dark:text-gray-200">Potential tax saved (monthly)</span>
-                                            <button type="button" className="p-2 -m-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 ml-2" aria-label="More info">
-                                                <Info className="w-4 h-4 text-gray-400 dark:text-gray-500" />
+                                            <span className="text-neutral-700 dark:text-neutral-200">Potential tax saved (monthly)</span>
+                                            <button type="button" className="p-2 -m-2 rounded-full hover:bg-neutral-100 dark:hover:bg-neutral-800 ml-2" aria-label="More info">
+                                                <Info className="w-4 h-4 text-neutral-400 dark:text-neutral-500" />
                                             </button>
                                         </div>
                                     </td>
                                     {calculationResult.scenarios.map((scenario, index) => (
                                         <td
                                             key={index}
-                                            className={`text-center py-3 px-4 font-semibold text-blue-600 dark:text-blue-400 tabular-nums border-l border-gray-200 dark:border-gray-600 ${index % 2 === 1 ? 'bg-gray-50/50 dark:bg-gray-700/30' : ''}`}
+                                            className={`text-center py-3 px-4 font-semibold tabular-nums border-l border-neutral-200 dark:border-neutral-700 ${index % 2 === 1 ? 'bg-neutral-50/50 dark:bg-neutral-800/30' : ''}`}
+                                            style={{ color: OVERVIEW_COLORS[0] }}
                                         >
                                             <BlurredValue>{formatCurrency(scenario.tax_saved_monthly)}</BlurredValue>
                                         </td>
@@ -480,21 +490,19 @@ export default function RATaxCalculator() {
                                 </tr>
                             </tbody>
                         </table>
-                    </div>
+                    </AppCard>
 
-                    {/* Growth Projection Graph */}
                     {growthData.length > 0 && (
-                        <div className={`bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 ${blurSensitiveValues ? 'blur-[5px] select-none' : ''}`}>
-                            <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">RA Growth Projection</h2>
-                            <div className="w-full min-w-0 h-[340px] sm:h-[480px]">
+                        <AppCard band={CARD_BAND.investments} className={`p-4 sm:p-6 ${blurSensitiveValues ? 'blur-[5px] select-none' : ''}`}>
+                            <h2 className={eyebrowClass}>RA growth projection</h2>
+                            <div className="mt-4 w-full min-w-0 h-[340px] sm:h-[480px]">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <LineChart data={growthData} margin={{ top: 5, right: 10, left: isMobile ? 0 : 30, bottom: 35 }}>
-                                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" className="dark:stroke-gray-700" />
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" className="dark:stroke-neutral-700" />
                                         <XAxis
                                             dataKey="year"
-                                            stroke="#6b7280"
-                                            className="dark:stroke-gray-400"
-                                            tick={{ fill: '#6b7280', fontSize: isMobile ? 11 : 12 }}
+                                            stroke="#9CA3AF"
+                                            tick={{ fill: '#9CA3AF', fontSize: isMobile ? 11 : 12 }}
                                             ticks={growthData.length > 8 ? growthData.filter((_, i) => i % 5 === 0).map(d => d.year) : undefined}
                                             tickFormatter={(value) => {
                                                 const year = value
@@ -502,13 +510,12 @@ export default function RATaxCalculator() {
                                                 const yearsFromNow = year - currentYear
                                                 return yearsFromNow % 5 === 0 ? year.toString() : ''
                                             }}
-                                            label={{ value: 'Year', position: 'insideBottom', offset: -10, style: { fill: '#6b7280', fontSize: 13 } }}
+                                            label={{ value: 'Year', position: 'insideBottom', offset: -10, style: { fill: '#9CA3AF', fontSize: 13 } }}
                                         />
                                         <YAxis
-                                            stroke="#6b7280"
-                                            className="dark:stroke-gray-400"
+                                            stroke="#9CA3AF"
                                             width={isMobile ? 52 : 70}
-                                            tick={{ fill: '#6b7280', fontSize: isMobile ? 10 : 12 }}
+                                            tick={{ fill: '#9CA3AF', fontSize: isMobile ? 10 : 12 }}
                                             tickFormatter={(value) => {
                                                 if (value >= 1000000) {
                                                     return `R${(value / 1000000).toFixed(1)}M`
@@ -522,7 +529,7 @@ export default function RATaxCalculator() {
                                                 angle: -90,
                                                 position: 'insideLeft',
                                                 offset: 15,
-                                                style: { fill: '#6b7280', fontSize: 13, textAnchor: 'middle' }
+                                                style: { fill: '#9CA3AF', fontSize: 13, textAnchor: 'middle' }
                                             } : undefined}
                                         />
                                         <Tooltip
@@ -541,7 +548,7 @@ export default function RATaxCalculator() {
                                         <Line
                                             type="monotone"
                                             dataKey="value"
-                                            stroke="#3b82f6"
+                                            stroke={OVERVIEW_COLORS[0]}
                                             strokeWidth={2}
                                             dot={false}
                                             activeDot={{ r: 6 }}
@@ -551,39 +558,33 @@ export default function RATaxCalculator() {
                                     </LineChart>
                                 </ResponsiveContainer>
                             </div>
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-4 italic">
+                            <p className="text-xs text-neutral-400 mt-4 italic">
                                 Assumes net return of 5.5% after tax and inflation. This is a projection and actual returns may vary.
                             </p>
-                        </div>
+                        </AppCard>
                     )}
 
-                    {/* Info Box */}
-                    <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-                        <div className="flex items-start gap-3">
-                            <Calculator className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5" />
-                            <div className="text-sm text-blue-800 dark:text-blue-200">
-                                <p className="font-semibold mb-1">About RA Tax Benefits</p>
-                                <ul className="list-disc list-inside space-y-1 text-blue-700 dark:text-blue-300">
-                                    <li>RA contributions are tax deductible up to 27.5% of your earnings or <BlurredValue>{calculationResult?.ra_max_deduction ? formatCurrency(calculationResult.ra_max_deduction, { minimumFractionDigits: 0, maximumFractionDigits: 0 }) : 'R350,000'}</BlurredValue> per year (whichever is lower)</li>
-                                    <li>The higher your RA contributions, the higher your potential tax refund</li>
-                                    <li>Growth on your RA money is tax-free (no tax on interest, dividends, or capital gains)</li>
-                                    <li>At retirement, you can take up to 1/3 of your RA as a lump sum with lower tax rates</li>
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
+                    <AppCard band={CARD_BAND.investments} className="p-4">
+                        <p className={`${eyebrowClass} mb-2`}>About RA tax benefits</p>
+                        <ul className="list-disc list-inside space-y-1 text-sm text-neutral-600 dark:text-neutral-300">
+                            <li>RA contributions are tax deductible up to 27.5% of your earnings or <BlurredValue>{calculationResult?.ra_max_deduction ? formatCurrency(calculationResult.ra_max_deduction, { minimumFractionDigits: 0, maximumFractionDigits: 0 }) : 'R350,000'}</BlurredValue> per year (whichever is lower)</li>
+                            <li>The higher your RA contributions, the higher your potential tax refund</li>
+                            <li>Growth on your RA money is tax-free (no tax on interest, dividends, or capital gains)</li>
+                            <li>At retirement, you can take up to 1/3 of your RA as a lump sum with lower tax rates</li>
+                        </ul>
+                    </AppCard>
                 </div>
             )}
 
             {calculating && (
-                <div className="text-center text-gray-600 dark:text-gray-400">Calculating...</div>
+                <div className="text-center text-neutral-400">Calculating...</div>
             )}
 
             {showJumpToResults && (
                 <button
                     type="button"
                     onClick={() => document.getElementById('calculator-result')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                    className="fixed bottom-4 right-4 z-50 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900"
+                    className="fixed bottom-4 right-4 z-50 px-4 py-3 bg-neutral-900 hover:bg-neutral-800 text-white text-sm font-medium rounded-full shadow-lg focus:outline-none focus:ring-2 focus:ring-neutral-400 focus:ring-offset-2 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-100 dark:focus:ring-offset-neutral-900"
                 >
                     Jump to Results
                 </button>

@@ -1,6 +1,17 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import axios from 'axios'
 import EmergencyFundCalculator from '../components/EmergencyFundCalculator'
+import BlurredValue from '../components/BlurredValue'
+import { formatCurrency, formatNumber } from '../utils/numberFormatting'
+import {
+    CARD_BAND,
+    AppCard,
+    LedgerRow,
+    eyebrowClass,
+    heroMoneyClass,
+    moneyTone,
+    dividerClass,
+} from '../components/appUi'
 import {
     EMERGENCY_FUND_SOURCES,
     getEmergencyFundAccount,
@@ -218,7 +229,13 @@ export default function EmergencySavings() {
         setEmergencyFundData(apiData)
     }
 
-    if (loading) return <div className="p-8 text-center text-gray-500">Loading...</div>
+    if (loading) {
+        return (
+            <div className="mx-auto max-w-[1400px] space-y-5">
+                <p className="py-12 text-center text-sm text-neutral-400">Loading...</p>
+            </div>
+        )
+    }
 
     // Compute effective total from manual value, bank sync, and manual accounts marked as EF
     const effectiveCurrentFund = computeEffectiveEmergencyFund({
@@ -227,6 +244,20 @@ export default function EmergencySavings() {
         bankSyncBalance: emergencyAccount?.available_balance,
         manualAccounts
     })
+
+    const targetAmount =
+        emergencyFundData.target_type === 'target_value'
+            ? (emergencyFundData.target_value ?? 0)
+            : needsTotal * (emergencyFundData.target_months ?? 6)
+
+    const progress =
+        targetAmount > 0 ? Math.min(100, (effectiveCurrentFund / targetAmount) * 100) : null
+
+    const remainingToSave = Math.max(0, targetAmount - effectiveCurrentFund)
+    const excessAboveTarget = Math.max(0, effectiveCurrentFund - targetAmount)
+
+    const fundSourceLabel =
+        fundSource === EMERGENCY_FUND_SOURCES.BANK_SYNC ? 'Bank sync' : 'Manual input'
 
     // Convert API field names to component's expected field names
     const componentData = {
@@ -238,30 +269,146 @@ export default function EmergencySavings() {
     }
 
     return (
-        <div className="space-y-6 sm:space-y-8">
-            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
-                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">🛡️ Emergency Savings</h1>
-                <div className="flex items-center gap-4">
-                    <div className="text-sm text-gray-500 dark:text-gray-400">
-                        {isSaving ? 'Saving...' : 'All changes saved'}
-                    </div>
+        <div className="mx-auto max-w-[1400px] space-y-5">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                    <p className={eyebrowClass}>Cash & safety</p>
+                    <h1 className="mt-1 text-3xl font-semibold tracking-tight text-neutral-950 dark:text-white">
+                        Emergency Savings
+                    </h1>
                 </div>
+                <p className="text-xs font-medium text-neutral-400">
+                    {isSaving ? 'Saving...' : 'All changes saved'}
+                </p>
             </div>
 
-            <EmergencyFundCalculator
-                needsTotal={needsTotal}
-                emergencyFundData={componentData}
-                onSave={handleEmergencyFundSave}
-                fundSource={fundSource}
-                onFundSourceChange={handleFundSourceChange}
-                bankSyncAvailable={bankSyncAvailable}
-                hasInvestecCredentials={hasInvestecCredentials}
-                bankSyncMeta={{
-                    accountName: emergencyAccount?.account_name,
-                    referenceName: emergencyAccount?.reference_name,
-                    balanceUpdatedAt: emergencyAccount?.balance_updated_at
-                }}
-            />
+            <AppCard band={CARD_BAND.accounts} className="p-6">
+                <div className="flex items-baseline justify-between gap-4">
+                    <p className={eyebrowClass}>Emergency fund</p>
+                    <p className="text-xs text-neutral-400">
+                        {progress == null ? 'No target' : `${Math.round(progress)}% funded`}
+                    </p>
+                </div>
+                <BlurredValue>
+                    <p className={`mt-5 ${heroMoneyClass}`}>
+                        {formatCurrency(effectiveCurrentFund, {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                        })}
+                    </p>
+                </BlurredValue>
+
+                {progress != null && (
+                    <div className="mt-6">
+                        <div className="h-1.5 overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800">
+                            <div
+                                className="h-full rounded-full bg-neutral-950 transition-all dark:bg-white"
+                                style={{ width: `${progress}%` }}
+                            />
+                        </div>
+                        <div className="mt-2 flex justify-between text-xs text-neutral-400">
+                            <BlurredValue>
+                                <span>
+                                    {formatCurrency(effectiveCurrentFund, {
+                                        minimumFractionDigits: 0,
+                                        maximumFractionDigits: 0,
+                                    })}
+                                </span>
+                            </BlurredValue>
+                            <BlurredValue>
+                                <span>
+                                    {formatCurrency(targetAmount, {
+                                        minimumFractionDigits: 0,
+                                        maximumFractionDigits: 0,
+                                    })}
+                                </span>
+                            </BlurredValue>
+                        </div>
+                    </div>
+                )}
+
+                <div className={`mt-6 ${dividerClass}`}>
+                    <LedgerRow
+                        label="Target"
+                        value={
+                            <BlurredValue>
+                                {targetAmount > 0
+                                    ? formatCurrency(targetAmount, {
+                                          minimumFractionDigits: 2,
+                                          maximumFractionDigits: 2,
+                                      })
+                                    : 'Not set'}
+                            </BlurredValue>
+                        }
+                    />
+                    <LedgerRow
+                        label="Monthly deposit"
+                        value={
+                            <BlurredValue>
+                                {formatCurrency(emergencyFundData.monthly_deposit ?? 0, {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                })}
+                            </BlurredValue>
+                        }
+                    />
+                    <LedgerRow
+                        label="Fund source"
+                        value={fundSourceLabel}
+                    />
+                    {targetAmount > 0 && (
+                        <LedgerRow
+                            label={remainingToSave > 0 ? 'Remaining to save' : 'Excess above target'}
+                            value={
+                                <BlurredValue>
+                                    {formatCurrency(
+                                        remainingToSave > 0 ? remainingToSave : excessAboveTarget,
+                                        { minimumFractionDigits: 2, maximumFractionDigits: 2 }
+                                    )}
+                                </BlurredValue>
+                            }
+                            tone={moneyTone(remainingToSave > 0 ? -1 : 1)}
+                        />
+                    )}
+                    {progress != null && (
+                        <LedgerRow
+                            label="Progress"
+                            value={
+                                <BlurredValue>
+                                    {formatNumber(progress, {
+                                        minimumFractionDigits: 1,
+                                        maximumFractionDigits: 1,
+                                    })}
+                                    %
+                                </BlurredValue>
+                            }
+                        />
+                    )}
+                </div>
+            </AppCard>
+
+            <AppCard band={CARD_BAND.accounts} className="overflow-hidden p-6">
+                <p className={eyebrowClass}>Fund setup</p>
+                <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
+                    Configure source, targets, and monthly deposits.
+                </p>
+                <div className="mt-4 [&>div]:rounded-none [&>div]:border-0 [&>div]:bg-transparent [&>div]:p-0 [&>div]:shadow-none [&>div]:dark:bg-transparent [&_h2]:hidden">
+                    <EmergencyFundCalculator
+                        needsTotal={needsTotal}
+                        emergencyFundData={componentData}
+                        onSave={handleEmergencyFundSave}
+                        fundSource={fundSource}
+                        onFundSourceChange={handleFundSourceChange}
+                        bankSyncAvailable={bankSyncAvailable}
+                        hasInvestecCredentials={hasInvestecCredentials}
+                        bankSyncMeta={{
+                            accountName: emergencyAccount?.account_name,
+                            referenceName: emergencyAccount?.reference_name,
+                            balanceUpdatedAt: emergencyAccount?.balance_updated_at
+                        }}
+                    />
+                </div>
+            </AppCard>
         </div>
     )
 }
