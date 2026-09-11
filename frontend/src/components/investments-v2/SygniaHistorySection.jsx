@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import {
-    LineChart,
+    ComposedChart,
+    Area,
     Line,
     XAxis,
     YAxis,
@@ -14,6 +15,21 @@ import ConfirmModal from '../ConfirmModal'
 import BlurredValue from '../BlurredValue'
 import { useAuth } from '../../context/AuthContext'
 import { formatCurrency, formatDateSafe } from '../../utils/numberFormatting'
+import {
+    PAPER_CHART,
+    PaperCard,
+    paperBtnGhost,
+    paperBtnPrimary,
+    paperEyebrow,
+    paperField,
+    paperIconBtn,
+    paperIconBtnDanger,
+    paperMoney,
+    paperMoneyTone,
+    paperSegment,
+    paperTableHead,
+    paperTableRow,
+} from '../appUi'
 import {
     getSygniaAccountHistory,
     createSygniaSnapshot,
@@ -335,57 +351,76 @@ export function SygniaOverviewCards() {
 
     if (loading && chartData.length === 0 && monthlyRows.length === 0) {
         return (
-            <p className="text-center text-gray-500 dark:text-gray-400 py-8 text-sm">
+            <p className="py-8 text-center text-sm text-[var(--paper-muted)]">
                 Loading performance data…
             </p>
         )
     }
 
+    const hasDeposits = totalContributionsNum > 0
+    const fyLabel = financialYearLabel ? ` (${financialYearLabel})` : ''
+
+    const stats = [
+        { label: 'Portfolio value', value: formatCurrencyLocal(portfolioValueNum), tone: 'text-[var(--paper-ink)]' },
+        { label: 'Total deposits', value: formatCurrencyLocal(totalContributionsNum), tone: 'text-[var(--paper-ink)]' },
+        {
+            label: 'Growth',
+            value: formatCurrencyLocal(growth),
+            tone: hasDeposits ? paperMoneyTone(growth) : 'text-[var(--paper-ink)]',
+            hint: hasDeposits && growthPercent !== null
+                ? `${growthPercent.toFixed(2)}% on deposits`
+                : !hasDeposits
+                  ? 'No deposits recorded yet'
+                  : null,
+        },
+        {
+            label: `FY deposits${fyLabel}`,
+            value: formatCurrencyLocal(contributionsCurrentFy),
+            tone: 'text-[var(--paper-ink)]',
+        },
+    ]
+
     return (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3 sm:p-4">
-                <p className="text-sm text-gray-500 dark:text-gray-400">Portfolio value</p>
-                <BlurredValue>
-                    <p className="text-xl font-semibold text-gray-900 dark:text-white">
-                        {formatCurrencyLocal(portfolioValueNum)}
-                    </p>
-                </BlurredValue>
-            </div>
-            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3 sm:p-4">
-                <p className="text-sm text-gray-500 dark:text-gray-400">Total deposits</p>
-                <BlurredValue>
-                    <p className="text-xl font-semibold text-gray-900 dark:text-white">
-                        {formatCurrencyLocal(totalContributionsNum)}
-                    </p>
-                </BlurredValue>
-            </div>
-            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3 sm:p-4">
-                <p className="text-sm text-gray-500 dark:text-gray-400">Growth</p>
-                <BlurredValue>
-                    <p
-                        className={`text-xl font-semibold ${growth >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}
-                    >
-                        {formatCurrencyLocal(growth)}
-                    </p>
-                    {growthPercent !== null && (
-                        <p
-                            className={`text-sm font-medium ${growth >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}
-                        >
-                            {growthPercent.toFixed(2)}%
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {stats.map((stat) => (
+                <PaperCard key={stat.label} className="p-5 sm:p-6">
+                    <p className={`${paperEyebrow} text-xs`}>{stat.label}</p>
+                    <BlurredValue>
+                        <p className={`mt-3 text-2xl sm:text-[1.75rem] ${paperMoney} ${stat.tone}`}>
+                            {stat.value}
                         </p>
-                    )}
-                </BlurredValue>
-            </div>
-            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3 sm:p-4">
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                    Deposits this financial year ({financialYearLabel})
-                </p>
-                <BlurredValue>
-                    <p className="text-xl font-semibold text-gray-900 dark:text-white">
-                        {formatCurrencyLocal(contributionsCurrentFy)}
-                    </p>
-                </BlurredValue>
-            </div>
+                    </BlurredValue>
+                    {stat.hint ? (
+                        <p className="mt-1.5 text-xs text-[var(--paper-muted)]">{stat.hint}</p>
+                    ) : null}
+                </PaperCard>
+            ))}
+        </div>
+    )
+}
+
+function PaperChartTooltip({ active, payload, label, formatLabel }) {
+    if (!active || !payload?.length) return null
+    return (
+        <div className="rounded-md border border-[var(--paper-line)] bg-[var(--paper-card)] px-3 py-2 shadow-sm">
+            <p className="mb-1.5 text-xs text-[var(--paper-muted)]">{formatLabel(label)}</p>
+            <ul className="space-y-1">
+                {payload.map((entry) => (
+                    <li key={entry.dataKey} className="flex items-center justify-between gap-4 text-sm">
+                        <span className="flex items-center gap-1.5 text-[var(--paper-muted)]">
+                            <span
+                                className="h-2 w-2 shrink-0 rounded-full"
+                                style={{ backgroundColor: entry.color }}
+                                aria-hidden
+                            />
+                            {entry.name}
+                        </span>
+                        <span className={`${paperMoney} text-[var(--paper-ink)]`}>
+                            {entry.value != null ? formatCurrency(entry.value) : '—'}
+                        </span>
+                    </li>
+                ))}
+            </ul>
         </div>
     )
 }
@@ -406,23 +441,42 @@ export function SygniaPerformanceChart() {
         chartData.length > 0 &&
         chartData.some((d) => d.portfolio_value != null || d.cumulative_contributions > 0)
 
+    const hasDepositsSeries = chartData.some((d) => (d.cumulative_contributions ?? 0) > 0)
+    const isSparse = chartData.length <= 2
+    const chartHeight = isSparse ? 240 : 320
+
+    const portfolioValues = chartData
+        .map((d) => d.portfolio_value)
+        .filter((v) => v != null && !Number.isNaN(Number(v)))
+    const depositValues = chartData
+        .map((d) => d.cumulative_contributions)
+        .filter((v) => v != null && !Number.isNaN(Number(v)))
+    const allValues = [...portfolioValues, ...(hasDepositsSeries ? depositValues : [])]
+    const dataMin = allValues.length ? Math.min(...allValues) : 0
+    const dataMax = allValues.length ? Math.max(...allValues) : 0
+    const yPadding = dataMax === dataMin ? Math.max(dataMax * 0.05, 1000) : (dataMax - dataMin) * 0.08
+    const yDomain = isSparse && allValues.length
+        ? [Math.max(0, dataMin - yPadding), dataMax + yPadding]
+        : [0, 'auto']
+
     return (
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-            <div className="flex flex-wrap items-center justify-between gap-4 p-4 sm:p-6 pb-2">
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                    <TrendingUp className="w-5 h-5 shrink-0" />
-                    <span>Portfolio value & deposits over time</span>
+        <PaperCard className="overflow-hidden">
+            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--paper-line)] px-5 py-4 sm:px-6">
+                <h2 className="flex items-center gap-2 text-sm font-semibold text-[var(--paper-ink)]">
+                    <TrendingUp className="h-4 w-4 shrink-0 text-[var(--paper-muted)]" aria-hidden />
+                    <span>Portfolio value & deposits</span>
                 </h2>
-                <div className="flex flex-wrap gap-2">
+                <div className={paperSegment} role="group" aria-label="Time range">
                     {TIME_RANGES.map(({ key, label }) => (
                         <button
                             key={key}
                             type="button"
                             onClick={() => setSelectedRange(key)}
-                            className={`px-4 py-2.5 min-h-[44px] rounded-lg text-sm font-medium transition-colors ${
+                            aria-pressed={selectedRange === key}
+                            className={`min-h-[32px] cursor-pointer rounded px-3 py-1.5 text-sm font-medium transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--paper-accent)]/20 ${
                                 selectedRange === key
-                                    ? 'bg-blue-600 text-white'
-                                    : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                                    ? 'bg-[var(--paper-ink)] text-[var(--paper-card)]'
+                                    : 'text-[var(--paper-muted)] hover:text-[var(--paper-ink)]'
                             }`}
                         >
                             {label}
@@ -431,61 +485,89 @@ export function SygniaPerformanceChart() {
                 </div>
             </div>
             {!hasChartData ? (
-                <p className="text-gray-500 dark:text-gray-400 py-8 text-center px-4">
-                    Add portfolio values or deposits below to see the chart.
+                <p className="px-5 py-10 text-center text-sm text-[var(--paper-muted)] sm:px-6">
+                    Add portfolio values or deposits below to see performance over time.
                 </p>
             ) : (
-                <div
-                    className={`w-full -mx-2 sm:mx-0 px-0 sm:px-4 pb-4 ${blurSensitiveValues ? 'blur-[5px] select-none' : ''}`}
-                >
-                    <ResponsiveContainer width="100%" height={360}>
-                        <LineChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
-                            <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-600" />
-                            <XAxis
-                                dataKey="date"
-                                tickFormatter={formatChartDate}
-                                className="text-gray-600 dark:text-gray-400"
-                                tick={{ fontSize: 12 }}
-                            />
-                            <YAxis
-                                tickFormatter={(v) => `R ${(v / 1000).toFixed(0)}k`}
-                                className="text-gray-600 dark:text-gray-400"
-                                tick={{ fontSize: 12 }}
-                            />
-                            <Tooltip
-                                formatter={(value) => [value != null ? formatCurrency(value) : '—']}
-                                labelFormatter={formatChartDate}
-                                contentStyle={{
-                                    backgroundColor: 'var(--tooltip-bg, #fff)',
-                                    border: '1px solid #e5e7eb',
-                                }}
-                                cursor={{ strokeWidth: 1 }}
-                            />
-                            <Legend />
-                            <Line
-                                type="monotone"
-                                dataKey="portfolio_value"
-                                name="Portfolio value"
-                                stroke="#2563eb"
-                                strokeWidth={2}
-                                dot={{ r: 5 }}
-                                activeDot={{ r: 8 }}
-                                connectNulls
-                            />
-                            <Line
-                                type="monotone"
-                                dataKey="cumulative_contributions"
-                                name="Deposits (cumulative)"
-                                stroke="#16a34a"
-                                strokeWidth={2}
-                                dot={{ r: 5 }}
-                                activeDot={{ r: 8 }}
-                            />
-                        </LineChart>
-                    </ResponsiveContainer>
-                </div>
+                <>
+                    {isSparse && (
+                        <p className="border-b border-[var(--paper-line)] px-5 py-3 text-xs text-[var(--paper-muted)] sm:px-6">
+                            {chartData.length === 1
+                                ? 'One snapshot recorded — add more months to see a trend.'
+                                : 'Limited history — the chart will fill in as you add monthly data.'}
+                            {!hasDepositsSeries && ' Deposits line hidden until cumulative deposits are recorded.'}
+                        </p>
+                    )}
+                    <div
+                        className={`w-full px-2 pb-4 pt-2 sm:px-4 ${blurSensitiveValues ? 'blur-[5px] select-none' : ''}`}
+                    >
+                        <ResponsiveContainer width="100%" height={chartHeight}>
+                            <ComposedChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 4 }}>
+                                <defs>
+                                    <linearGradient id="sygniaPortfolioFill" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="0%" stopColor={PAPER_CHART.umber} stopOpacity={0.22} />
+                                        <stop offset="100%" stopColor={PAPER_CHART.umber} stopOpacity={0.02} />
+                                    </linearGradient>
+                                </defs>
+                                <CartesianGrid strokeDasharray="3 3" stroke="var(--paper-line)" vertical={false} />
+                                <XAxis
+                                    dataKey="date"
+                                    tickFormatter={formatChartDate}
+                                    axisLine={false}
+                                    tickLine={false}
+                                    stroke="var(--paper-muted)"
+                                    tick={{ fill: 'var(--paper-muted)', fontSize: 11 }}
+                                    dy={4}
+                                />
+                                <YAxis
+                                    domain={yDomain}
+                                    tickFormatter={(v) => {
+                                        if (Math.abs(v) >= 1000) return `R ${(v / 1000).toFixed(0)}k`
+                                        return formatCurrency(v)
+                                    }}
+                                    axisLine={false}
+                                    tickLine={false}
+                                    width={56}
+                                    stroke="var(--paper-muted)"
+                                    tick={{ fill: 'var(--paper-muted)', fontSize: 11 }}
+                                />
+                                <Tooltip
+                                    content={
+                                        <PaperChartTooltip formatLabel={formatChartDate} />
+                                    }
+                                    cursor={{ stroke: 'var(--paper-muted)', strokeWidth: 1, strokeDasharray: '4 4' }}
+                                />
+                                <Legend
+                                    wrapperStyle={{ color: 'var(--paper-muted)', fontSize: 12, paddingTop: 8 }}
+                                />
+                                <Area
+                                    type="monotone"
+                                    dataKey="portfolio_value"
+                                    name="Portfolio value"
+                                    stroke={PAPER_CHART.umber}
+                                    strokeWidth={2}
+                                    fill="url(#sygniaPortfolioFill)"
+                                    dot={isSparse ? { r: 5, fill: PAPER_CHART.umber, strokeWidth: 0 } : false}
+                                    activeDot={{ r: 6 }}
+                                    connectNulls={false}
+                                />
+                                {hasDepositsSeries && (
+                                    <Line
+                                        type="monotone"
+                                        dataKey="cumulative_contributions"
+                                        name="Deposits (cumulative)"
+                                        stroke={PAPER_CHART.olive}
+                                        strokeWidth={2}
+                                        dot={isSparse ? { r: 4, fill: PAPER_CHART.olive, strokeWidth: 0 } : { r: 3 }}
+                                        activeDot={{ r: 5 }}
+                                    />
+                                )}
+                            </ComposedChart>
+                        </ResponsiveContainer>
+                    </div>
+                </>
             )}
-        </div>
+        </PaperCard>
     )
 }
 
@@ -515,144 +597,143 @@ export function SygniaMonthlySnapshots() {
 
     return (
         <>
-            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                    Monthly snapshots & deposits
-                </h2>
+            <PaperCard className="overflow-hidden">
+                <div className="border-b border-[var(--paper-line)] px-5 py-3.5 sm:px-6">
+                    <h2 className="text-sm font-semibold text-[var(--paper-ink)]">
+                        Monthly snapshots & deposits
+                    </h2>
+                </div>
 
-                <div className="mb-6 flex justify-center">
-                    <form
-                        onSubmit={handleSaveMonth}
-                        className="w-full max-w-3xl bg-gray-50 dark:bg-gray-900/40 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-4 md:px-6 md:py-5 shadow-sm space-y-3"
-                    >
-                        <div className="flex flex-wrap items-baseline justify-between gap-2">
-                            <p className="text-sm font-semibold text-gray-900 dark:text-white">Add or edit month</p>
-                            {editingMonthKey && (
-                                <p className="text-xs text-blue-600 dark:text-blue-400">
-                                    Editing{' '}
-                                    {new Date(`${editingMonthKey}-01T00:00:00Z`).toLocaleDateString('en-ZA', {
-                                        month: 'short',
-                                        year: 'numeric',
-                                    })}
-                                </p>
+                <form
+                    onSubmit={handleSaveMonth}
+                    className="border-b border-[var(--paper-line)] bg-[var(--paper-canvas)]/30 px-5 py-4 sm:px-6 sm:py-5"
+                >
+                    <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+                        <p className="text-sm font-medium text-[var(--paper-ink)]">Add or edit month</p>
+                        {editingMonthKey && (
+                            <p className="text-xs text-[var(--paper-accent)]">
+                                Editing{' '}
+                                {new Date(`${editingMonthKey}-01T00:00:00Z`).toLocaleDateString('en-ZA', {
+                                    month: 'short',
+                                    year: 'numeric',
+                                })}
+                            </p>
+                        )}
+                    </div>
+                    <div className="grid grid-cols-1 items-end gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
+                        <div className="flex min-w-0 flex-col gap-1.5">
+                            <label htmlFor="sygnia-snapshot-month" className="text-xs font-medium text-[var(--paper-muted)]">
+                                Month
+                            </label>
+                            <input
+                                id="sygnia-snapshot-month"
+                                type="month"
+                                value={entryMonth}
+                                onChange={(e) => setEntryMonth(e.target.value)}
+                                className={paperField}
+                            />
+                        </div>
+                        <div className="flex min-w-0 flex-col gap-1.5">
+                            <label htmlFor="sygnia-snapshot-value" className="text-xs font-medium text-[var(--paper-muted)]">
+                                Portfolio value (R)
+                            </label>
+                            <BlurredValue as="div">
+                                <input
+                                    id="sygnia-snapshot-value"
+                                    type="number"
+                                    inputMode="decimal"
+                                    min="0"
+                                    step="any"
+                                    value={portfolioValue}
+                                    onChange={(e) => setPortfolioValue(e.target.value)}
+                                    className={paperField}
+                                />
+                            </BlurredValue>
+                            {snapshotError && (
+                                <p className="text-xs text-[var(--paper-brick)]">{snapshotError}</p>
                             )}
                         </div>
-                        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 overflow-hidden">
-                            <div className="flex flex-col gap-1 min-w-0">
-                                <label className="text-xs font-medium text-gray-700 dark:text-gray-300">Month</label>
+                        <div className="flex min-w-0 flex-col gap-1.5">
+                            <label htmlFor="sygnia-snapshot-deposits" className="text-xs font-medium text-[var(--paper-muted)]">
+                                Deposits (R)
+                            </label>
+                            <BlurredValue as="div">
                                 <input
-                                    type="month"
-                                    value={entryMonth}
-                                    onChange={(e) => setEntryMonth(e.target.value)}
-                                    className="w-full max-w-full min-w-0 px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                    id="sygnia-snapshot-deposits"
+                                    type="number"
+                                    inputMode="decimal"
+                                    min="0"
+                                    step="any"
+                                    value={contributionAmount}
+                                    onChange={(e) => setContributionAmount(e.target.value)}
+                                    className={paperField}
                                 />
-                            </div>
-                            <div className="flex flex-col gap-1 min-w-0">
-                                <label className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                                    Portfolio value (R)
-                                </label>
-                                <BlurredValue as="div">
-                                    <input
-                                        type="number"
-                                        inputMode="decimal"
-                                        min="0"
-                                        step="any"
-                                        value={portfolioValue}
-                                        onChange={(e) => setPortfolioValue(e.target.value)}
-                                        className="w-full min-w-0 px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                                    />
-                                </BlurredValue>
-                                {snapshotError && (
-                                    <p className="text-xs text-red-600 dark:text-red-400 mt-0.5">{snapshotError}</p>
-                                )}
-                            </div>
-                            <div className="flex flex-col gap-1 min-w-0">
-                                <label className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                                    Deposits (R)
-                                </label>
-                                <BlurredValue as="div">
-                                    <input
-                                        type="number"
-                                        inputMode="decimal"
-                                        min="0"
-                                        step="any"
-                                        value={contributionAmount}
-                                        onChange={(e) => setContributionAmount(e.target.value)}
-                                        className="w-full min-w-0 px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                                    />
-                                </BlurredValue>
-                                {contributionError && (
-                                    <p className="text-xs text-red-600 dark:text-red-400 mt-0.5">{contributionError}</p>
-                                )}
-                            </div>
+                            </BlurredValue>
+                            {contributionError && (
+                                <p className="text-xs text-[var(--paper-brick)]">{contributionError}</p>
+                            )}
                         </div>
-                        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-1">
+                        <div className="flex flex-wrap gap-2 lg:flex-col lg:items-stretch">
                             {editingMonthKey && (
-                                <button
-                                    type="button"
-                                    onClick={handleCancelEditMonth}
-                                    className="w-full sm:w-auto px-3 py-2.5 min-h-[44px] border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 text-sm rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
-                                >
+                                <button type="button" onClick={handleCancelEditMonth} className={paperBtnGhost}>
                                     Cancel
                                 </button>
                             )}
-                            <button
-                                type="submit"
-                                disabled={isSaving}
-                                className="w-full sm:w-auto px-3 py-2.5 min-h-[44px] bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white text-sm font-medium rounded-lg transition-colors"
-                            >
+                            <button type="submit" disabled={isSaving} className={paperBtnPrimary}>
                                 {isSaving ? 'Saving…' : editingMonthKey ? 'Update month' : 'Add month'}
                             </button>
                         </div>
-                    </form>
-                </div>
+                    </div>
+                </form>
 
                 {monthlyRows.length > 0 ? (
-                    <div className="overflow-x-auto -mx-4 px-4 sm:mx-auto sm:px-0 max-w-3xl">
-                        <table className="w-full text-sm text-left text-gray-700 dark:text-gray-300">
+                    <div className="overflow-x-auto px-5 py-4 sm:px-6">
+                        <table className="w-full min-w-[28rem] text-left text-sm text-[var(--paper-ink)]">
                             <thead>
-                                <tr className="border-b border-gray-200 dark:border-gray-600">
-                                    <th className="py-2 pr-4 font-medium">Month</th>
-                                    <th className="py-2 pr-4 font-medium">Portfolio value</th>
-                                    <th className="py-2 pr-4 font-medium">Deposits</th>
-                                    <th className="py-2 pr-2 font-medium text-right">Actions</th>
+                                <tr className={paperTableHead}>
+                                    <th className="py-2.5 pr-4">Month</th>
+                                    <th className="py-2.5 pr-4">Portfolio value</th>
+                                    <th className="py-2.5 pr-4">Deposits</th>
+                                    <th className="py-2.5 pr-2 text-right">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {monthlyRows.map((row) => (
-                                    <tr key={row.monthKey} className="border-b border-gray-100 dark:border-gray-700">
-                                        <td className="py-2 pr-4">{formatTableMonth(row.date)}</td>
-                                        <td className="py-2 pr-4">
+                                    <tr key={row.monthKey} className={paperTableRow}>
+                                        <td className="py-2.5 pr-4">{formatTableMonth(row.date)}</td>
+                                        <td className="py-2.5 pr-4 tabular-nums">
                                             <BlurredValue>
                                                 {row.portfolio_value != null
                                                     ? formatCurrencyLocal(row.portfolio_value)
                                                     : '—'}
                                             </BlurredValue>
                                         </td>
-                                        <td className="py-2 pr-4">
+                                        <td className="py-2.5 pr-4 tabular-nums">
                                             <BlurredValue>
                                                 {row.contribution_total
                                                     ? formatCurrencyLocal(row.contribution_total)
                                                     : '—'}
                                             </BlurredValue>
                                         </td>
-                                        <td className="py-2 pr-2">
-                                            <div className="flex justify-end gap-1">
+                                        <td className="py-2.5 pr-2">
+                                            <div className="flex justify-end gap-0.5">
                                                 <button
                                                     type="button"
                                                     onClick={() => handleEditMonth(row)}
-                                                    className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400"
+                                                    className={paperIconBtn}
+                                                    aria-label={`Edit ${formatTableMonth(row.date)}`}
                                                     title="Edit month"
                                                 >
-                                                    <Edit2 className="w-4 h-4" />
+                                                    <Edit2 className="h-4 w-4" aria-hidden />
                                                 </button>
                                                 <button
                                                     type="button"
                                                     onClick={() => handleDeleteMonth(row.monthKey)}
-                                                    className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/30 text-red-500 dark:text-red-400"
+                                                    className={paperIconBtnDanger}
+                                                    aria-label={`Delete ${formatTableMonth(row.date)}`}
                                                     title="Delete month"
                                                 >
-                                                    <Trash2 className="w-4 h-4" />
+                                                    <Trash2 className="h-4 w-4" aria-hidden />
                                                 </button>
                                             </div>
                                         </td>
@@ -662,11 +743,11 @@ export function SygniaMonthlySnapshots() {
                         </table>
                     </div>
                 ) : (
-                    <p className="text-gray-500 dark:text-gray-400 text-sm">
+                    <p className="px-5 py-6 text-sm text-[var(--paper-muted)] sm:px-6">
                         No monthly data yet. Add a value or deposit above.
                     </p>
                 )}
-            </div>
+            </PaperCard>
 
             <ConfirmModal
                 isOpen={deleteConfirm.open}

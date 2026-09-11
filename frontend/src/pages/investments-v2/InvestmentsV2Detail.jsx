@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Calculator, Loader2, ShieldCheck } from 'lucide-react'
+import { Calculator, Loader2, ShieldCheck } from 'lucide-react'
+import HubBackLink from '../../components/HubBackLink'
 import SygniaDetailView from '../../components/investments-v2/SygniaDetailView'
 import DeleteSygniaAccountButton from '../../components/investments-v2/DeleteSygniaAccountButton'
+import SyncPlaywrightAccountsButton from '../../components/investments-v2/SyncPlaywrightAccountsButton'
 import { useInvestmentsV2 } from '../../investments-v2/InvestmentsV2Provider'
 import { SOURCE_IDS, productTypeLabel, stripAccountCodeFromName, labelsMatch } from '../../investments-v2/types'
 import { formatDateSafe, formatDateTimeSafe } from '../../utils/numberFormatting'
+import { PaperCard, paperBackLink, paperEyebrow, paperTitle } from '../../components/appUi'
 
 export default function InvestmentsV2Detail() {
     const { accountId } = useParams()
@@ -21,6 +24,12 @@ export default function InvestmentsV2Detail() {
         if (!account) {
             setDetail(null)
             setDetailLoading(false)
+            return
+        }
+
+        if (account.sourceId === SOURCE_IDS.GOOGLE_SHEETS) {
+            setDetailLoading(false)
+            setDetailError(null)
             return
         }
 
@@ -55,15 +64,22 @@ export default function InvestmentsV2Detail() {
 
     if (accountsLoading && !account) {
         return (
-            <div className="flex items-center justify-center py-16 text-gray-500 dark:text-gray-400">
-                <Loader2 className="w-6 h-6 animate-spin mr-2" />
+            <div className="mx-auto flex max-w-[1080px] items-center justify-center py-16 text-[var(--paper-muted)]">
+                <Loader2 className="mr-2 h-6 w-6 animate-spin" />
                 Loading account…
             </div>
         )
     }
 
     if (!account) {
-        return <Navigate to="/investments-v2" replace />
+        if (/^\d+$/.test(accountId) || String(accountId).includes(':')) {
+            return <Navigate to="/investments" replace />
+        }
+        return <Navigate to={`/investments/sheets/${accountId}`} replace />
+    }
+
+    if (account.sourceId === SOURCE_IDS.GOOGLE_SHEETS && account.slug) {
+        return <Navigate to={`/investments/sheets/${account.slug}`} replace />
     }
 
     const meta = detail || account
@@ -84,128 +100,134 @@ export default function InvestmentsV2Detail() {
     const reg28 = meta.reg28_compliant ?? account.reg28Compliant
     const asOf = meta.as_of_date || account.asOfDate
     const lastSynced = meta.last_synced_at || account.lastSyncedAt
+    const lastSyncStatus = meta.last_sync_status || account.lastSyncStatus
+    const lastSyncError = meta.last_sync_error || account.lastSyncError
+
+    const applySyncedDetail = (payload) => {
+        if (!payload) return
+        const next = { ...payload }
+        delete next.sync
+        setDetail(next)
+        setDetailError(null)
+    }
 
     return (
-        <div className="space-y-6 pb-6">
-            <div>
-                <Link
-                    to="/investments-v2"
-                    className="inline-flex items-center gap-1.5 text-sm font-medium text-teal-700 dark:text-teal-300 hover:text-teal-800 dark:hover:text-teal-200"
-                >
-                    <ArrowLeft className="w-4 h-4" />
-                    Investments 2.0
-                </Link>
+        <div className="mx-auto max-w-[1080px] space-y-8 pb-6">
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                <HubBackLink to="/investments" label="Investments" />
+                {productType === 'ra' && (
+                    <Link
+                        to="/investments/calculator"
+                        state={{ fromAccountId: account.id }}
+                        className={paperBackLink}
+                    >
+                        <Calculator className="h-4 w-4 shrink-0" aria-hidden />
+                        RA tax calculator
+                    </Link>
+                )}
             </div>
 
-            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-600 p-6 shadow-sm">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="min-w-0">
-                        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white text-balance">
-                            {title}
-                        </h1>
-                        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-gray-500 dark:text-gray-400">
-                            {accountCode && (
-                                <span className="font-mono font-medium text-gray-700 dark:text-gray-300">
+            <PaperCard className="p-5 sm:p-6">
+                <div className="min-w-0">
+                    <p className={paperEyebrow}>Sygnia account</p>
+                    <h1 className={`mt-1.5 text-balance ${paperTitle}`}>{title}</h1>
+                    {(showSygniaType || showBudgetType) && (
+                        <p className="mt-1 text-sm text-[var(--paper-muted)]">
+                            {[showSygniaType && typeLabel, showBudgetType && budgetType]
+                                .filter(Boolean)
+                                .join(' · ')}
+                        </p>
+                    )}
+                    <dl className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+                        {accountCode && (
+                            <div className="relative flex items-center gap-1.5">
+                                <dt className="sr-only">Account code</dt>
+                                <dd className="font-mono font-medium tabular-nums text-[var(--paper-ink)]">
                                     {accountCode}
-                                </span>
-                            )}
-                            {accountCode && reg28 != null && (
-                                <span className="text-gray-300 dark:text-gray-600" aria-hidden>
-                                    ·
-                                </span>
-                            )}
-                            {reg28 != null && (
-                                <span
+                                </dd>
+                            </div>
+                        )}
+                        {reg28 != null && (
+                            <div className="relative flex items-center gap-1.5">
+                                <dt className="sr-only">Regulation 28</dt>
+                                <dd
                                     className={`inline-flex items-center gap-1 ${
-                                        reg28
-                                            ? 'text-green-700 dark:text-green-300'
-                                            : 'text-amber-700 dark:text-amber-300'
+                                        reg28 ? 'text-[var(--paper-olive)]' : 'text-[var(--paper-brick)]'
                                     }`}
                                 >
-                                    <ShieldCheck className="w-3.5 h-3.5" aria-hidden />
+                                    <ShieldCheck className="h-3.5 w-3.5 shrink-0" aria-hidden />
                                     Reg 28 {reg28 ? 'compliant' : 'non-compliant'}
-                                </span>
-                            )}
-                            {showSygniaType && (
-                                <>
-                                    <span className="text-gray-300 dark:text-gray-600" aria-hidden>
-                                        ·
-                                    </span>
-                                    <span>{typeLabel}</span>
-                                </>
-                            )}
-                            {showBudgetType && (
-                                <>
-                                    <span className="text-gray-300 dark:text-gray-600" aria-hidden>
-                                        ·
-                                    </span>
-                                    <span>{budgetType}</span>
-                                </>
-                            )}
-                        </div>
-                        <p className="mt-1.5 text-sm text-gray-500 dark:text-gray-400">
-                            {asOf && (
-                                <>
-                                    As of{' '}
+                                </dd>
+                            </div>
+                        )}
+                    </dl>
+                    <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-[var(--paper-muted)]">
+                        {asOf && (
+                            <span>
+                                As of{' '}
+                                <time dateTime={asOf}>
                                     {formatDateSafe(asOf, {
                                         day: 'numeric',
                                         month: 'short',
                                         year: 'numeric',
                                     })}
-                                </>
-                            )}
-                            {asOf && lastSynced && (
-                                <span className="text-gray-300 dark:text-gray-600" aria-hidden>
-                                    {' '}
-                                    ·{' '}
-                                </span>
-                            )}
-                            {lastSynced && <>Last synced {formatDateTimeSafe(lastSynced)}</>}
-                        </p>
-                        {productType === 'ra' && (
-                            <p className="mt-2">
-                                <Link
-                                    to="/investments-v2/ra/calculator"
-                                    state={{ fromAccountId: account.id }}
-                                    className="inline-flex items-center gap-1.5 text-sm font-medium text-teal-700 dark:text-teal-300 hover:text-teal-800 dark:hover:text-teal-200"
-                                >
-                                    <Calculator className="w-4 h-4" aria-hidden />
-                                    RA tax calculator
-                                </Link>
-                            </p>
+                                </time>
+                            </span>
                         )}
+                        {asOf && lastSynced && (
+                            <span className="text-[var(--paper-line)]" aria-hidden>
+                                ·
+                            </span>
+                        )}
+                        {lastSynced && <span>Synced {formatDateTimeSafe(lastSynced)}</span>}
+                        {(asOf || lastSynced) && (
+                            <span className="text-[var(--paper-line)]" aria-hidden>
+                                ·
+                            </span>
+                        )}
+                        <SyncPlaywrightAccountsButton
+                            accountIds={[account.id]}
+                            onSynced={applySyncedDetail}
+                            variant="inline"
+                        />
                     </div>
+                    {lastSyncStatus === 'error' && lastSyncError && (
+                        <p role="alert" className="mt-3 text-sm text-[var(--paper-brick)]">
+                            Last sync failed: {lastSyncError}
+                        </p>
+                    )}
                 </div>
-            </div>
+            </PaperCard>
 
             {detailLoading && (
-                <div className="flex items-center justify-center py-12 text-gray-500 dark:text-gray-400">
-                    <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                <div className="flex items-center justify-center py-12 text-[var(--paper-muted)]">
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                     Loading account data…
                 </div>
             )}
 
             {detailError && !detailLoading && (
-                <p className="text-sm text-red-500 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-4 py-3">
-                    {detailError}
-                </p>
+                <PaperCard className="px-5 py-4 text-sm text-[var(--paper-brick)]">{detailError}</PaperCard>
             )}
 
             {!detailLoading && !detailError && detail && (
                 <SygniaDetailView accountId={account.id} detail={detail} />
             )}
 
-            <section className="rounded-2xl border border-red-200 dark:border-red-900/60 bg-white dark:bg-gray-800 p-5">
-                <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Remove account</h2>
-                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 max-w-xl">
-                    Disconnect this account from BudgetHQ. Synced holdings and history are deleted
-                    here; the account at the broker is not closed.
-                </p>
-                <div className="mt-4">
+            <section className="border-t border-[var(--paper-line)] pt-6">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                        <h2 className="text-sm font-medium text-[var(--paper-muted)]">
+                            Disconnect from BudgetHQ
+                        </h2>
+                        <p className="mt-0.5 max-w-lg text-xs text-[var(--paper-muted)]">
+                            Removes synced holdings and history here. Your broker account stays open.
+                        </p>
+                    </div>
                     <DeleteSygniaAccountButton
                         accountId={account.id}
                         accountName={meta.name}
-                        onDeleted={() => navigate('/investments-v2')}
+                        onDeleted={() => navigate('/investments')}
                     />
                 </div>
             </section>
