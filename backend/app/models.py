@@ -168,8 +168,7 @@ class BudgetCategory(Base):
     name = Column(String)
     amount = Column(Float)
     transaction_category = Column(String, nullable=True, default='uncategorized')  # Links to BankTransaction.category
-    excluded = Column(Boolean, default=False)  # If true, entry is visible but not counted in totals
-    cadence = Column(String, nullable=False, server_default='monthly')  # 'monthly', 'annual', or 'tracking'
+    excluded = Column(Boolean, default=False)  # If true, entry is visible but not counted in Budget Analysis
 
     budget = relationship("Budget", back_populates="categories")
 

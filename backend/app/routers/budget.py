@@ -6,6 +6,7 @@ from typing import List, Optional
 from .. import models, database, auth
 from datetime import date
 from ..budget_period import get_period_dates_for_end_month, get_current_period
+from ..payslip_budget import monthly_budget_income_for_user
 
 logger = logging.getLogger(__name__)
 
@@ -16,15 +17,12 @@ BUDGET_TRANSACTION_CATEGORIES = [
     "transfers", "uncategorized"
 ]
 
-BUDGET_CADENCES = ["monthly", "annual", "tracking"]
-
 # Pydantic Models for Budget
 class CategoryBase(BaseModel):
     name: str
     amount: float
     transaction_category: Optional[str] = "uncategorized"
     excluded: Optional[bool] = False
-    cadence: Optional[str] = "monthly"
 
 class BudgetData(BaseModel):
     salary: float
@@ -44,25 +42,23 @@ router = APIRouter(prefix="/budget", tags=["budget"])
 async def get_budget(current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(database.get_db)):
     budget = db.query(models.Budget).filter(models.Budget.user_id == current_user.id).first()
 
-    # Get net salary from latest payslip
-    net_salary = None  # Default to None if no data exists
-    
-    latest_payslip = (
-        db.query(models.MonthlyPayslip)
-        .filter(models.MonthlyPayslip.user_id == current_user.id)
-        .order_by(models.MonthlyPayslip.year.desc(), models.MonthlyPayslip.month.desc())
-        .first()
-    )
-    
-    if latest_payslip:
-        net_salary = latest_payslip.net_pay
-    elif budget and budget.salary:
-        # Only use stored budget.salary if it's explicitly set and no payslip exists
+    # Use the latest normal payslip for monthly income. If the newest slip has
+    # additional income (bonus), skip it and use the previous one without a bonus.
+    income = monthly_budget_income_for_user(db, current_user.id)
+    net_salary = income.amount if income else None
+    if net_salary is None and budget and budget.salary:
         net_salary = budget.salary
+
+    salary_payslip_year = income.year if income else None
+    salary_payslip_month = income.month if income else None
+    salary_skipped_additional = bool(income.skipped_additional) if income else False
 
     if not budget:
         return {
             "salary": net_salary,
+            "salary_payslip_year": salary_payslip_year,
+            "salary_payslip_month": salary_payslip_month,
+            "salary_skipped_additional": salary_skipped_additional,
             "needs": [],
             "wants": [],
             "savings": [],
@@ -77,9 +73,12 @@ async def get_budget(current_user: models.User = Depends(auth.get_current_user),
 
     return {
         "salary": net_salary,
-        "needs": [{"name": c.name, "amount": c.amount, "transaction_category": c.transaction_category or "uncategorized", "excluded": c.excluded or False, "cadence": c.cadence or "monthly"} for c in needs],
-        "wants": [{"name": c.name, "amount": c.amount, "transaction_category": c.transaction_category or "uncategorized", "excluded": c.excluded or False, "cadence": c.cadence or "monthly"} for c in wants],
-        "savings": [{"name": c.name, "amount": c.amount, "transaction_category": c.transaction_category or "uncategorized", "excluded": c.excluded or False, "cadence": c.cadence or "monthly"} for c in savings],
+        "salary_payslip_year": salary_payslip_year,
+        "salary_payslip_month": salary_payslip_month,
+        "salary_skipped_additional": salary_skipped_additional,
+        "needs": [{"name": c.name, "amount": c.amount, "transaction_category": c.transaction_category or "uncategorized", "excluded": c.excluded or False} for c in needs],
+        "wants": [{"name": c.name, "amount": c.amount, "transaction_category": c.transaction_category or "uncategorized", "excluded": c.excluded or False} for c in wants],
+        "savings": [{"name": c.name, "amount": c.amount, "transaction_category": c.transaction_category or "uncategorized", "excluded": c.excluded or False} for c in savings],
         "budget_period_start_day": start_day
     }
 
@@ -112,27 +111,18 @@ async def save_budget(data: BudgetData, current_user: models.User = Depends(auth
             return "uncategorized"
         return cat
 
-    def _normalize_cadence(cadence: Optional[str]) -> str:
-        if not cadence or cadence not in BUDGET_CADENCES:
-            return "monthly"
-        return cadence
-
-    # Add new categories
     for item in data.needs:
         tc = _normalize_category(item.transaction_category)
         excluded = item.excluded or False
-        cadence = _normalize_cadence(item.cadence)
-        db.add(models.BudgetCategory(budget_id=budget.id, type='needs', name=item.name, amount=item.amount, transaction_category=tc, excluded=excluded, cadence=cadence))
+        db.add(models.BudgetCategory(budget_id=budget.id, type='needs', name=item.name, amount=item.amount, transaction_category=tc, excluded=excluded))
     for item in data.wants:
         tc = _normalize_category(item.transaction_category)
         excluded = item.excluded or False
-        cadence = _normalize_cadence(item.cadence)
-        db.add(models.BudgetCategory(budget_id=budget.id, type='wants', name=item.name, amount=item.amount, transaction_category=tc, excluded=excluded, cadence=cadence))
+        db.add(models.BudgetCategory(budget_id=budget.id, type='wants', name=item.name, amount=item.amount, transaction_category=tc, excluded=excluded))
     for item in data.savings:
         tc = _normalize_category(item.transaction_category)
         excluded = item.excluded or False
-        cadence = _normalize_cadence(item.cadence)
-        db.add(models.BudgetCategory(budget_id=budget.id, type='savings', name=item.name, amount=item.amount, transaction_category=tc, excluded=excluded, cadence=cadence))
+        db.add(models.BudgetCategory(budget_id=budget.id, type='savings', name=item.name, amount=item.amount, transaction_category=tc, excluded=excluded))
 
     db.commit()
     logger.info("Budget saved", extra={"user_id": current_user.id})

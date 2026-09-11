@@ -6,6 +6,7 @@ from typing import Iterable, List, Optional
 from sqlalchemy.orm import Session
 
 from . import models
+from .payslip_budget import monthly_budget_income_for_user
 from .transaction_categories import EARNINGS_CATEGORIES, category_label
 from .transaction_links import (
     apply_linked_offsets_to_spending,
@@ -72,14 +73,9 @@ def get_budgeted_amounts_by_category(db: Session, user_id: int) -> dict[str, flo
     if not budget:
         return totals
 
-    latest_payslip = (
-        db.query(models.MonthlyPayslip)
-        .filter(models.MonthlyPayslip.user_id == user_id)
-        .order_by(models.MonthlyPayslip.year.desc(), models.MonthlyPayslip.month.desc())
-        .first()
-    )
-    if latest_payslip:
-        totals["income"] = latest_payslip.net_pay or 0.0
+    income = monthly_budget_income_for_user(db, user_id)
+    if income:
+        totals["income"] = income.amount
     elif budget.salary:
         totals["income"] = budget.salary
 
@@ -90,8 +86,6 @@ def get_budgeted_amounts_by_category(db: Session, user_id: int) -> dict[str, flo
     )
     for item in categories:
         if item.excluded:
-            continue
-        if (item.cadence or "monthly") != "monthly":
             continue
         cat = item.transaction_category or "uncategorized"
         if cat in totals:
