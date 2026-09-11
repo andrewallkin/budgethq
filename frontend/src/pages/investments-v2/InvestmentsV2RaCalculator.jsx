@@ -2,11 +2,76 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import axios from 'axios'
 import { Calculator, ChevronLeft, ChevronRight, Info } from 'lucide-react'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import {
+    Area,
+    AreaChart,
+    CartesianGrid,
+    ReferenceDot,
+    ResponsiveContainer,
+    Tooltip,
+    XAxis,
+    YAxis,
+} from 'recharts'
 import BlurredValue from '../../components/BlurredValue'
+import {
+    PAPER_CHART,
+    PaperCard,
+    paperBackLink,
+    paperBtnPrimary,
+    paperEyebrow,
+    paperField,
+    paperIconBtn,
+    paperMoney,
+    paperMoneyTone,
+    paperTableHead,
+    paperTableRow,
+    paperTitle,
+} from '../../components/appUi'
 import { useAuth } from '../../context/AuthContext'
 import { getRaSummary } from '../../investments-v2/api'
 import { formatCurrency } from '../../utils/numberFormatting'
+
+const fieldInputReadonly = `${paperField} cursor-not-allowed bg-[var(--paper-canvas)]/50`
+
+function InfoHint({ label, description }) {
+    return (
+        <button
+            type="button"
+            className={paperIconBtn}
+            aria-label={`${label}: ${description}`}
+            title={description}
+        >
+            <Info className="h-4 w-4 shrink-0" aria-hidden="true" />
+        </button>
+    )
+}
+
+function GrowthChartTooltip({ active, payload, label }) {
+    if (!active || !payload?.length) return null
+    return (
+        <div className="rounded-md border border-[var(--paper-line)] bg-[var(--paper-card)] px-3 py-2 shadow-sm">
+            <p className="text-xs text-[var(--paper-muted)]">Year {label}</p>
+            <p className={`mt-0.5 text-sm ${paperMoney} text-[var(--paper-ink)]`}>
+                {formatCurrency(payload[0].value)}
+            </p>
+        </div>
+    )
+}
+
+function scenarioColumnClass(index, isCurrent = false) {
+    const base = 'border-l border-[var(--paper-line)] px-3 py-3 text-center tabular-nums sm:px-4'
+    if (isCurrent) return `${base} bg-[var(--paper-canvas)]/70`
+    if (index % 2 === 1) return `${base} bg-[var(--paper-canvas)]/30`
+    return base
+}
+
+function scenarioHeaderClass(index, isCurrent = false) {
+    const base =
+        'border-l border-[var(--paper-line)] px-3 py-3 text-center text-sm font-semibold text-[var(--paper-ink)] sm:px-4'
+    if (isCurrent) return `${base} bg-[var(--paper-canvas)]/70`
+    if (index % 2 === 1) return `${base} bg-[var(--paper-canvas)]/30`
+    return base
+}
 
 function sumSuggestedMonthly(accounts) {
     if (!accounts?.length) return 0
@@ -21,8 +86,8 @@ export default function InvestmentsV2RaCalculator() {
     const { blurSensitiveValues } = useAuth()
     const location = useLocation()
     const fromAccountId = location.state?.fromAccountId
-    const backTo = fromAccountId ? `/investments-v2/${fromAccountId}` : '/investments-v2'
-    const backLabel = fromAccountId ? 'Back to account' : 'Back to Investments 2.0'
+    const backTo = fromAccountId ? `/investments/${fromAccountId}` : '/investments'
+    const backLabel = fromAccountId ? 'Back to account' : 'Back to Investments'
 
     const [loading, setLoading] = useState(true)
     const [isSaving, setIsSaving] = useState(false)
@@ -39,6 +104,7 @@ export default function InvestmentsV2RaCalculator() {
     const [calculating, setCalculating] = useState(false)
     const [showJumpToResults, setShowJumpToResults] = useState(false)
     const resultsSectionRef = useRef(null)
+    const calculationRequestId = useRef(0)
 
     const monthlyRAContributionRef = useRef(monthlyRAContribution)
     useEffect(() => {
@@ -137,17 +203,26 @@ export default function InvestmentsV2RaCalculator() {
         return month >= 3 ? year : year - 1
     }, [])
 
+    const statutoryRaAnnualCap = currentFinancialYearStart >= 2026 ? 430000 : 350000
+
     const maxMonthlyRAContribution = useMemo(() => {
         if (salary <= 0) return 0
-        const annualSalary = salary * 12
-        const raCapFromAPI = calculationResult?.ra_max_deduction ?? null
-        const annualCap = raCapFromAPI !== null ? raCapFromAPI : Math.min(annualSalary * 0.275, 350000)
-        return annualCap / 12
-    }, [salary, calculationResult])
+        const resultSalary = Number(calculationResult?.monthly_salary)
+        const resultMatchesSalary =
+            calculationResult?.ra_max_deduction != null &&
+            Number.isFinite(resultSalary) &&
+            Math.abs(resultSalary - salary) < 0.005
+        if (resultMatchesSalary) {
+            return calculationResult.ra_max_deduction / 12
+        }
+        return Math.min(salary * 12 * 0.275, statutoryRaAnnualCap) / 12
+    }, [salary, calculationResult, statutoryRaAnnualCap])
 
     const calculateRATax = useCallback(async () => {
         if (salary <= 0) return
 
+        const requestId = calculationRequestId.current + 1
+        calculationRequestId.current = requestId
         setCalculating(true)
         try {
             const res = await axios.post('/api/calculate/ra-tax', {
@@ -156,13 +231,22 @@ export default function InvestmentsV2RaCalculator() {
                 monthly_ra_contribution: monthlyRAContribution || 0,
                 financial_year_start: currentFinancialYearStart,
             })
+            if (requestId !== calculationRequestId.current) return
             setCalculationResult(res.data)
         } catch (err) {
+            if (requestId !== calculationRequestId.current) return
             console.error('Failed to calculate RA tax', err)
         } finally {
-            setCalculating(false)
+            if (requestId === calculationRequestId.current) {
+                setCalculating(false)
+            }
         }
     }, [salary, age, monthlyRAContribution, currentFinancialYearStart])
+
+    const updateSalary = useCallback((value) => {
+        const numValue = parseFloat(value)
+        setSalary(Number.isFinite(numValue) && numValue >= 0 ? numValue : 0)
+    }, [])
 
     const updateMonthlyRAContribution = useCallback((value) => {
         setHasUserEdited(true)
@@ -208,13 +292,14 @@ export default function InvestmentsV2RaCalculator() {
     }, [monthlyRAContribution, loading, saveRAData, hasUserEdited])
 
     useEffect(() => {
-        if (salary > 0 && monthlyRAContribution >= 0) {
-            if (maxMonthlyRAContribution > 0 && monthlyRAContribution > maxMonthlyRAContribution) {
-                return
-            }
+        if (salary <= 0 || monthlyRAContribution < 0) return
+
+        const timer = setTimeout(() => {
             calculateRATax()
-        }
-    }, [salary, age, monthlyRAContribution, maxMonthlyRAContribution, calculateRATax])
+        }, 400)
+
+        return () => clearTimeout(timer)
+    }, [salary, monthlyRAContribution, calculateRATax])
 
     const calculateRAGrowth = (currentValue, monthlyContribution, annualReturn = 0.055) => {
         const now = new Date()
@@ -263,402 +348,417 @@ export default function InvestmentsV2RaCalculator() {
     const fyLabel = raSummary?.financial_year_label ?? ''
     const fyDeposits = raSummary?.contributions_current_fy ?? 0
     const remainingRoom = raSummary?.remaining_room
+    const currentScenario = calculationResult?.scenarios?.[0]
 
     if (loading) {
         return (
-            <div className="flex items-center justify-center h-64">
-                <div className="text-gray-600 dark:text-gray-400">Loading...</div>
+            <div className="mx-auto flex h-64 max-w-[1080px] items-center justify-center text-[var(--paper-muted)]">
+                Loading...
             </div>
         )
     }
 
     if (raSummaryError) {
         return (
-            <div className="space-y-6">
-                <Link
-                    to={backTo}
-                    className="inline-flex items-center gap-2 text-sm font-medium text-teal-700 dark:text-teal-300 hover:underline w-fit"
-                >
-                    <ChevronLeft className="w-4 h-4 shrink-0" />
+            <div className="mx-auto max-w-[1080px] space-y-5">
+                <Link to={backTo} className={paperBackLink}>
+                    <ChevronLeft className="h-4 w-4 shrink-0" aria-hidden="true" />
                     {backLabel}
                 </Link>
-                <p className="text-sm text-red-500 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-4 py-3">
-                    {raSummaryError}
-                </p>
+                <PaperCard className="px-5 py-4 text-sm text-[var(--paper-brick)]">{raSummaryError}</PaperCard>
             </div>
         )
     }
 
     if (raSummary && raAccounts.length === 0) {
         return (
-            <div className="space-y-6">
-                <Link
-                    to={backTo}
-                    className="inline-flex items-center gap-2 text-sm font-medium text-teal-700 dark:text-teal-300 hover:underline w-fit"
-                >
-                    <ChevronLeft className="w-4 h-4 shrink-0" />
+            <div className="mx-auto max-w-[1080px] space-y-5">
+                <Link to={backTo} className={paperBackLink}>
+                    <ChevronLeft className="h-4 w-4 shrink-0" aria-hidden="true" />
                     {backLabel}
                 </Link>
-                <div className="rounded-2xl border border-dashed border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800/50 px-6 py-12 text-center max-w-lg">
-                    <Calculator className="w-10 h-10 mx-auto text-gray-400 dark:text-gray-500 mb-3" aria-hidden />
-                    <h1 className="text-xl font-semibold text-gray-900 dark:text-white">RA tax calculator</h1>
-                    <p className="mt-3 text-sm text-gray-600 dark:text-gray-400">
+                <PaperCard className="max-w-lg px-6 py-12 text-center">
+                    <Calculator className="mx-auto mb-3 h-10 w-10 text-[var(--paper-muted)]" aria-hidden />
+                    <p className={paperEyebrow}>Retirement annuity</p>
+                    <h1 className={`mt-2 ${paperTitle}`}>RA tax calculator</h1>
+                    <p className="mt-3 text-sm text-[var(--paper-muted)]">
                         Mark a connected account as Retirement annuity to use this calculator.
                     </p>
                     <Link
-                        to="/investments-v2"
-                        className="mt-6 inline-flex items-center gap-2 text-sm font-medium text-teal-700 dark:text-teal-300 hover:underline"
+                        to="/investments"
+                        className="mt-6 inline-flex cursor-pointer items-center gap-2 text-sm font-medium text-[var(--paper-accent)] hover:text-[var(--paper-ink)]"
                     >
-                        Go to Investments 2.0
+                        Go to Investments
                     </Link>
-                </div>
+                </PaperCard>
             </div>
         )
     }
 
     return (
-        <div className="space-y-6 sm:space-y-8">
-            <Link
-                to={backTo}
-                className="inline-flex items-center gap-2 text-sm font-medium text-teal-700 dark:text-teal-300 hover:underline w-fit"
-            >
-                <ChevronLeft className="w-4 h-4 shrink-0" />
+        <div className="mx-auto max-w-[1080px] space-y-6">
+            <Link to={backTo} className={paperBackLink}>
+                <ChevronLeft className="h-4 w-4 shrink-0" aria-hidden="true" />
                 {backLabel}
             </Link>
-            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
-                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
-                    RA tax calculator
-                </h1>
-                <div className="flex items-center gap-4">
-                    <div className="text-sm text-gray-500 dark:text-gray-400">
-                        {isSaving ? 'Saving...' : 'All changes saved'}
-                    </div>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                    <p className={paperEyebrow}>Retirement annuity</p>
+                    <h1 className={paperTitle}>RA tax calculator</h1>
                 </div>
+                <p
+                    className="inline-flex min-h-[40px] items-center gap-2 self-start rounded-md border border-[var(--paper-line)] bg-[var(--paper-canvas)]/50 px-3 py-1.5 text-sm text-[var(--paper-muted)] sm:self-auto"
+                    aria-live="polite"
+                >
+                    <span
+                        className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                            isSaving ? 'bg-[var(--paper-accent)]' : 'bg-[var(--paper-olive)]'
+                        }`}
+                        aria-hidden="true"
+                    />
+                    {isSaving ? 'Saving…' : 'All changes saved'}
+                </p>
             </div>
 
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
-                <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Input Details</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-                            Monthly Gross Salary (R)
-                        </label>
-                        <BlurredValue as="div">
-                            <input
-                                type="text"
-                                value={formatCurrency(salary)}
-                                readOnly
-                                className="w-full min-h-[44px] px-3 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white cursor-not-allowed"
-                            />
-                        </BlurredValue>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                            From your latest payslip (gross + company contributions + additional income)
-                        </p>
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-                            Current RA Value (R)
-                        </label>
-                        <BlurredValue as="div">
-                            <input
-                                type="text"
-                                value={formatCurrency(currentRAValue)}
-                                readOnly
-                                className="w-full min-h-[44px] px-3 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white cursor-not-allowed"
-                                placeholder="0"
-                            />
-                        </BlurredValue>
-                        {raAccounts.length > 1 && (
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                {raAccounts.map((account) => account.name).join(', ')}
-                            </p>
-                        )}
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                            Total across RA accounts in Investments 2.0
-                        </p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 tabular-nums">
-                            FY deposits ({fyLabel}):{' '}
-                            <BlurredValue as="span">{formatCurrency(fyDeposits)}</BlurredValue>
-                            {' · '}
-                            {remainingRoom != null ? (
-                                <>
-                                    Remaining room:{' '}
-                                    <BlurredValue as="span">{formatCurrency(remainingRoom)}</BlurredValue>
-                                </>
-                            ) : (
-                                <Link to="/salary" className="text-teal-700 dark:text-teal-300 hover:underline">
-                                    Add salary to see remaining room
-                                </Link>
-                            )}
-                        </p>
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-                            Monthly RA Contribution (R)
+            <PaperCard className="p-5 sm:p-6">
+                <p className={paperEyebrow}>Input details</p>
+                <div className="mt-4 grid grid-cols-1 gap-5 md:grid-cols-3 md:gap-6">
+                    <div className="min-w-0 space-y-1.5">
+                        <label
+                            htmlFor="ra-calc-salary"
+                            className="block text-sm font-medium text-[var(--paper-ink)]"
+                        >
+                            Monthly gross salary
                         </label>
                         <BlurredValue as="div" className="relative">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400 pointer-events-none">
+                            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[var(--paper-muted)]">
                                 R
                             </span>
                             <input
+                                id="ra-calc-salary"
+                                type="number"
+                                inputMode="decimal"
+                                min="0"
+                                step="1"
+                                value={salary}
+                                onChange={(e) => updateSalary(e.target.value)}
+                                onFocus={(e) => e.target.select()}
+                                className={`${paperField} pl-8`}
+                                placeholder="0"
+                            />
+                        </BlurredValue>
+                        <p className="text-xs leading-relaxed text-[var(--paper-muted)]">
+                            Prefills from your latest payslip. Change it to model a different salary.
+                        </p>
+                    </div>
+                    <div className="min-w-0 space-y-1.5">
+                        <label
+                            htmlFor="ra-calc-value"
+                            className="block text-sm font-medium text-[var(--paper-ink)]"
+                        >
+                            Current RA value
+                        </label>
+                        <BlurredValue as="div">
+                            <input
+                                id="ra-calc-value"
+                                type="text"
+                                value={formatCurrency(currentRAValue)}
+                                readOnly
+                                className={fieldInputReadonly}
+                                placeholder="0"
+                            />
+                        </BlurredValue>
+                        <div className="space-y-1 text-xs leading-relaxed text-[var(--paper-muted)]">
+                            {raAccounts.length > 1 && (
+                                <p className="break-words">{raAccounts.map((account) => account.name).join(', ')}</p>
+                            )}
+                            <p>Total across RA accounts in Investments.</p>
+                            <p className="tabular-nums">
+                                FY deposits ({fyLabel}):{' '}
+                                <BlurredValue as="span">{formatCurrency(fyDeposits)}</BlurredValue>
+                                {' · '}
+                                {remainingRoom != null ? (
+                                    <>
+                                        Remaining room:{' '}
+                                        <BlurredValue as="span">{formatCurrency(remainingRoom)}</BlurredValue>
+                                    </>
+                                ) : (
+                                    <Link
+                                        to="/salary"
+                                        className="cursor-pointer text-[var(--paper-accent)] transition-colors duration-200 hover:text-[var(--paper-ink)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--paper-accent)]/20"
+                                    >
+                                        Add salary to see remaining room
+                                    </Link>
+                                )}
+                            </p>
+                        </div>
+                    </div>
+                    <div className="min-w-0 space-y-1.5">
+                        <label
+                            htmlFor="ra-calc-contribution"
+                            className="block text-sm font-medium text-[var(--paper-ink)]"
+                        >
+                            Monthly RA contribution
+                        </label>
+                        <BlurredValue as="div" className="relative">
+                            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[var(--paper-muted)]">
+                                R
+                            </span>
+                            <input
+                                id="ra-calc-contribution"
                                 type="number"
                                 inputMode="decimal"
                                 value={monthlyRAContribution}
                                 onChange={(e) => updateMonthlyRAContribution(e.target.value)}
                                 onFocus={(e) => e.target.select()}
-                                className={`w-full min-h-[44px] pl-8 pr-3 py-3 border rounded-lg focus:ring-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors ${
+                                className={`${paperField} pl-8 ${
                                     monthlyRAContribution > 0 && !isRAContributionValid
-                                        ? 'border-red-500 dark:border-red-500 focus:ring-red-500'
-                                        : 'border-gray-300 dark:border-gray-600 focus:ring-blue-500'
+                                        ? 'border-[var(--paper-brick)] focus:ring-[var(--paper-brick)]/20'
+                                        : ''
                                 }`}
                                 placeholder="0"
                             />
                         </BlurredValue>
-                        {monthlyRAContribution > 0 && maxMonthlyRAContribution > 0 && !isRAContributionValid && (
-                            <p className="text-xs text-red-600 dark:text-red-400 mt-1">
-                                Please provide a valid monthly contribution. Maximum monthly contribution is{' '}
+                        {monthlyRAContribution > 0 && maxMonthlyRAContribution > 0 && !isRAContributionValid ? (
+                            <p className="text-xs leading-relaxed text-[var(--paper-brick)]">
+                                Maximum monthly contribution is{' '}
                                 <BlurredValue>{formatCurrency(maxMonthlyRAContribution)}</BlurredValue>
+                            </p>
+                        ) : (
+                            <p className="text-xs leading-relaxed text-[var(--paper-muted)]">
+                                Editable — saved automatically when you change it.
                             </p>
                         )}
                     </div>
                 </div>
-            </div>
+            </PaperCard>
 
             {calculationResult && (
                 <div ref={resultsSectionRef} className="space-y-6">
-                    <div
-                        id="calculator-result"
-                        className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 scroll-mt-24 pb-8"
-                    >
-                        <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">
-                            Calculator Result
-                        </h2>
-                        <p className="text-gray-700 dark:text-gray-200 mb-2 tabular-nums">
-                            On a salary of{' '}
-                            <BlurredValue>{formatCurrency(calculationResult.monthly_salary)}</BlurredValue> per month,{' '}
-                            <BlurredValue>{formatCurrency(calculationResult.annual_salary)}</BlurredValue> per year,
-                            you can expect to pay{' '}
-                            <BlurredValue>
-                                <span className="font-semibold text-red-600 dark:text-red-400">
-                                    {formatCurrency(calculationResult.base_tax_annual)}
-                                </span>
-                            </BlurredValue>{' '}
-                            in income tax per year.
+                    <PaperCard id="calculator-result" className="scroll-mt-24 p-5 sm:p-6">
+                        <p className={paperEyebrow}>Calculator result</p>
+                        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                            <div className="rounded-md border border-[var(--paper-line)] bg-[var(--paper-canvas)]/40 p-4">
+                                <p className="text-xs font-medium uppercase tracking-wider text-[var(--paper-muted)]">
+                                    Income tax (annual)
+                                </p>
+                                <p className={`mt-2 text-2xl sm:text-3xl ${paperMoney} ${paperMoneyTone(-1)}`}>
+                                    <BlurredValue>{formatCurrency(calculationResult.base_tax_annual)}</BlurredValue>
+                                </p>
+                                <p className="mt-2 text-xs leading-relaxed text-[var(--paper-muted)]">
+                                    Before RA deductions, on{' '}
+                                    <BlurredValue>{formatCurrency(calculationResult.monthly_salary)}</BlurredValue>
+                                    /mo (
+                                    <BlurredValue>{formatCurrency(calculationResult.annual_salary)}</BlurredValue>
+                                    /yr).
+                                </p>
+                            </div>
+                            <div className="rounded-md border border-[var(--paper-line)] bg-[var(--paper-canvas)]/40 p-4">
+                                <p className="text-xs font-medium uppercase tracking-wider text-[var(--paper-muted)]">
+                                    Tax saved (current contribution)
+                                </p>
+                                <p className={`mt-2 text-2xl sm:text-3xl ${paperMoney} ${paperMoneyTone(1)}`}>
+                                    <BlurredValue>
+                                        {formatCurrency(currentScenario?.tax_saved_annual ?? 0)}
+                                    </BlurredValue>
+                                </p>
+                                <p className="mt-2 text-xs leading-relaxed text-[var(--paper-muted)]">
+                                    <BlurredValue>
+                                        {formatCurrency(currentScenario?.tax_saved_monthly ?? 0)}
+                                    </BlurredValue>{' '}
+                                    per month back in your pocket — compare scenarios below.
+                                </p>
+                            </div>
+                        </div>
+                        <p className="mt-4 text-sm leading-relaxed text-[var(--paper-muted)]">
+                            Your RA contribution can lower taxable income and increase your potential tax refund.
                         </p>
-                        <p className="text-gray-700 dark:text-gray-200">
-                            Here is how your contribution can lower your income tax and potentially increase your tax
-                            refund:
-                        </p>
-                    </div>
+                    </PaperCard>
 
-                    <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-x-auto">
-                        <div className="flex items-center gap-2 mb-2 sm:hidden">
-                            <ChevronRight className="w-4 h-4 text-gray-500 dark:text-gray-400 flex-shrink-0" />
-                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                    <PaperCard className="overflow-hidden p-4 sm:p-6">
+                        <p className={paperEyebrow}>Contribution scenarios</p>
+                        <div className="mb-3 mt-3 flex items-center gap-2 sm:hidden">
+                            <ChevronRight className="h-4 w-4 shrink-0 text-[var(--paper-muted)]" aria-hidden="true" />
+                            <p className="text-xs text-[var(--paper-muted)]">
                                 Swipe horizontally to see all scenarios
                             </p>
                         </div>
-                        <table className="w-full min-w-[800px]">
-                            <thead>
-                                <tr className="border-b border-gray-200 dark:border-gray-700">
-                                    <th className="text-left py-3 px-4 font-semibold text-gray-900 dark:text-white"></th>
-                                    {calculationResult.scenarios.map((scenario, index) => (
-                                        <th
-                                            key={index}
-                                            className={`text-center py-3 px-4 font-semibold text-gray-900 dark:text-white border-l border-gray-200 dark:border-gray-600 ${
-                                                index % 2 === 1 ? 'bg-gray-50/50 dark:bg-gray-700/30' : ''
-                                            }`}
-                                        >
-                                            {scenario.label}
+                        <div className="-mx-4 overflow-x-auto overflow-y-hidden px-4 sm:-mx-6 sm:px-6">
+                            <table className="w-full min-w-[720px] border-collapse text-sm">
+                                <thead className="sticky top-0 z-10 bg-[var(--paper-card)]">
+                                    <tr className={paperTableHead}>
+                                        <th className="sticky left-0 z-20 min-w-[180px] bg-[var(--paper-card)] py-2.5 pr-4 text-left">
+                                            &nbsp;
                                         </th>
-                                    ))}
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr className="border-b border-gray-100 dark:border-gray-700">
-                                    <td className="py-3 px-4">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-gray-700 dark:text-gray-200">Net income (monthly)</span>
-                                            <button
-                                                type="button"
-                                                className="p-2 -m-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 ml-2"
-                                                aria-label="More info"
+                                        {calculationResult.scenarios.map((scenario, index) => (
+                                            <th
+                                                key={index}
+                                                scope="col"
+                                                className={scenarioHeaderClass(index, index === 0)}
                                             >
-                                                <Info className="w-4 h-4 text-gray-400 dark:text-gray-500" />
-                                            </button>
-                                        </div>
-                                    </td>
-                                    {calculationResult.scenarios.map((scenario, index) => (
-                                        <td
-                                            key={index}
-                                            className={`text-center py-3 px-4 text-gray-900 dark:text-white tabular-nums border-l border-gray-200 dark:border-gray-600 ${
-                                                index % 2 === 1 ? 'bg-gray-50/50 dark:bg-gray-700/30' : ''
-                                            }`}
-                                        >
-                                            <BlurredValue>{formatCurrency(calculationResult.net_income_monthly)}</BlurredValue>
-                                        </td>
-                                    ))}
-                                </tr>
+                                                <span className="block">{scenario.label}</span>
+                                                {index === 0 && (
+                                                    <span className="mt-1 block text-[10px] font-normal uppercase tracking-wider text-[var(--paper-muted)]">
+                                                        Your plan
+                                                    </span>
+                                                )}
+                                            </th>
+                                        ))}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr className={paperTableRow}>
+                                        <th scope="row" className="sticky left-0 z-[1] bg-[var(--paper-card)] py-3 pr-4 text-left font-normal text-[var(--paper-ink)]">
+                                            <div className="flex items-center gap-1">
+                                                <span>Net income (monthly)</span>
+                                                <InfoHint
+                                                    label="Net income"
+                                                    description="Take-home pay after tax and UIF, before RA contributions."
+                                                />
+                                            </div>
+                                        </th>
+                                        {calculationResult.scenarios.map((scenario, index) => (
+                                            <td key={index} className={scenarioColumnClass(index, index === 0)}>
+                                                <BlurredValue>{formatCurrency(calculationResult.net_income_monthly)}</BlurredValue>
+                                            </td>
+                                        ))}
+                                    </tr>
 
-                                <tr className="border-b border-gray-100 dark:border-gray-700">
-                                    <td className="py-4 px-4 text-gray-700 dark:text-gray-200">RA contributions</td>
-                                    {calculationResult.scenarios.map((scenario, index) => (
-                                        <td
-                                            key={index}
-                                            className={`text-center py-4 px-4 text-gray-900 dark:text-white tabular-nums leading-relaxed border-l border-gray-200 dark:border-gray-600 ${
-                                                index % 2 === 1 ? 'bg-gray-50/50 dark:bg-gray-700/30' : ''
-                                            }`}
-                                        >
-                                            <BlurredValue>
-                                                {formatCurrency(scenario.ra_contribution_annual)} yr /{' '}
-                                                {formatCurrency(scenario.ra_contribution_monthly)} mo
-                                            </BlurredValue>
-                                        </td>
-                                    ))}
-                                </tr>
+                                    <tr className={paperTableRow}>
+                                        <th scope="row" className="sticky left-0 z-[1] bg-[var(--paper-card)] py-3 pr-4 text-left font-normal text-[var(--paper-ink)]">
+                                            RA contributions
+                                        </th>
+                                        {calculationResult.scenarios.map((scenario, index) => (
+                                            <td key={index} className={`${scenarioColumnClass(index, index === 0)} leading-relaxed`}>
+                                                <BlurredValue>
+                                                    {formatCurrency(scenario.ra_contribution_annual)} yr /{' '}
+                                                    {formatCurrency(scenario.ra_contribution_monthly)} mo
+                                                </BlurredValue>
+                                            </td>
+                                        ))}
+                                    </tr>
 
-                                <tr className="border-b border-gray-100 dark:border-gray-700">
-                                    <td className="py-3 px-4">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-gray-700 dark:text-gray-200">
-                                                Adjusted income (monthly)
-                                            </span>
-                                            <button
-                                                type="button"
-                                                className="p-2 -m-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 ml-2"
-                                                aria-label="More info"
+                                    <tr className={paperTableRow}>
+                                        <th scope="row" className="sticky left-0 z-[1] bg-[var(--paper-card)] py-3 pr-4 text-left font-normal text-[var(--paper-ink)]">
+                                            <div className="flex items-center gap-1">
+                                                <span>Adjusted income (monthly)</span>
+                                                <InfoHint
+                                                    label="Adjusted income"
+                                                    description="Take-home pay after RA deductions and revised tax."
+                                                />
+                                            </div>
+                                        </th>
+                                        {calculationResult.scenarios.map((scenario, index) => (
+                                            <td key={index} className={scenarioColumnClass(index, index === 0)}>
+                                                <BlurredValue>{formatCurrency(scenario.adjusted_income_monthly)}</BlurredValue>
+                                            </td>
+                                        ))}
+                                    </tr>
+
+                                    <tr className={paperTableRow}>
+                                        <th scope="row" className="sticky left-0 z-[1] bg-[var(--paper-card)] py-3 pr-4 text-left font-normal text-[var(--paper-ink)]">
+                                            Income tax (annual)
+                                        </th>
+                                        {calculationResult.scenarios.map((scenario, index) => (
+                                            <td
+                                                key={index}
+                                                className={`${scenarioColumnClass(index, index === 0)} ${paperMoney} ${paperMoneyTone(-1)}`}
                                             >
-                                                <Info className="w-4 h-4 text-gray-400 dark:text-gray-500" />
-                                            </button>
-                                        </div>
-                                    </td>
-                                    {calculationResult.scenarios.map((scenario, index) => (
-                                        <td
-                                            key={index}
-                                            className={`text-center py-3 px-4 text-gray-900 dark:text-white tabular-nums border-l border-gray-200 dark:border-gray-600 ${
-                                                index % 2 === 1 ? 'bg-gray-50/50 dark:bg-gray-700/30' : ''
-                                            }`}
-                                        >
-                                            <BlurredValue>{formatCurrency(scenario.adjusted_income_monthly)}</BlurredValue>
-                                        </td>
-                                    ))}
-                                </tr>
+                                                <BlurredValue>{formatCurrency(scenario.income_tax_annual)}</BlurredValue>
+                                            </td>
+                                        ))}
+                                    </tr>
 
-                                <tr className="border-b border-gray-100 dark:border-gray-700">
-                                    <td className="py-3 px-4 text-gray-700 dark:text-gray-200">Income tax (annual)</td>
-                                    {calculationResult.scenarios.map((scenario, index) => (
-                                        <td
-                                            key={index}
-                                            className={`text-center py-3 px-4 font-semibold text-red-600 dark:text-red-400 tabular-nums border-l border-gray-200 dark:border-gray-600 ${
-                                                index % 2 === 1 ? 'bg-gray-50/50 dark:bg-gray-700/30' : ''
-                                            }`}
-                                        >
-                                            <BlurredValue>{formatCurrency(scenario.income_tax_annual)}</BlurredValue>
-                                        </td>
-                                    ))}
-                                </tr>
-
-                                <tr className="border-b border-gray-100 dark:border-gray-700">
-                                    <td className="py-3 px-4">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-gray-700 dark:text-gray-200">
-                                                Potential tax saved (annual)
-                                            </span>
-                                            <button
-                                                type="button"
-                                                className="p-2 -m-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 ml-2"
-                                                aria-label="More info"
+                                    <tr className={paperTableRow}>
+                                        <th scope="row" className="sticky left-0 z-[1] bg-[var(--paper-card)] py-3 pr-4 text-left font-normal text-[var(--paper-ink)]">
+                                            <div className="flex items-center gap-1">
+                                                <span>Potential tax saved (annual)</span>
+                                                <InfoHint
+                                                    label="Tax saved annually"
+                                                    description="Difference between base tax and tax after RA deduction."
+                                                />
+                                            </div>
+                                        </th>
+                                        {calculationResult.scenarios.map((scenario, index) => (
+                                            <td
+                                                key={index}
+                                                className={`${scenarioColumnClass(index, index === 0)} ${paperMoney} ${paperMoneyTone(1)}`}
                                             >
-                                                <Info className="w-4 h-4 text-gray-400 dark:text-gray-500" />
-                                            </button>
-                                        </div>
-                                    </td>
-                                    {calculationResult.scenarios.map((scenario, index) => (
-                                        <td
-                                            key={index}
-                                            className={`text-center py-3 px-4 font-semibold text-blue-600 dark:text-blue-400 tabular-nums border-l border-gray-200 dark:border-gray-600 ${
-                                                index % 2 === 1 ? 'bg-gray-50/50 dark:bg-gray-700/30' : ''
-                                            }`}
-                                        >
-                                            <BlurredValue>{formatCurrency(scenario.tax_saved_annual)}</BlurredValue>
-                                        </td>
-                                    ))}
-                                </tr>
+                                                <BlurredValue>{formatCurrency(scenario.tax_saved_annual)}</BlurredValue>
+                                            </td>
+                                        ))}
+                                    </tr>
 
-                                <tr>
-                                    <td className="py-3 px-4">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-gray-700 dark:text-gray-200">
-                                                Potential tax saved (monthly)
-                                            </span>
-                                            <button
-                                                type="button"
-                                                className="p-2 -m-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 ml-2"
-                                                aria-label="More info"
+                                    <tr className={paperTableRow}>
+                                        <th scope="row" className="sticky left-0 z-[1] bg-[var(--paper-card)] py-3 pr-4 text-left font-normal text-[var(--paper-ink)]">
+                                            <div className="flex items-center gap-1">
+                                                <span>Potential tax saved (monthly)</span>
+                                                <InfoHint
+                                                    label="Tax saved monthly"
+                                                    description="Annual tax saving divided by twelve."
+                                                />
+                                            </div>
+                                        </th>
+                                        {calculationResult.scenarios.map((scenario, index) => (
+                                            <td
+                                                key={index}
+                                                className={`${scenarioColumnClass(index, index === 0)} ${paperMoney} ${paperMoneyTone(1)}`}
                                             >
-                                                <Info className="w-4 h-4 text-gray-400 dark:text-gray-500" />
-                                            </button>
-                                        </div>
-                                    </td>
-                                    {calculationResult.scenarios.map((scenario, index) => (
-                                        <td
-                                            key={index}
-                                            className={`text-center py-3 px-4 font-semibold text-blue-600 dark:text-blue-400 tabular-nums border-l border-gray-200 dark:border-gray-600 ${
-                                                index % 2 === 1 ? 'bg-gray-50/50 dark:bg-gray-700/30' : ''
-                                            }`}
-                                        >
-                                            <BlurredValue>{formatCurrency(scenario.tax_saved_monthly)}</BlurredValue>
-                                        </td>
-                                    ))}
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
+                                                <BlurredValue>{formatCurrency(scenario.tax_saved_monthly)}</BlurredValue>
+                                            </td>
+                                        ))}
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </PaperCard>
 
                     {growthData.length > 0 && (
-                        <div
-                            className={`bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 ${
+                        <PaperCard
+                            className={`p-4 sm:p-6 ${
                                 blurSensitiveValues ? 'blur-[5px] select-none' : ''
                             }`}
                         >
-                            <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">
-                                RA Growth Projection
-                            </h2>
-                            <div className="w-full min-w-0 h-[340px] sm:h-[480px]">
+                            <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
+                                <p className={paperEyebrow}>RA growth projection</p>
+                                <div className="flex items-center gap-2 text-xs text-[var(--paper-muted)]">
+                                    <span
+                                        className="inline-block h-2 w-4 rounded-sm"
+                                        style={{ backgroundColor: PAPER_CHART.olive }}
+                                        aria-hidden="true"
+                                    />
+                                    Projected RA value
+                                </div>
+                            </div>
+                            <div className="mt-3 h-[260px] min-w-0 w-full sm:h-[320px]">
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <LineChart
+                                    <AreaChart
                                         data={growthData}
-                                        margin={{ top: 5, right: 10, left: isMobile ? 0 : 30, bottom: 35 }}
+                                        margin={{ top: 8, right: 8, left: isMobile ? 4 : 12, bottom: 4 }}
                                     >
-                                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" className="dark:stroke-gray-700" />
+                                        <defs>
+                                            <linearGradient id="raGrowthFill" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="5%" stopColor={PAPER_CHART.olive} stopOpacity={0.35} />
+                                                <stop offset="95%" stopColor={PAPER_CHART.olive} stopOpacity={0.03} />
+                                            </linearGradient>
+                                        </defs>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="var(--paper-line)" vertical={false} />
                                         <XAxis
                                             dataKey="year"
-                                            stroke="#6b7280"
-                                            className="dark:stroke-gray-400"
-                                            tick={{ fill: '#6b7280', fontSize: isMobile ? 11 : 12 }}
-                                            ticks={
-                                                growthData.length > 8
-                                                    ? growthData.filter((_, i) => i % 5 === 0).map((d) => d.year)
-                                                    : undefined
-                                            }
-                                            tickFormatter={(value) => {
-                                                const year = value
-                                                const currentYear = new Date().getFullYear()
-                                                const yearsFromNow = year - currentYear
-                                                return yearsFromNow % 5 === 0 ? year.toString() : ''
-                                            }}
-                                            label={{
-                                                value: 'Year',
-                                                position: 'insideBottom',
-                                                offset: -10,
-                                                style: { fill: '#6b7280', fontSize: 13 },
-                                            }}
+                                            stroke="var(--paper-muted)"
+                                            tick={{ fill: 'var(--paper-muted)', fontSize: isMobile ? 10 : 11 }}
+                                            tickLine={false}
+                                            axisLine={false}
+                                            interval="preserveStartEnd"
+                                            minTickGap={isMobile ? 24 : 32}
                                         />
                                         <YAxis
-                                            stroke="#6b7280"
-                                            className="dark:stroke-gray-400"
-                                            width={isMobile ? 52 : 70}
-                                            tick={{ fill: '#6b7280', fontSize: isMobile ? 10 : 12 }}
+                                            stroke="var(--paper-muted)"
+                                            width={isMobile ? 48 : 56}
+                                            tick={{ fill: 'var(--paper-muted)', fontSize: isMobile ? 10 : 11 }}
+                                            tickLine={false}
+                                            axisLine={false}
+                                            tickMargin={4}
                                             tickFormatter={(value) => {
                                                 if (value >= 1000000) {
                                                     return `R${(value / 1000000).toFixed(1)}M`
@@ -668,103 +768,116 @@ export default function InvestmentsV2RaCalculator() {
                                                 }
                                                 return `R${value}`
                                             }}
-                                            label={
-                                                !isMobile
-                                                    ? {
-                                                          value: 'Portfolio Value (R)',
-                                                          angle: -90,
-                                                          position: 'insideLeft',
-                                                          offset: 15,
-                                                          style: {
-                                                              fill: '#6b7280',
-                                                              fontSize: 13,
-                                                              textAnchor: 'middle',
-                                                          },
-                                                      }
-                                                    : undefined
-                                            }
                                         />
                                         <Tooltip
-                                            contentStyle={{
-                                                backgroundColor: '#1f2937',
-                                                borderColor: '#374151',
-                                                color: '#f3f4f6',
-                                                borderRadius: '8px',
-                                            }}
-                                            cursor={{ stroke: '#6b7280', strokeWidth: 1 }}
-                                            formatter={(value) => [formatCurrency(value), 'Portfolio Value']}
-                                            labelFormatter={(label) => `Year: ${label}`}
+                                            content={<GrowthChartTooltip />}
+                                            cursor={{ stroke: 'var(--paper-line)', strokeWidth: 1 }}
+                                            wrapperStyle={{ outline: 'none' }}
                                         />
-                                        <Line
+                                        <Area
                                             type="monotone"
                                             dataKey="value"
-                                            stroke="#3b82f6"
+                                            stroke={PAPER_CHART.olive}
+                                            fill="url(#raGrowthFill)"
                                             strokeWidth={2}
+                                            fillOpacity={1}
                                             dot={false}
-                                            activeDot={{ r: 6 }}
+                                            activeDot={{ r: 4, fill: PAPER_CHART.olive, stroke: 'var(--paper-card)', strokeWidth: 2 }}
                                             isAnimationActive={false}
-                                            name="Portfolio Value"
+                                            name="Projected RA value"
                                         />
-                                    </LineChart>
+                                        {growthData[0] && (
+                                            <ReferenceDot
+                                                x={growthData[0].year}
+                                                y={growthData[0].value}
+                                                r={4}
+                                                fill={PAPER_CHART.umber}
+                                                stroke="var(--paper-card)"
+                                                strokeWidth={2}
+                                                isFront
+                                            />
+                                        )}
+                                    </AreaChart>
                                 </ResponsiveContainer>
                             </div>
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-4 italic">
-                                Assumes net return of 5.5% after tax and inflation. This is a projection and actual
-                                returns may vary.
+                            {growthData[0] && (
+                                <p className="mt-2 text-xs text-[var(--paper-muted)]">
+                                    Today:{' '}
+                                    <BlurredValue as="span" className={`${paperMoney} text-[var(--paper-ink)]`}>
+                                        {formatCurrency(growthData[0].value)}
+                                    </BlurredValue>
+                                </p>
+                            )}
+                            <p className="mt-2 text-xs leading-relaxed text-[var(--paper-muted)]">
+                                Assumes net return of 5.5% after tax and inflation. Projection only — actual returns
+                                may vary.
                             </p>
-                        </div>
+                        </PaperCard>
                     )}
 
-                    <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                    <PaperCard className="p-5 sm:p-6">
                         <div className="flex items-start gap-3">
-                            <Calculator className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5" />
-                            <div className="text-sm text-blue-800 dark:text-blue-200">
-                                <p className="font-semibold mb-1">About RA Tax Benefits</p>
-                                <ul className="list-disc list-inside space-y-1 text-blue-700 dark:text-blue-300">
-                                    <li>
-                                        RA contributions are tax deductible up to 27.5% of your earnings or{' '}
-                                        <BlurredValue>
-                                            {calculationResult?.ra_max_deduction
-                                                ? formatCurrency(calculationResult.ra_max_deduction, {
-                                                      minimumFractionDigits: 0,
-                                                      maximumFractionDigits: 0,
-                                                  })
-                                                : 'R350,000'}
-                                        </BlurredValue>{' '}
-                                        per year (whichever is lower)
+                            <Calculator className="mt-0.5 h-5 w-5 shrink-0 text-[var(--paper-muted)]" aria-hidden="true" />
+                            <div className="min-w-0 text-sm">
+                                <p className="font-semibold text-[var(--paper-ink)]">About RA tax benefits</p>
+                                <ul className="mt-2 space-y-2 text-[var(--paper-muted)]">
+                                    <li className="flex gap-2 leading-relaxed">
+                                        <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-[var(--paper-line)]" aria-hidden="true" />
+                                        <span>
+                                            RA contributions are tax deductible up to 27.5% of your earnings or{' '}
+                                            <BlurredValue>
+                                                {calculationResult?.ra_max_deduction
+                                                    ? formatCurrency(calculationResult.ra_max_deduction, {
+                                                          minimumFractionDigits: 0,
+                                                          maximumFractionDigits: 0,
+                                                      })
+                                                    : 'R350,000'}
+                                            </BlurredValue>{' '}
+                                            per year (whichever is lower).
+                                        </span>
                                     </li>
-                                    <li>The higher your RA contributions, the higher your potential tax refund</li>
-                                    <li>
-                                        Growth on your RA money is tax-free (no tax on interest, dividends, or capital
-                                        gains)
+                                    <li className="flex gap-2 leading-relaxed">
+                                        <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-[var(--paper-line)]" aria-hidden="true" />
+                                        <span>The higher your RA contributions, the higher your potential tax refund.</span>
                                     </li>
-                                    <li>
-                                        At retirement, you can take up to 1/3 of your RA as a lump sum with lower tax
-                                        rates
+                                    <li className="flex gap-2 leading-relaxed">
+                                        <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-[var(--paper-line)]" aria-hidden="true" />
+                                        <span>
+                                            Growth on your RA money is tax-free (no tax on interest, dividends, or
+                                            capital gains).
+                                        </span>
+                                    </li>
+                                    <li className="flex gap-2 leading-relaxed">
+                                        <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-[var(--paper-line)]" aria-hidden="true" />
+                                        <span>
+                                            At retirement, you can take up to 1/3 of your RA as a lump sum with lower
+                                            tax rates.
+                                        </span>
                                     </li>
                                 </ul>
                             </div>
                         </div>
-                    </div>
+                    </PaperCard>
                 </div>
             )}
 
             {calculating && (
-                <div className="text-center text-gray-600 dark:text-gray-400">Calculating...</div>
+                <div className="text-center text-[var(--paper-muted)]">Calculating…</div>
             )}
 
             {showJumpToResults && (
                 <button
                     type="button"
-                    onClick={() =>
+                    onClick={() => {
+                        const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
                         document.getElementById('calculator-result')?.scrollIntoView({
-                            behavior: 'smooth',
+                            behavior: reduceMotion ? 'auto' : 'smooth',
                             block: 'start',
                         })
-                    }
-                    className="fixed bottom-4 right-4 z-50 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900"
+                    }}
+                    className={`${paperBtnPrimary} fixed bottom-4 right-4 z-50 shadow-lg`}
                 >
-                    Jump to Results
+                    Jump to results
                 </button>
             )}
         </div>
