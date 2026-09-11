@@ -15,7 +15,7 @@ Primary stack: **React + Vite + TailwindCSS + Recharts** (`frontend/`), **FastAP
 | **Budget** | Needs / wants / savings structure, charts, autosave against the authenticated user—not a single demo user. |
 | **Emergency savings** | Goals tied to budget “Needs” (e.g. 3/6/12 months), progress and time-to-goal views. |
 | **RA** | Performance and RA tax-benefit scenarios using the same tax engine as the budget flow. |
-| **Investments** | Multiple portfolios (e.g. default TFSA at `/portfolio` redirecting to `/investments/tfsa`), target allocation, transactions, Sheets-backed ETF prices where configured, FX worksheet integration, rebalancing calculator, snapshots and summaries (scheduled). |
+| **Investments** | Account hub at `/investments` (Sheets and Sygnia). Default TFSA via `/portfolio` redirecting to `/investments/sheets/tfsa`. Target allocation, transactions, Sheets-backed ETF prices where configured, FX worksheet integration, rebalancing calculator, snapshots and summaries (scheduled). |
 | **Investec** (optional) | Account sync, transactions, categorization rules, budget analysis (`/investec/*`). Stored API credentials require `ENCRYPTION_KEY`. The sidebar entry is a **Settings** preference (persisted locally) regardless of connectivity. |
 | **Ops** | Docker Compose (`docker-compose.dev.yml` vs `docker-compose.yml`), Makefile helpers, VPS deploy with migrations (`run_migrations.sh` inside the backend container). |
 
@@ -32,6 +32,7 @@ Primary stack: **React + Vite + TailwindCSS + Recharts** (`frontend/`), **FastAP
 | `backend/app/models.py` | SQLAlchemy models |
 | `backend/alembic/versions/` | Migration scripts |
 | `tests/` | Python tests |
+| `docs/` | Product behaviour (payslip budget income, paper UI) |
 | `openapi.json` | API schema snapshot |
 
 ---
@@ -98,9 +99,9 @@ make clean                        # Dev compose down WITH volumes + docker syste
 
 ## Frontend routes (conceptual map)
 
-Protected app routes include home, budget, salary/payslip, emergency savings, investments landing and `/investments/:portfolioSlug`, RA calculator and RA performance (`/investments/ra`), category guide, settings, and (when Investec nav is enabled) Investec dashboard, accounts, transactions, rules, and budget analysis. Login and register stay public.
+Protected app routes include home, budget, salary/payslip, emergency savings, investments (`/investments`, account detail, `/investments/sheets/:slug`), RA calculator and RA performance (`/investments/ra`), category guide, settings, and (when Investec nav is enabled) Investec dashboard, accounts, transactions, rules, and budget analysis. Login and register stay public.
 
-Legacy paths `/portfolio`, `/ra`, and `/ra-calculator` redirect to the investments URL structure above.
+Legacy paths `/portfolio`, `/investments-v2`, `/ra`, and `/ra-calculator` redirect to the investments URL structure above.
 
 ---
 
