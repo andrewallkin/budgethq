@@ -50,6 +50,9 @@ service-account.json
 
 etf_bulk_upload.csv
 
+# Local design notes
+docs/superpowers/
+
 # Ignore all markdown files except README.md
 *.md
 !README.md
