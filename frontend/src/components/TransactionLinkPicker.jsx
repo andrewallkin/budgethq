@@ -15,6 +15,12 @@ export default function TransactionLinkPicker({ isOpen, onClose, sourceTransacti
 
     const isDebit = sourceTransaction?.transaction_type === 'DEBIT'
 
+    const openAmount = (txn) => {
+        if (!txn) return 0
+        if (txn.effective_amount != null) return Math.abs(Number(txn.effective_amount) || 0)
+        return Math.abs(Number(txn.amount) || 0)
+    }
+
     useEffect(() => {
         if (!isOpen || !sourceTransaction) return
         setSearch('')
@@ -42,8 +48,9 @@ export default function TransactionLinkPicker({ isOpen, onClose, sourceTransacti
             const response = await axios.get(`/api/investec/transactions?${params.toString()}`)
             const filtered = response.data.filter((txn) => {
                 if (txn.id === sourceTransaction.id) return false
+                if (openAmount(txn) <= 0.009) return false
                 if (isDebit) {
-                    return ['refund', 'reimbursements'].includes(txn.category) && !txn.linked_debit
+                    return ['refund', 'reimbursements'].includes(txn.category)
                 }
                 return txn.transaction_type === 'DEBIT'
             })
@@ -59,9 +66,10 @@ export default function TransactionLinkPicker({ isOpen, onClose, sourceTransacti
         setLinkingId(targetTxn.id)
         setError('')
         try {
+            const linkable = Math.min(openAmount(sourceTransaction), openAmount(targetTxn))
             const body = isDebit
-                ? { credit_transaction_id: targetTxn.id }
-                : { debit_transaction_id: targetTxn.id }
+                ? { credit_transaction_id: targetTxn.id, amount: linkable }
+                : { debit_transaction_id: targetTxn.id, amount: linkable }
             await axios.post(`/api/investec/transactions/${sourceTransaction.id}/links`, body)
             onLinked?.()
             onClose()
@@ -84,8 +92,8 @@ export default function TransactionLinkPicker({ isOpen, onClose, sourceTransacti
             title={isDebit ? 'Link credit' : 'Link to expense'}
             description={
                 isDebit
-                    ? 'Choose an unlinked refund or reimbursement to offset this expense.'
-                    : 'Choose the original expense this credit offsets.'
+                    ? 'Choose a refund or reimbursement. Only the amount that fits this expense is linked.'
+                    : 'Choose an expense. Only the amount that fits is linked. The rest stays unlinked.'
             }
             maxWidth="max-w-lg"
             zClass="z-[60]"
@@ -124,6 +132,9 @@ export default function TransactionLinkPicker({ isOpen, onClose, sourceTransacti
                             txn.transaction_type === 'CREDIT'
                                 ? Math.abs(Number(txn.amount) || 0)
                                 : -Math.abs(Number(txn.amount) || 0)
+                        const linkable = Math.min(openAmount(sourceTransaction), openAmount(txn))
+                        const creditTxn = txn.transaction_type === 'CREDIT' ? txn : sourceTransaction
+                        const staysUnlinked = openAmount(creditTxn) - linkable
                         return (
                             <button
                                 key={txn.id}
@@ -147,6 +158,15 @@ export default function TransactionLinkPicker({ isOpen, onClose, sourceTransacti
                                                 ? ` · ${CATEGORY_LABELS[txn.category] || txn.category}`
                                                 : ''}
                                         </p>
+                                        {staysUnlinked > 0.009 && (
+                                            <p className="mt-1 text-xs text-[var(--paper-muted)]">
+                                                Links{' '}
+                                                <BlurredValue>{formatCurrency(linkable)}</BlurredValue>
+                                                .{' '}
+                                                <BlurredValue>{formatCurrency(staysUnlinked)}</BlurredValue>
+                                                {' '}stays unlinked.
+                                            </p>
+                                        )}
                                     </div>
                                     <p className={`shrink-0 text-sm ${paperMoney} ${paperMoneyTone(signed)}`}>
                                         {signed > 0 ? '+' : ''}

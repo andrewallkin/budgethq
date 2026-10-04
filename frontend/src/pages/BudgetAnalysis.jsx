@@ -311,7 +311,7 @@ export default function BudgetAnalysis() {
     }
 
     const computeOffsetTotals = (txns) => {
-        const linkedCreditIds = new Set()
+        const allocatedByCreditId = {}
         const loadedDebitIds = new Set(
             txns.filter(t => t.transaction_type === 'DEBIT').map(t => t.id)
         )
@@ -319,13 +319,15 @@ export default function BudgetAnalysis() {
 
         txns.forEach(txn => {
             txn.linked_credits?.forEach(link => {
-                linkedCreditIds.add(link.transaction_id)
+                allocatedByCreditId[link.transaction_id] =
+                    (allocatedByCreditId[link.transaction_id] || 0) + link.link_amount
                 linkedOffsetTotal += link.link_amount
             })
-            if (txn.transaction_type === 'CREDIT' && txn.linked_debit
-                && !loadedDebitIds.has(txn.linked_debit.transaction_id)) {
-                linkedOffsetTotal += txn.linked_debit.link_amount
-            }
+            txn.linked_debits?.forEach(link => {
+                if (!loadedDebitIds.has(link.transaction_id)) {
+                    linkedOffsetTotal += link.link_amount
+                }
+            })
         })
 
         let unlinkedRefundTotal = 0
@@ -340,13 +342,17 @@ export default function BudgetAnalysis() {
             if (txn.category === 'reimbursements') {
                 reimbursementsTotal += amount
             }
-            if (linkedCreditIds.has(txn.id) || txn.linked_debit) {
+            const allocated = txn.linked_debits?.length
+                ? txn.linked_debits.reduce((sum, link) => sum + link.link_amount, 0)
+                : (allocatedByCreditId[txn.id] || 0)
+            const unallocated = amount - allocated
+            if (unallocated <= 0.009) {
                 return
             }
             if (txn.category === 'refund') {
-                unlinkedRefundTotal += amount
+                unlinkedRefundTotal += unallocated
             } else if (txn.category === 'reimbursements') {
-                unlinkedReimbursementTotal += amount
+                unlinkedReimbursementTotal += unallocated
             }
         })
 

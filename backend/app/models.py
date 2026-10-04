@@ -550,23 +550,29 @@ class BankTransaction(Base):
         back_populates="debit_transaction",
         cascade="all, delete-orphan",
     )
-    credit_link = relationship(
+    credit_links = relationship(
         "TransactionLink",
         foreign_keys="TransactionLink.credit_transaction_id",
         back_populates="credit_transaction",
-        uselist=False,
         cascade="all, delete-orphan",
     )
 
 
 class TransactionLink(Base):
-    """Links an offset credit (refund/reimbursement) to an original debit expense."""
+    """Links part of an offset credit (refund/reimbursement) to an original debit expense."""
     __tablename__ = "transaction_links"
+    __table_args__ = (
+        UniqueConstraint(
+            "credit_transaction_id",
+            "debit_transaction_id",
+            name="uq_transaction_link_credit_debit",
+        ),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), index=True)
     debit_transaction_id = Column(Integer, ForeignKey("bank_transactions.id"), index=True)
-    credit_transaction_id = Column(Integer, ForeignKey("bank_transactions.id"), unique=True, index=True)
+    credit_transaction_id = Column(Integer, ForeignKey("bank_transactions.id"), index=True)
     amount = Column(Float, nullable=False)
     created_at = Column(DateTime, default=get_sast_now)
 
@@ -579,7 +585,7 @@ class TransactionLink(Base):
     credit_transaction = relationship(
         "BankTransaction",
         foreign_keys=[credit_transaction_id],
-        back_populates="credit_link",
+        back_populates="credit_links",
     )
 
 

@@ -114,7 +114,7 @@ class TransactionResponse(BaseModel):
     ai_category_confidence: Optional[float]
     user_corrected: bool
     linked_credits: List[LinkedTransactionSummaryResponse] = []
-    linked_debit: Optional[LinkedTransactionSummaryResponse] = None
+    linked_debits: List[LinkedTransactionSummaryResponse] = []
     effective_amount: Optional[float] = None
     has_links: bool = False
 
@@ -125,7 +125,10 @@ class TransactionResponse(BaseModel):
 class TransactionLinkCreate(BaseModel):
     debit_transaction_id: Optional[int] = Field(None, description="Debit expense to offset")
     credit_transaction_id: Optional[int] = Field(None, description="Refund or reimbursement credit")
-    amount: Optional[float] = Field(None, description="Partial link amount; defaults to full credit amount")
+    amount: Optional[float] = Field(
+        None,
+        description="Amount of the credit to link. Defaults to whatever still fits on the credit and the expense.",
+    )
 
 
 class TransactionLinksResponse(BaseModel):
@@ -450,13 +453,13 @@ def _linked_summary_to_response(summary) -> LinkedTransactionSummaryResponse:
 def serialize_transaction(
     transaction: models.BankTransaction,
     links_by_debit: Optional[Dict[int, List[models.TransactionLink]]] = None,
-    link_by_credit: Optional[Dict[int, models.TransactionLink]] = None,
+    links_by_credit: Optional[Dict[int, List[models.TransactionLink]]] = None,
 ) -> TransactionResponse:
     linked_credits: List[LinkedTransactionSummaryResponse] = []
-    linked_debit: Optional[LinkedTransactionSummaryResponse] = None
+    linked_debits: List[LinkedTransactionSummaryResponse] = []
     effective_amount: Optional[float] = None
 
-    if links_by_debit is not None and link_by_credit is not None:
+    if links_by_debit is not None and links_by_credit is not None:
         if transaction.transaction_type == "DEBIT":
             debit_links = links_by_debit.get(transaction.id, [])
             if debit_links:
@@ -466,13 +469,16 @@ def serialize_transaction(
                 ]
                 effective_amount = effective_debit_amount(transaction, debit_links)
         elif transaction.transaction_type == "CREDIT":
-            credit_link = link_by_credit.get(transaction.id)
-            if credit_link:
-                linked_debit = _linked_summary_to_response(
-                    summarize_linked_transaction(credit_link, "debit")
-                )
+            credit_links = links_by_credit.get(transaction.id, [])
+            if credit_links:
+                linked_debits = [
+                    _linked_summary_to_response(summarize_linked_transaction(link, "debit"))
+                    for link in credit_links
+                ]
+                linked_total = sum(link.amount for link in credit_links)
+                effective_amount = max(0.0, abs(transaction.amount) - linked_total)
 
-    has_links = bool(linked_credits or linked_debit)
+    has_links = bool(linked_credits or linked_debits)
 
     return TransactionResponse(
         id=transaction.id,
@@ -487,7 +493,7 @@ def serialize_transaction(
         ai_category_confidence=transaction.ai_category_confidence,
         user_corrected=transaction.user_corrected,
         linked_credits=linked_credits,
-        linked_debit=linked_debit,
+        linked_debits=linked_debits,
         effective_amount=effective_amount,
         has_links=has_links,
     )
@@ -495,11 +501,11 @@ def serialize_transaction(
 
 def _build_link_indexes(links: List[models.TransactionLink]):
     links_by_debit: Dict[int, List[models.TransactionLink]] = {}
-    link_by_credit: Dict[int, models.TransactionLink] = {}
+    links_by_credit: Dict[int, List[models.TransactionLink]] = {}
     for link in links:
         links_by_debit.setdefault(link.debit_transaction_id, []).append(link)
-        link_by_credit[link.credit_transaction_id] = link
-    return links_by_debit, link_by_credit
+        links_by_credit.setdefault(link.credit_transaction_id, []).append(link)
+    return links_by_debit, links_by_credit
 
 
 def serialize_transactions(db: Session, user_id: int, transactions: List[models.BankTransaction]) -> List[TransactionResponse]:
