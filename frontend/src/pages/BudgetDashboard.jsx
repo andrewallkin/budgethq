@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import axios from 'axios'
 import { Trash2, BarChart2, ChevronDown } from 'lucide-react'
 import { Link } from 'react-router-dom'
@@ -455,60 +456,138 @@ function MetaRow({ label, hint, value, tone }) {
     )
 }
 
+const QUIET_MENU_GAP = 8
+const QUIET_MENU_PAD = 12
+const QUIET_MENU_MAX_HEIGHT = 256
+const QUIET_MENU_MIN_WIDTH = 224
+
+function placeQuietMenu(button, align) {
+    const rect = button.getBoundingClientRect()
+    const spaceBelow = window.innerHeight - rect.bottom - QUIET_MENU_GAP - QUIET_MENU_PAD
+    const spaceAbove = rect.top - QUIET_MENU_GAP - QUIET_MENU_PAD
+    const openUp = spaceBelow < QUIET_MENU_MAX_HEIGHT && spaceAbove > spaceBelow
+    const room = Math.max(0, openUp ? spaceAbove : spaceBelow)
+    const width = Math.min(
+        Math.max(rect.width, QUIET_MENU_MIN_WIDTH),
+        window.innerWidth - QUIET_MENU_PAD * 2,
+    )
+    const maxLeft = Math.max(QUIET_MENU_PAD, window.innerWidth - width - QUIET_MENU_PAD)
+    const preferredLeft = align === 'right' ? rect.right - width : rect.left
+    const left = Math.min(Math.max(QUIET_MENU_PAD, preferredLeft), maxLeft)
+
+    if (openUp) {
+        return {
+            width,
+            left,
+            maxHeight: Math.min(QUIET_MENU_MAX_HEIGHT, room),
+            top: 'auto',
+            bottom: window.innerHeight - rect.top + QUIET_MENU_GAP,
+        }
+    }
+
+    return {
+        width,
+        left,
+        maxHeight: Math.min(QUIET_MENU_MAX_HEIGHT, room),
+        top: rect.bottom + QUIET_MENU_GAP,
+        bottom: 'auto',
+    }
+}
+
 function QuietMenu({ value, options, labels, onChange, swatchFor, align = 'left' }) {
     const [open, setOpen] = useState(false)
+    const [placement, setPlacement] = useState(null)
     const ref = useRef(null)
+    const buttonRef = useRef(null)
+    const menuRef = useRef(null)
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         if (!open) return undefined
-        const onPointer = (event) => {
-            if (ref.current && !ref.current.contains(event.target)) setOpen(false)
+
+        const place = () => {
+            const button = buttonRef.current
+            if (!button) return
+            setPlacement(placeQuietMenu(button, align))
         }
+
+        place()
+
+        const onPointer = (event) => {
+            if (ref.current?.contains(event.target) || menuRef.current?.contains(event.target)) return
+            setOpen(false)
+        }
+        const onKey = (event) => {
+            if (event.key === 'Escape') setOpen(false)
+        }
+
         document.addEventListener('mousedown', onPointer)
-        return () => document.removeEventListener('mousedown', onPointer)
-    }, [open])
+        document.addEventListener('keydown', onKey)
+        window.addEventListener('resize', place)
+        window.addEventListener('scroll', place, true)
+        return () => {
+            document.removeEventListener('mousedown', onPointer)
+            document.removeEventListener('keydown', onKey)
+            window.removeEventListener('resize', place)
+            window.removeEventListener('scroll', place, true)
+        }
+    }, [open, align])
 
     const swatch = swatchFor?.(value)
 
     return (
         <div className="relative w-[11rem] shrink-0" ref={ref}>
             <button
+                ref={buttonRef}
                 type="button"
+                aria-haspopup="listbox"
+                aria-expanded={open}
                 onClick={() => setOpen((current) => !current)}
                 className="flex w-full cursor-pointer items-center gap-1.5 text-left text-xs text-[var(--paper-muted)] transition-colors hover:text-[var(--paper-ink)]"
             >
-                {swatch ? <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: swatch }} /> : null}
+                {swatch ? <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: swatch }} aria-hidden="true" /> : null}
                 <span className="min-w-0 flex-1 truncate">{labels[value] || value}</span>
-                <ChevronDown className={`h-3 w-3 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+                <ChevronDown className={`h-3 w-3 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
             </button>
-            {open ? (
-                <div
-                    className={`absolute z-20 mt-2 max-h-64 min-w-[14rem] overflow-y-auto rounded-md border border-[var(--paper-line)] bg-[var(--paper-card)] py-1 shadow-sm ${
-                        align === 'right' ? 'right-0' : 'left-0'
-                    }`}
-                >
-                    {options.map((option) => (
-                        <button
-                            key={option}
-                            type="button"
-                            onClick={() => {
-                                onChange(option)
-                                setOpen(false)
-                            }}
-                            className={`flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--paper-canvas)] ${
-                                option === value
-                                    ? 'font-medium text-[var(--paper-ink)]'
-                                    : 'text-[var(--paper-muted)]'
-                            }`}
-                        >
-                            {swatchFor ? (
-                                <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: swatchFor(option) }} />
-                            ) : null}
-                            {labels[option] || option}
-                        </button>
-                    ))}
-                </div>
-            ) : null}
+            {open && placement
+                ? createPortal(
+                    <div
+                        ref={menuRef}
+                        role="listbox"
+                        style={{
+                            top: placement.top,
+                            bottom: placement.bottom,
+                            left: placement.left,
+                            width: placement.width,
+                            maxHeight: placement.maxHeight,
+                        }}
+                        className="fixed z-30 overflow-y-auto overscroll-contain rounded-md border border-[var(--paper-line)] bg-[var(--paper-card)] py-1 shadow-md"
+                    >
+                        {options.map((option) => (
+                            <button
+                                key={option}
+                                type="button"
+                                role="option"
+                                aria-selected={option === value}
+                                onClick={() => {
+                                    onChange(option)
+                                    setOpen(false)
+                                }}
+                                className={`flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--paper-canvas)] ${
+                                    option === value
+                                        ? 'font-medium text-[var(--paper-ink)]'
+                                        : 'text-[var(--paper-muted)]'
+                                }`}
+                            >
+                                {swatchFor ? (
+                                    <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: swatchFor(option) }} aria-hidden="true" />
+                                ) : null}
+                                {labels[option] || option}
+                            </button>
+                        ))}
+                    </div>,
+                    document.body,
+                )
+                : null}
         </div>
     )
 }
