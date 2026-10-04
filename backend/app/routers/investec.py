@@ -785,6 +785,26 @@ async def sync_historical_transactions(
     }
 
 
+@router.get("/transactions/{transaction_id}", response_model=TransactionResponse)
+async def get_transaction(
+    transaction_id: int,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get a single transaction with link summaries and effective amount."""
+    transaction = db.query(models.BankTransaction).filter(
+        models.BankTransaction.id == transaction_id,
+        models.BankTransaction.user_id == current_user.id,
+    ).first()
+
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    links = get_links_for_transaction(db, current_user.id, transaction.id)
+    links_by_debit, links_by_credit = _build_link_indexes(links)
+    return serialize_transaction(transaction, links_by_debit, links_by_credit)
+
+
 @router.patch("/transactions/{transaction_id}", response_model=TransactionResponse)
 async def update_transaction_category(
     transaction_id: int,
