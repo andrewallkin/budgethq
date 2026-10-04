@@ -36,7 +36,7 @@ const KIND_META = {
     },
     expense: {
         label: 'Expenses',
-        hint: 'Everyday spend. Budget line items usually map here.',
+        hint: 'Categories budget lines map to, including infrequent costs you assign yourself.',
         chip: 'bg-[var(--paper-accent)]/12 text-[var(--paper-accent)]',
     },
     neutral: {
@@ -66,6 +66,9 @@ function categoryNote(cat, showInvestecNav) {
     }
     if (cat === 'uncategorized' && showInvestecNav) {
         return 'Uncategorized transactions sit in Analysis until a rule or manual category is set.'
+    }
+    if (cat === 'irregular') {
+        return 'Only for costs you assign yourself. New transactions stay uncategorized until you recategorise them or a rule matches.'
     }
     return null
 }

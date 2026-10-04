@@ -25,7 +25,8 @@ class TransactionCategorization(BaseModel):
             "One of: salary, side_income, investment_income, reimbursements, other_income, "
             "groceries, household_home, dining_takeaways, shopping_clothing, "
             "travel_accommodation, entertainment, health_wellness, bills, "
-            "subscriptions, transport, savings, loan_repayment, refund, transfers"
+            "subscriptions, transport, savings, loan_repayment, refund, transfers, "
+            "or an empty string when the debit should stay uncategorized"
         )
     )
     confidence: float = Field(
@@ -51,15 +52,15 @@ class TransactionCategorizer:
         "other_income": "Gifts received, bonuses, miscellaneous windfall credits",
         # Expense categories (DEBIT transactions)
         "groceries": "Food and drink purchased for home — supermarkets, butchers, delis, fresh produce stores",
-        "household_home": "Recurring home costs and once-off home spend — electricity, cleaning services, garden supplies, homeware",
+        "household_home": "Recurring home costs — electricity, cleaning services, garden supplies, homeware. Not infrequent repairs",
         "dining_takeaways": "Food or drink consumed out of home — restaurants, coffee shops, takeaways, Uber Eats, bar tabs",
         "shopping_clothing": "Retail purchases for personal use — clothing, accessories, homeware décor, online shopping (Takealot, Temu)",
         "travel_accommodation": "Trip-related costs — Airbnb, hotels, and any accommodation or travel bookings outside daily commuting",
-        "entertainment": "Events, activities, and leisure spend — concert tickets, Webtickets, sports events, social outings",
+        "entertainment": "Events and leisure for yourself — concert tickets, Webtickets, sports events, social outings. Not gifts",
         "health_wellness": "Physical health and body maintenance — physio, pharmacy, doctor visits, recovery treatments, personal care products",
         "bills": "Fixed essential obligations — levies, rates, insurance premiums, medical aid, bank charges",
-        "subscriptions": "Recurring digital and membership services — streaming, phone contracts, gym memberships, software",
-        "transport": "Getting around — fuel, Uber rides, parking, tolls, vehicle-related costs",
+        "subscriptions": "Monthly digital and membership services — streaming, phone contracts, gym memberships, software. Not yearly renewals",
+        "transport": "Getting around — fuel, Uber rides, parking, tolls. Not servicing, tyres, licence discs, or repairs",
         "savings": "Money put to work for the future — TFSA, retirement annuity, unit trusts, investment contributions",
         "loan_repayment": "Debt servicing — bond repayments, personal loans, vehicle finance instalments",
         # Neutral
@@ -175,16 +176,17 @@ class TransactionCategorizer:
             )
 
             categorization = response.choices[0].message.parsed
+            category = self._category_from_ai(categorization.category)
 
             logger.info(
                 "AI categorization completed: %s (confidence: %.2f)",
-                categorization.category,
+                category,
                 categorization.confidence,
                 extra={"description_preview": redact_description(description)},
             )
 
             return {
-                'category': categorization.category,
+                'category': category,
                 'confidence': categorization.confidence,
                 'method': 'ai',
                 'reasoning': categorization.reasoning
@@ -222,18 +224,19 @@ Guidelines for CREDIT transactions (money IN):
 
 Guidelines for DEBIT transactions (money OUT):
 - **transfers**: Bank-to-bank transfers, inter-account movements (look for: TRANSFER, FNB, CAPITEC, ABSA, STANDARD BANK, NEDBANK, "FROM/TO ACCOUNT", account numbers)
-- **subscriptions**: Netflix, DSTV, Spotify, Apple, Google, Microsoft, gym, phone contracts, any recurring monthly service
+- **subscriptions**: Netflix, DSTV, Spotify, Apple, Google, Microsoft, gym, phone contracts, any recurring monthly service. Yearly renewals are not subscriptions.
 - **bills**: Only fixed essential obligations — levies, rates, insurance premiums, medical aid, bank charges. Do NOT put subscriptions here.
 - **loan_repayment**: Regular fixed payments to a bank or financial institution for a bond, home loan, personal loan, or vehicle finance. Distinct from bills.
 - **groceries**: Food/drink bought for home — Woolworths, Pick n Pay, Checkers, Shoprite, butchers, delis.
-- **household_home**: Electricity, cleaning services, garden supplies, homeware and home maintenance.
+- **household_home**: Recurring home costs — electricity, cleaning services, garden supplies, homeware. Not a geyser repair, gutter cleaning, or pest control.
 - **dining_takeaways**: Restaurants, coffee shops, bars, takeaways, Uber Eats, Mr D.
 - **shopping_clothing**: Clothing, accessories, décor, online retail like Takealot or Temu.
 - **travel_accommodation**: Airbnb, hotels, flights, and accommodation or travel bookings (not daily commuting).
-- **entertainment**: Concert tickets, Webtickets, Computicket, sports events, social outings.
+- **entertainment**: Concert tickets, Webtickets, Computicket, sports events, social outings. Not gifts.
 - **health_wellness**: Physio, pharmacy (Clicks, Dis-Chem), doctor visits, recovery treatments, personal care.
-- **transport**: Fuel (Engen, Shell, BP, Sasol), Uber/Bolt rides, parking, tolls, vehicle costs.
+- **transport**: Fuel (Engen, Shell, BP, Sasol), Uber/Bolt rides, parking, tolls. Not servicing, tyres, brakes, batteries, licence discs, or repairs.
 - **savings**: Investment contributions (TFSA, RA, unit trusts). Moving money between your own accounts is transfers, NOT savings.
+- **Leave uncategorized** (empty category string): necessary costs that do not follow a monthly pattern. That includes vehicle servicing and repairs, tyres, licence disc renewal, yearly software or memberships (such as Google One), gifts and occasions, infrequent home repairs, and annual professional fees. Do not invent a monthly category for these. Never return "irregular"; that category is assigned only by the user or a rule.
 
 Provide your categorization with confidence score (0.0 to 1.0) and brief reasoning."""
 
@@ -258,6 +261,13 @@ Type: {txn_type}"""
                 prompt += f"\n- \"{ex['description']}\" (R{ex['amount']:.2f}) → {ex['category']}"
 
         return prompt
+
+    def _category_from_ai(self, category: str | None) -> str | None:
+        """Drop irregular and empty AI labels so that pot stays manually assigned."""
+        cleaned = (category or "").strip()
+        if cleaned in {"", "irregular", "uncategorized"}:
+            return None
+        return cleaned
 
     def _get_user_corrections(self, user_id: int, limit: int = 5) -> List[Dict]:
         """Get user's past manual corrections for few-shot learning"""

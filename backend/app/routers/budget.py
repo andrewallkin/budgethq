@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 BUDGET_TRANSACTION_CATEGORIES = [
     "groceries", "household_home", "dining_takeaways", "shopping_clothing",
     "travel_accommodation", "entertainment", "health_wellness", "bills",
-    "subscriptions", "transport", "savings", "loan_repayment",
+    "subscriptions", "transport", "savings", "loan_repayment", "irregular",
     "transfers", "uncategorized"
 ]
 
