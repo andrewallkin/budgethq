@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Iterable, List, Optional, Set
+from typing import Dict, Iterable, List, Optional
 
 from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
@@ -32,7 +32,10 @@ def _linked_credit_amounts_by_debit_id(links: Iterable[models.TransactionLink]) 
 
 
 def _linked_amount_by_credit_id(links: Iterable[models.TransactionLink]) -> Dict[int, float]:
-    return {link.credit_transaction_id: link.amount for link in links}
+    totals: Dict[int, float] = {}
+    for link in links:
+        totals[link.credit_transaction_id] = totals.get(link.credit_transaction_id, 0.0) + link.amount
+    return totals
 
 
 def load_user_transaction_links(db: Session, user_id: int) -> List[models.TransactionLink]:
@@ -89,7 +92,7 @@ def compute_offset_totals(
 
     reimbursements_total is all reimbursement credits regardless of link status (for footnotes).
     """
-    linked_credit_ids: Set[int] = {link.credit_transaction_id for link in links}
+    allocated_by_credit = _linked_amount_by_credit_id(links)
     linked_offset_total = sum(link.amount for link in links)
 
     unlinked_refund_total = 0.0
@@ -102,12 +105,13 @@ def compute_offset_totals(
         amount = abs(txn.amount)
         if txn.category == "reimbursements":
             reimbursements_total += amount
-        if txn.id in linked_credit_ids:
+        unallocated = amount - allocated_by_credit.get(txn.id, 0.0)
+        if unallocated <= 1e-9:
             continue
         if txn.category == "refund":
-            unlinked_refund_total += amount
+            unlinked_refund_total += unallocated
         elif txn.category == "reimbursements":
-            unlinked_reimbursement_total += amount
+            unlinked_reimbursement_total += unallocated
 
     return unlinked_refund_total, unlinked_reimbursement_total, linked_offset_total, reimbursements_total
 
@@ -129,6 +133,29 @@ def apply_linked_offsets_to_spending(
 def effective_debit_amount(debit: models.BankTransaction, links: List[models.TransactionLink]) -> float:
     linked_total = sum(link.amount for link in links)
     return max(0.0, abs(debit.amount) - linked_total)
+
+
+def resolve_link_amount(
+    credit_amount: float,
+    debit_amount: float,
+    credit_already_linked: float = 0.0,
+    debit_already_linked: float = 0.0,
+    requested: Optional[float] = None,
+) -> float:
+    """Amount to link. Defaults to whatever still fits on both sides."""
+    credit_remaining = abs(credit_amount) - credit_already_linked
+    debit_remaining = abs(debit_amount) - debit_already_linked
+    link_amount = min(credit_remaining, debit_remaining) if requested is None else abs(requested)
+    if link_amount <= 1e-9:
+        raise HTTPException(status_code=400, detail="Link amount must be greater than zero")
+    if link_amount > credit_remaining + 1e-9:
+        raise HTTPException(
+            status_code=400,
+            detail="Link amount cannot exceed the unallocated credit amount",
+        )
+    if link_amount > debit_remaining + 1e-9:
+        raise HTTPException(status_code=400, detail="Total linked amount cannot exceed the debit amount")
+    return link_amount
 
 
 def _validate_offset_credit(credit: models.BankTransaction) -> None:
@@ -172,19 +199,13 @@ def create_transaction_link(
     _validate_debit(debit)
     _validate_offset_credit(credit)
 
-    existing = (
+    existing_credit_links = (
         db.query(models.TransactionLink)
         .filter(models.TransactionLink.credit_transaction_id == credit_transaction_id)
-        .first()
+        .all()
     )
-    if existing:
-        raise HTTPException(status_code=400, detail="This credit is already linked to a debit")
-
-    link_amount = abs(amount) if amount is not None else abs(credit.amount)
-    if link_amount <= 0:
-        raise HTTPException(status_code=400, detail="Link amount must be greater than zero")
-    if link_amount > abs(credit.amount) + 1e-9:
-        raise HTTPException(status_code=400, detail="Link amount cannot exceed the credit amount")
+    if any(link.debit_transaction_id == debit_transaction_id for link in existing_credit_links):
+        raise HTTPException(status_code=400, detail="This credit is already linked to this debit")
 
     existing_debit_total = (
         db.query(models.TransactionLink)
@@ -192,9 +213,13 @@ def create_transaction_link(
         .with_entities(models.TransactionLink.amount)
         .all()
     )
-    debit_linked_total = sum(row[0] for row in existing_debit_total)
-    if debit_linked_total + link_amount > abs(debit.amount) + 1e-9:
-        raise HTTPException(status_code=400, detail="Total linked amount cannot exceed the debit amount")
+    link_amount = resolve_link_amount(
+        credit_amount=credit.amount,
+        debit_amount=debit.amount,
+        credit_already_linked=sum(link.amount for link in existing_credit_links),
+        debit_already_linked=sum(row[0] for row in existing_debit_total),
+        requested=amount,
+    )
 
     link = models.TransactionLink(
         user_id=user_id,
@@ -206,10 +231,9 @@ def create_transaction_link(
     try:
         db.commit()
     except IntegrityError:
-        # A concurrent request linked the same credit first; the unique constraint
-        # on credit_transaction_id rejects this one. Surface a 400 instead of a 500.
+        # A concurrent request linked this credit to the same debit first.
         db.rollback()
-        raise HTTPException(status_code=400, detail="This credit is already linked to a debit")
+        raise HTTPException(status_code=400, detail="This credit is already linked to this debit")
     db.refresh(link)
     return link
 

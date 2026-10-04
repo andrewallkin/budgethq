@@ -437,14 +437,20 @@ export default function BankTransactions() {
     }
 
     const refreshSelectedTransaction = async () => {
+        if (!selectedTransaction) {
+            fetchTransactions()
+            return
+        }
+
         try {
-            const params = buildParams()
-            const response = await axios.get(`/api/investec/transactions?${params.toString()}`)
-            setTransactions(response.data)
-            if (selectedTransaction) {
-                const updated = response.data.find((t) => t.id === selectedTransaction.id)
-                if (updated) setSelectedTransaction(updated)
-            }
+            const response = await axios.get(
+                `/api/investec/transactions/${selectedTransaction.id}`,
+            )
+            const updated = response.data
+            setSelectedTransaction(updated)
+            setTransactions((prev) =>
+                prev.map((txn) => (txn.id === updated.id ? updated : txn)),
+            )
         } catch (err) {
             setError(err.response?.data?.detail || 'Failed to refresh transaction')
         }

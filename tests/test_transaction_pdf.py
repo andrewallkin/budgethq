@@ -266,3 +266,41 @@ class TestComputeOffsetTotals:
         assert unlinked_reimb == 0.0
         assert linked == 2000.0
         assert reimbursements == 2000.0
+
+    def test_partial_link_leaves_remainder_as_unlinked_refund(self):
+        txns = [
+            SimpleTxn("dining_takeaways", "DEBIT", 1000.0, 1),
+            SimpleTxn("refund", "CREDIT", 400.0, 2),
+        ]
+        links = [SimpleLink(1, 2, 200.0, "dining_takeaways")]
+        unlinked_refund, unlinked_reimb, linked, reimbursements = compute_offset_totals(txns, links)
+        assert unlinked_refund == 200.0
+        assert unlinked_reimb == 0.0
+        assert linked == 200.0
+        assert reimbursements == 0.0
+
+    def test_split_refund_across_expenses_only_linked_slices_reduce_categories(self):
+        """Docs example (R800 on dinner, R400 refund with R200 linked) plus a second link.
+
+        Dinner is R2000 so category actual cannot hide behind max(0, …) if offsets are wrong.
+        """
+        txns = [
+            SimpleTxn("dining_takeaways", "DEBIT", 2000.0, 1),
+            SimpleTxn("groceries", "DEBIT", 80.0, 2),
+            SimpleTxn("refund", "CREDIT", 800.0, 3),
+            SimpleTxn("refund", "CREDIT", 400.0, 4),
+        ]
+        links = [
+            SimpleLink(1, 3, 800.0, "dining_takeaways"),
+            SimpleLink(1, 4, 200.0, "dining_takeaways"),
+            SimpleLink(2, 4, 80.0, "groceries"),
+        ]
+        spending = compute_actual_spending(txns, links)
+        assert spending["dining_takeaways"] == 1000.0
+        assert spending["groceries"] == 0.0
+
+        unlinked_refund, unlinked_reimb, linked, reimbursements = compute_offset_totals(txns, links)
+        assert unlinked_refund == 120.0
+        assert unlinked_reimb == 0.0
+        assert linked == 1080.0
+        assert reimbursements == 0.0

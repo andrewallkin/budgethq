@@ -67,9 +67,6 @@ function categoryNote(cat, showInvestecNav) {
     if (cat === 'uncategorized' && showInvestecNav) {
         return 'Uncategorized transactions sit in Analysis until a rule or manual category is set.'
     }
-    if (cat === 'irregular') {
-        return 'Only for costs you assign yourself. New transactions stay uncategorized until you recategorise them or a rule matches.'
-    }
     return null
 }
 

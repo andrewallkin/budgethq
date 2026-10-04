@@ -42,8 +42,13 @@ export default function TransactionDetailsModal({
     const isCredit = transaction.transaction_type === 'CREDIT'
     const isDebit = transaction.transaction_type === 'DEBIT'
     const confidence = transaction.ai_category_confidence
+    const openAmount =
+        transaction.effective_amount != null
+            ? Math.abs(transaction.effective_amount)
+            : Math.abs(transaction.amount)
     const canLink =
-        isDebit || (isCredit && OFFSET_CATEGORIES.includes(transaction.category) && !transaction.linked_debit)
+        (isDebit && openAmount > 0.009) ||
+        (isCredit && OFFSET_CATEGORIES.includes(transaction.category) && openAmount > 0.009)
 
     const confidenceTone =
         confidence == null
@@ -126,9 +131,15 @@ export default function TransactionDetailsModal({
                                 <BlurredValue>{formatCurrency(Math.abs(transaction.amount))}</BlurredValue>
                             </p>
                         )}
+                        {isCredit && transaction.linked_debits?.length > 0 && openAmount > 0.009 && (
+                            <p className="mt-1 text-xs text-[var(--paper-muted)]">
+                                {transaction.category === 'reimbursements' ? 'Still unlinked' : 'Unlinked refund'}
+                                : <BlurredValue>{formatCurrency(openAmount)}</BlurredValue>
+                            </p>
+                        )}
                     </div>
 
-                    {(transaction.linked_credits?.length > 0 || transaction.linked_debit) && (
+                    {(transaction.linked_credits?.length > 0 || transaction.linked_debits?.length > 0) && (
                         <div>
                             <h3 className={`${paperEyebrow} mb-2`}>Linked transactions</h3>
                             {linkError && (
@@ -161,23 +172,24 @@ export default function TransactionDetailsModal({
                                         </button>
                                     </div>
                                 ))}
-                                {transaction.linked_debit && (
-                                    <div className="flex items-center justify-between gap-3 rounded-md border border-[var(--paper-line)] px-3 py-2.5">
+                                {transaction.linked_debits?.map((link) => (
+                                    <div
+                                        key={link.link_id}
+                                        className="flex items-center justify-between gap-3 rounded-md border border-[var(--paper-line)] px-3 py-2.5"
+                                    >
                                         <div className="min-w-0">
                                             <p className="truncate text-sm text-[var(--paper-ink)]">
-                                                {transaction.linked_debit.description}
+                                                {link.description}
                                             </p>
                                             <p className="text-xs text-[var(--paper-muted)]">
                                                 Linked expense:{' '}
-                                                <BlurredValue>
-                                                    {formatCurrency(transaction.linked_debit.link_amount)}
-                                                </BlurredValue>
+                                                <BlurredValue>{formatCurrency(link.link_amount)}</BlurredValue>
                                             </p>
                                         </div>
                                         <button
                                             type="button"
-                                            onClick={() => handleUnlink(transaction.linked_debit.link_id)}
-                                            disabled={unlinkingId === transaction.linked_debit.link_id}
+                                            onClick={() => handleUnlink(link.link_id)}
+                                            disabled={unlinkingId === link.link_id}
                                             className="inline-flex min-h-[40px] min-w-[40px] cursor-pointer items-center justify-center rounded-md text-[var(--paper-muted)] transition-colors hover:bg-[var(--paper-canvas)] hover:text-[var(--paper-brick)] disabled:opacity-50"
                                             title="Remove link"
                                             aria-label="Remove link"
@@ -185,7 +197,7 @@ export default function TransactionDetailsModal({
                                             <Unlink className="h-4 w-4" aria-hidden="true" />
                                         </button>
                                     </div>
-                                )}
+                                ))}
                             </div>
                         </div>
                     )}
