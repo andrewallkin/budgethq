@@ -135,6 +135,12 @@ export default function TransactionLinkPicker({ isOpen, onClose, sourceTransacti
                         const linkable = Math.min(openAmount(sourceTransaction), openAmount(txn))
                         const creditTxn = txn.transaction_type === 'CREDIT' ? txn : sourceTransaction
                         const staysUnlinked = openAmount(creditTxn) - linkable
+                        const postedCandidate = Math.abs(Number(txn.amount) || 0)
+                        const postedCredit = Math.abs(Number(creditTxn.amount) || 0)
+                        const showLinkCaption =
+                            postedCandidate - linkable > 0.009 ||
+                            postedCredit - linkable > 0.009 ||
+                            staysUnlinked > 0.009
                         return (
                             <button
                                 key={txn.id}
@@ -158,13 +164,20 @@ export default function TransactionLinkPicker({ isOpen, onClose, sourceTransacti
                                                 ? ` · ${CATEGORY_LABELS[txn.category] || txn.category}`
                                                 : ''}
                                         </p>
-                                        {staysUnlinked > 0.009 && (
+                                        {showLinkCaption && (
                                             <p className="mt-1 text-xs text-[var(--paper-muted)]">
                                                 Links{' '}
                                                 <BlurredValue>{formatCurrency(linkable)}</BlurredValue>
-                                                .{' '}
-                                                <BlurredValue>{formatCurrency(staysUnlinked)}</BlurredValue>
-                                                {' '}stays unlinked.
+                                                .
+                                                {staysUnlinked > 0.009 && (
+                                                    <>
+                                                        {' '}
+                                                        <BlurredValue>
+                                                            {formatCurrency(staysUnlinked)}
+                                                        </BlurredValue>
+                                                        {' '}stays unlinked.
+                                                    </>
+                                                )}
                                             </p>
                                         )}
                                     </div>
