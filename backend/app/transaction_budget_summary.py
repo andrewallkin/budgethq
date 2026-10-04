@@ -27,6 +27,7 @@ COMPARISON_CATEGORIES = [
     "transport",
     "savings",
     "loan_repayment",
+    "irregular",
     "uncategorized",
 ]
 

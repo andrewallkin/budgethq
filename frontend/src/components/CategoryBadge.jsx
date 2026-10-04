@@ -21,6 +21,7 @@ const CATEGORY_COLORS = {
     transport: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300',
     savings: 'bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300',
     loan_repayment: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300',
+    irregular: 'whitespace-nowrap bg-rose-100 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300',
     // Neutral
     transfers: 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400',
     uncategorized: 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'

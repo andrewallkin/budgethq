@@ -19,7 +19,7 @@ VALID_TRANSACTION_CATEGORIES = [
     "salary", "side_income", "investment_income", "reimbursements", "other_income",
     "groceries", "household_home", "dining_takeaways", "shopping_clothing",
     "travel_accommodation", "entertainment", "health_wellness", "bills",
-    "subscriptions", "transport", "savings", "loan_repayment", "refund", "transfers",
+    "subscriptions", "transport", "savings", "loan_repayment", "irregular", "refund", "transfers",
 ]
 
 _VALID_TRANSACTION_CATEGORIES_SET = set(VALID_TRANSACTION_CATEGORIES)
@@ -50,6 +50,7 @@ CATEGORY_LABELS = {
     "transport": "Transport",
     "savings": "Savings",
     "loan_repayment": "Loan Repayment",
+    "irregular": "Irregular",
     "transfers": "Transfers",
     "uncategorized": "Uncategorized",
 }

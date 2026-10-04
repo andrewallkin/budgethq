@@ -133,12 +133,12 @@ class TransactionLinksResponse(BaseModel):
 
 
 class TransactionUpdate(BaseModel):
-    category: Optional[str] = Field(None, description="One of: salary, side_income, investment_income, reimbursements, other_income, groceries, household_home, dining_takeaways, shopping_clothing, travel_accommodation, entertainment, health_wellness, bills, subscriptions, transport, savings, loan_repayment, refund, transfers, or empty string for uncategorized")
+    category: Optional[str] = Field(None, description="One of: salary, side_income, investment_income, reimbursements, other_income, groceries, household_home, dining_takeaways, shopping_clothing, travel_accommodation, entertainment, health_wellness, bills, subscriptions, transport, savings, loan_repayment, irregular, refund, transfers, or empty string for uncategorized")
 
 
 class CategorizationRuleCreate(BaseModel):
     pattern: str
-    category: str = Field(..., description="One of: salary, side_income, investment_income, reimbursements, other_income, groceries, household_home, dining_takeaways, shopping_clothing, travel_accommodation, entertainment, health_wellness, bills, subscriptions, transport, savings, loan_repayment, refund, transfers")
+    category: str = Field(..., description="One of: salary, side_income, investment_income, reimbursements, other_income, groceries, household_home, dining_takeaways, shopping_clothing, travel_accommodation, entertainment, health_wellness, bills, subscriptions, transport, savings, loan_repayment, irregular, refund, transfers")
     priority: int = Field(default=10, ge=0, le=100)
 
 

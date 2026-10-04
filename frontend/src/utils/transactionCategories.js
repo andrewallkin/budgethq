@@ -21,6 +21,7 @@ export const EXPENSE_CATEGORIES = [
     'transport',
     'savings',
     'loan_repayment',
+    'irregular',
 ]
 export const CATEGORIES = [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES, ...NEUTRAL_CATEGORIES]
 
@@ -47,6 +48,7 @@ export const CATEGORY_LABELS = {
     transport: 'Transport',
     savings: 'Savings',
     loan_repayment: 'Loan Repayment',
+    irregular: 'Irregular',
     transfers: 'Transfers',
     uncategorized: 'Uncategorized'
 }
@@ -65,6 +67,7 @@ export const CATEGORY_COLORS = {
     transport: '#a855f7',
     savings: '#14b8a6',
     loan_repayment: '#ef4444',
+    irregular: '#9f1239',
     refund: '#06b6d4',
     reimbursements: '#0891b2',
     transfers: '#6b7280',
@@ -80,17 +83,18 @@ export const CATEGORY_DESCRIPTIONS = {
     reimbursements: 'Travel per diems, expense claims, friends paying you back for costs you fronted',
     other_income: 'Gifts received, bonuses, miscellaneous windfall credits',
     groceries: 'Food and drink purchased for home — supermarkets, butchers, delis, and fresh produce stores',
-    household_home: 'Recurring home costs and once-off home spend — electricity, cleaning services, garden supplies, and homeware',
+    household_home: 'Recurring home costs — electricity, cleaning services, garden supplies, and homeware. Infrequent repairs belong in Irregular',
     dining_takeaways: 'Any food or drink consumed out of home — restaurants, coffee shops, takeaways, Uber Eats, and bar tabs',
     shopping_clothing: 'Retail purchases for personal use — clothing, accessories, homeware décor, and online shopping (Takealot, Temu)',
     travel_accommodation: 'Trip-related costs — Airbnb, hotels, and any accommodation or travel bookings outside daily commuting',
-    entertainment: 'Events, activities, and leisure spend — concert tickets, Webtickets, sports events, and social outings',
+    entertainment: 'Events and leisure for yourself — concert tickets, Webtickets, sports events, and social outings. Gifts belong in Irregular',
     health_wellness: 'Physical health and body maintenance — physio, pharmacy, doctor visits, recovery treatments, and personal care products',
     bills: 'Fixed essential obligations — levies, rates, insurance premiums, medical aid, and bank charges',
-    subscriptions: 'Recurring digital and membership services — streaming, phone contracts, gym memberships, and software',
-    transport: 'Getting around — fuel, Uber rides, parking, tolls, and vehicle-related costs',
+    subscriptions: 'Monthly digital and membership services — streaming, phone contracts, gym memberships, and software. Yearly renewals belong in Irregular',
+    transport: 'Getting around — fuel, Uber rides, parking, and tolls. Servicing, tyres, licence discs, and repairs belong in Irregular',
     savings: 'Money put to work for the future — TFSA, retirement annuity, unit trusts, and investment contributions',
     loan_repayment: 'Debt servicing — bond repayments, personal loans, and vehicle finance instalments',
+    irregular: 'Necessary costs that do not follow a monthly pattern — vehicle maintenance and repairs, yearly renewals, gifts, and other infrequent essentials. Assign this yourself; new transactions stay uncategorized until you do',
     transfers: 'Money movements between your own accounts',
     uncategorized: 'Not yet categorized'
 }
@@ -115,6 +119,7 @@ export const CATEGORY_EXAMPLES = {
     transport: 'Engen, Shell, Uber, Bolt, tolls',
     savings: 'TFSA, RA, unit trusts',
     loan_repayment: 'Home loan, vehicle finance',
+    irregular: 'Car service, tyres, licence disc, yearly Google One, birthdays',
     transfers: 'FNB, Capitec, inter-account',
     uncategorized: '—'
 }
