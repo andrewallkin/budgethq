@@ -271,6 +271,10 @@ export function SygniaHistoryProvider({ accountId, refreshKey, children }) {
         }
     }
 
+    const portfolioValueByMonth = new Map(
+        chartData.map((point) => [point.date?.slice(0, 7), point.portfolio_value ?? null]),
+    )
+
     const monthlyMap = {}
     valueSnapshots.forEach((snap) => {
         const monthKey = snap.date?.slice(0, 7)
@@ -283,7 +287,6 @@ export function SygniaHistoryProvider({ accountId, refreshKey, children }) {
                 contribution_total: 0,
             }
         }
-        monthlyMap[monthKey].portfolio_value = snap.portfolio_value || 0
     })
     contributions.forEach((c) => {
         const monthKey = c.date?.slice(0, 7)
@@ -297,6 +300,11 @@ export function SygniaHistoryProvider({ accountId, refreshKey, children }) {
             }
         }
         monthlyMap[monthKey].contribution_total += c.amount || 0
+    })
+    Object.values(monthlyMap).forEach((row) => {
+        if (portfolioValueByMonth.has(row.monthKey)) {
+            row.portfolio_value = portfolioValueByMonth.get(row.monthKey)
+        }
     })
     const monthlyRows = Object.values(monthlyMap)
         .sort((a, b) => a.monthKey.localeCompare(b.monthKey))

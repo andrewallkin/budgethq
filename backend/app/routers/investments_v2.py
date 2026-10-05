@@ -328,11 +328,47 @@ def _month_key(d: date) -> tuple[int, int]:
     return (d.year, d.month)
 
 
+def _select_month_snapshot(
+    rows: list[models.SygniaValueHistory],
+    *,
+    today: date,
+    as_of_date: date | None,
+) -> models.SygniaValueHistory | None:
+    """Portfolio value shown for one month.
+
+    The current month follows the daily scrape (account as-of date) so it matches
+    the portfolio card. A manual entry is stored on the last calendar day, which
+    is still in the future for most of the month and must not hide that scrape.
+    Closed months keep the latest snapshot on or before today.
+    """
+    if not rows:
+        return None
+
+    month = _month_key(rows[0].record_date)
+    if (
+        as_of_date is not None
+        and _month_key(as_of_date) == month == _month_key(today)
+    ):
+        synced = next((row for row in rows if row.record_date == as_of_date), None)
+        if synced is not None:
+            return synced
+
+    eligible = [row for row in rows if row.record_date <= today]
+    pool = eligible or rows
+    return max(pool, key=lambda row: row.record_date)
+
+
 def _build_monthly_chart_data(
     snapshot_rows: list[models.SygniaValueHistory],
     contribution_rows: list[models.SygniaContribution],
+    *,
+    today: date | None = None,
+    as_of_date: date | None = None,
 ) -> list[dict]:
     """Build month-to-month chart points (date = 1st of month)."""
+    if today is None:
+        today = get_sast_now().date()
+
     months: set[tuple[int, int]] = set()
     for row in snapshot_rows:
         months.add(_month_key(row.record_date))
@@ -342,12 +378,9 @@ def _build_monthly_chart_data(
     if not months:
         return []
 
-    snapshots_by_month: dict[tuple[int, int], models.SygniaValueHistory] = {}
+    snapshots_by_month: dict[tuple[int, int], list[models.SygniaValueHistory]] = {}
     for row in snapshot_rows:
-        key = _month_key(row.record_date)
-        existing = snapshots_by_month.get(key)
-        if existing is None or row.record_date > existing.record_date:
-            snapshots_by_month[key] = row
+        snapshots_by_month.setdefault(_month_key(row.record_date), []).append(row)
 
     contributions_sorted = sorted(contribution_rows, key=lambda r: r.contribution_date)
     cumulative = 0.0
@@ -363,7 +396,11 @@ def _build_monthly_chart_data(
             cumulative += contributions_sorted[contrib_idx].amount or 0
             contrib_idx += 1
 
-        snapshot = snapshots_by_month.get((year, month))
+        snapshot = _select_month_snapshot(
+            snapshots_by_month.get((year, month), []),
+            today=today,
+            as_of_date=as_of_date,
+        )
         portfolio_value = round(snapshot.portfolio_value or 0, 2) if snapshot else None
         chart_data.append(
             {
@@ -421,7 +458,11 @@ def _build_history_payload(
         for r in contribution_rows
     ]
 
-    chart_data = _build_monthly_chart_data(snapshot_rows, contribution_rows)
+    chart_data = _build_monthly_chart_data(
+        snapshot_rows,
+        contribution_rows,
+        as_of_date=account.as_of_date,
+    )
 
     fy_start_year = get_sa_financial_year_start()
     fy_start_date = date(fy_start_year, 3, 1)
