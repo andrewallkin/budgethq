@@ -1,26 +1,32 @@
 services:
   backend:
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
+    image: andrewallkin/budgethq:${DOCKER_IMAGE_BACKEND:-backend-main-latest}
+    env_file:
+      - .env
     ports:
-      - "${BACKEND_PORT:-8000}:8000"
+      - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
     volumes:
       - ./data:/app/data
     depends_on: []
-    env_file:
-      - .env
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=5)"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - default
+      - postgres-net
     restart: always
-    networks: [default, postgres-net]
 
   frontend:
-    build: ./frontend
+    image: andrewallkin/budgethq:${DOCKER_IMAGE_FRONTEND:-frontend-main-latest}
     ports:
-      - "${FRONTEND_PORT:-3000}:80"
+      - "127.0.0.1:${FRONTEND_PORT:-3000}:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     restart: always
-    networks: [default]
 
 networks:
   default:

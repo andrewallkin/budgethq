@@ -1,4 +1,4 @@
-import { getAccountKind } from './accountLocalMeta'
+import { getAccountKind } from './accountLocalMeta.js'
 
 const toAmount = (value) => {
     const n = Number(value)

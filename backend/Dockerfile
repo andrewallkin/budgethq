@@ -1,16 +1,19 @@
 FROM python:3.11-slim
 
-# Install uv
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
+
+RUN pip install --no-cache-dir uv
 
 # Copy dependency files from root
 COPY pyproject.toml uv.lock ./
 
-# Export dependencies to requirements.txt and install them
-RUN uv export --extra backend --no-dev --frozen > requirements.txt && \
-    uv pip install --system -r requirements.txt
+# Sync backend dependencies into /app/.venv
+RUN uv sync --frozen --no-dev --extra backend
+
+ENV PATH="/app/.venv/bin:$PATH"
 
 # Copy application code from backend directory
 COPY backend/app ./app
@@ -24,8 +27,10 @@ RUN playwright install --with-deps chromium
 # Copy Alembic migration files from backend directory
 COPY backend/alembic.ini .
 COPY backend/alembic ./alembic
-COPY backend/run_migrations.sh .
-RUN chmod +x run_migrations.sh
+
+# Migration script run by the control panel: bash /app/run_migrations.sh
+COPY backend/run_migrations.sh /app/run_migrations.sh
+RUN chmod +x /app/run_migrations.sh
 
 # Expose port
 EXPOSE 8000
