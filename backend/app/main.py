@@ -91,6 +91,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.get("/api/health")
+async def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
 # Register all routers
 app.include_router(auth_router, prefix="/api")
 app.include_router(budget_router, prefix="/api")

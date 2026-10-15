@@ -3,13 +3,12 @@ FROM node:18-alpine AS deps
 
 WORKDIR /app
 
-COPY package.json package-lock.json* ./
-RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
+COPY package.json package-lock.json ./
+RUN npm ci
 
 # Build stage
 FROM deps AS build
 
-# Respect frontend/.dockerignore so host node_modules does not overwrite the install above.
 COPY . .
 RUN npm run build
 

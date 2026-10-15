@@ -10,11 +10,15 @@ __pycache__
 dist
 build
 .pytest_cache
+.ruff_cache
 .coverage
 htmlcov
 .venv
 venv
 env
+
+# Tests (not needed in container)
+tests
 
 # IDE
 .vscode
