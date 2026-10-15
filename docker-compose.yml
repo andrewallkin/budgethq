@@ -1,6 +1,6 @@
 services:
   backend:
-    image: andrewallkin/budgethq:${DOCKER_IMAGE_BACKEND}
+    image: andrewallkin/budgethq:${DOCKER_IMAGE_BACKEND:-backend-main-latest}
     env_file:
       - .env
     ports:
@@ -20,7 +20,7 @@ services:
     restart: always
 
   frontend:
-    image: andrewallkin/budgethq:${DOCKER_IMAGE_FRONTEND}
+    image: andrewallkin/budgethq:${DOCKER_IMAGE_FRONTEND:-frontend-main-latest}
     ports:
       - "127.0.0.1:${FRONTEND_PORT:-3000}:80"
     depends_on:
