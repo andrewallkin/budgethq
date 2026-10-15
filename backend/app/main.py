@@ -1,5 +1,6 @@
+import asyncio
 import logging
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from fastapi import FastAPI, Request
 from fastapi.exceptions import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -49,11 +50,15 @@ async def lifespan(app: FastAPI):
     database.check_postgres_connection()
     # Startup: Start the price sync scheduler
     start_scheduler()
-    # Run initial sync on startup
-    await sync_all_prices()
+    # Run initial sync in the background so /api/health answers immediately;
+    # slow Google API calls must not gate startup or the panel's health poll.
+    initial_sync = asyncio.create_task(sync_all_prices())
     yield
     # Shutdown: Stop the scheduler
     stop_scheduler()
+    initial_sync.cancel()
+    with suppress(asyncio.CancelledError, Exception):
+        await initial_sync
 
 
 app = FastAPI(lifespan=lifespan)
