@@ -7,7 +7,36 @@ on:
   workflow_dispatch:
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.11"
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --frozen --extra backend --extra dev
+
+      - name: Run pytest
+        env:
+          POSTGRES_DB: budget_db
+          POSTGRES_USER: budget_user
+          POSTGRES_PASSWORD: budget_user
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: "5432"
+          RESTRICT_AUTHORIZED_USERS: "true"
+          AUTHORIZED_USERS: test@example.com
+          ENCRYPTION_KEY: test-encryption-key-not-real
+        run: uv run pytest
+
   build:
+    needs: test
     runs-on: ubuntu-latest
 
     steps:
