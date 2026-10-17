@@ -9,6 +9,7 @@ import requests
 from typing import List, Dict, Optional
 from datetime import datetime, timedelta
 import logging
+import time
 
 from .logging_utils import redact_account
 
@@ -109,7 +110,30 @@ class InvestecService:
         }
 
         try:
-            response = requests.request(method, url, headers=headers, timeout=30, **kwargs)
+            # Retry transient network/timeout failures with exponential backoff
+            # (the Investec API intermittently stalls or drops connections)
+            max_attempts = 3
+            for attempt in range(max_attempts):
+                try:
+                    response = requests.request(method, url, headers=headers, timeout=60, **kwargs)
+                    break
+                except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+                    if attempt < max_attempts - 1:
+                        backoff = 2 ** attempt
+                        logger.warning(
+                            "Investec API request failed (attempt %d/%d): %s %s: %s: %s, retrying in %ds",
+                            attempt + 1,
+                            max_attempts,
+                            method,
+                            endpoint,
+                            type(e).__name__,
+                            e,
+                            backoff,
+                        )
+                        time.sleep(backoff)
+                    else:
+                        raise
+
             response.raise_for_status()
             return response.json()
 
