@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from . import models
 from .logging_utils import redact_description
 from .transaction_categories import is_valid_category
+from .transaction_categories import CATEGORY_DESCRIPTIONS
 import re
 import logging
 

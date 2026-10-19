@@ -7,15 +7,9 @@ from .. import models, database, auth
 from datetime import date
 from ..budget_period import get_period_dates_for_end_month, get_current_period
 from ..payslip_budget import monthly_budget_income_for_user
+from ..transaction_categories import BUDGET_TRANSACTION_CATEGORIES
 
 logger = logging.getLogger(__name__)
-
-BUDGET_TRANSACTION_CATEGORIES = [
-    "groceries", "household_home", "dining_takeaways", "shopping_clothing",
-    "travel_accommodation", "entertainment", "health_wellness", "bills",
-    "subscriptions", "transport", "savings", "loan_repayment", "irregular",
-    "transfers", "uncategorized"
-]
 
 # Pydantic Models for Budget
 class CategoryBase(BaseModel):
