@@ -23,6 +23,7 @@ from ..investec_sync import _sync_user_accounts, _sync_account_transactions
 from ..logging_utils import redact_description
 from ..transaction_budget_summary import build_budget_comparison
 from ..transaction_categories import VALID_TRANSACTION_CATEGORIES, is_valid_category
+from ..rule_matching import get_matching_rule, matches_rule_pattern, rule_applies_to_type
 from ..transaction_links import (
     create_transaction_link,
     delete_transaction_link,
@@ -1160,31 +1161,6 @@ async def delete_rule(
     return None
 
 
-def _matches_rule_pattern(description: str, pattern: str) -> bool:
-    """Check if description matches rule pattern (regex or substring)."""
-    import re
-    try:
-        return bool(re.search(pattern, description, re.IGNORECASE))
-    except re.error:
-        # Fallback to simple substring match if not valid regex
-        return pattern.lower() in description.lower()
-
-
-def _get_matching_rule(description: str, rules: list) -> Optional[tuple]:
-    """
-    Return (rule, proposed_category) for the first matching rule, or None.
-    Rules should be sorted by priority desc. Rules whose stored category is no
-    longer a valid slug (e.g. left over from an old taxonomy) are skipped so they
-    can't propagate dead categories onto transactions.
-    """
-    for rule in rules:
-        if not is_valid_category(rule.category):
-            continue
-        if _matches_rule_pattern(description, rule.pattern):
-            return (rule, rule.category)
-    return None
-
-
 @router.get("/rules/apply-to-existing/preview")
 async def preview_apply_rules_to_all(
     current_user: models.User = Depends(auth.get_current_user),
@@ -1201,6 +1177,7 @@ async def preview_apply_rules_to_all(
         models.CategorizationRule.user_id == current_user.id,
         models.CategorizationRule.is_active == True
     ).order_by(models.CategorizationRule.priority.desc()).all()
+    valid_rules = [rule for rule in rules if is_valid_category(rule.category)]
 
     # Uncategorized: only non-user-corrected (we won't overwrite explicit "leave uncategorized")
     uncategorized_txns = db.query(models.BankTransaction).filter(
@@ -1217,15 +1194,15 @@ async def preview_apply_rules_to_all(
 
     uncategorized_count = 0
     for txn in uncategorized_txns:
-        if _get_matching_rule(txn.description, rules):
+        if get_matching_rule(txn.description, txn.transaction_type, valid_rules):
             uncategorized_count += 1
 
     conflicts: List[ConflictPreviewItem] = []
     for txn in categorized_txns:
-        match = _get_matching_rule(txn.description, rules)
-        if not match:
+        rule = get_matching_rule(txn.description, txn.transaction_type, valid_rules)
+        if not rule:
             continue
-        rule, proposed_category = match
+        proposed_category = rule.category
         if txn.category != proposed_category:
             conflicts.append(ConflictPreviewItem(
                 id=txn.id,
@@ -1270,7 +1247,9 @@ async def apply_single_rule_to_existing_transactions(
     categorized_count = 0
     if is_valid_category(rule.category):
         for txn in transactions:
-            if _matches_rule_pattern(txn.description, rule.pattern):
+            if not rule_applies_to_type(rule, txn.transaction_type):
+                continue
+            if matches_rule_pattern(txn.description, rule.pattern):
                 txn.category = rule.category
                 txn.ai_category_confidence = 1.0
                 rule.usage_count += 1
@@ -1304,6 +1283,7 @@ async def apply_rules_to_existing_transactions(
         models.CategorizationRule.user_id == current_user.id,
         models.CategorizationRule.is_active == True
     ).order_by(models.CategorizationRule.priority.desc()).all()
+    valid_rules = [rule for rule in rules if is_valid_category(rule.category)]
 
     # 1. Apply to uncategorized transactions
     uncategorized_txns = db.query(models.BankTransaction).filter(
@@ -1314,15 +1294,12 @@ async def apply_rules_to_existing_transactions(
 
     categorized_count = 0
     for txn in uncategorized_txns:
-        for rule in rules:
-            if not is_valid_category(rule.category):
-                continue
-            if _matches_rule_pattern(txn.description, rule.pattern):
-                txn.category = rule.category
-                txn.ai_category_confidence = 1.0
-                rule.usage_count += 1
-                categorized_count += 1
-                break
+        rule = get_matching_rule(txn.description, txn.transaction_type, valid_rules)
+        if rule is not None:
+            txn.category = rule.category
+            txn.ai_category_confidence = 1.0
+            rule.usage_count += 1
+            categorized_count += 1
 
     # 2. Apply accepted conflict resolutions (include user_corrected - user explicitly accepted)
     conflicts_resolved = 0
@@ -1334,10 +1311,9 @@ async def apply_rules_to_existing_transactions(
         ).all()
 
         for txn in conflict_txns:
-            match = _get_matching_rule(txn.description, rules)
-            if match:
-                rule, proposed_category = match
-                txn.category = proposed_category
+            rule = get_matching_rule(txn.description, txn.transaction_type, valid_rules)
+            if rule:
+                txn.category = rule.category
                 txn.ai_category_confidence = 1.0
                 rule.usage_count += 1
                 conflicts_resolved += 1
