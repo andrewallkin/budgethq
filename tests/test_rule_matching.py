@@ -37,7 +37,9 @@ def test_null_type_matches_any():
 
 
 def test_invalid_regex_falls_back_to_substring():
-    assert rule_matching.matches_rule_pattern("Woolworths", "Woolworths(")
+    # "Woolworths(" is an invalid regex; the fallback must substring-match it
+    # when the description actually contains that text (case-insensitively).
+    assert rule_matching.matches_rule_pattern("WOOLWORTHS( SPORT", "Woolworths(")
 
 
 def test_priority_order_first_match_wins():

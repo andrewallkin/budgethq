@@ -21,8 +21,9 @@ class _Txn:
         self.hidden = hidden
 
 
-def _credit(amount=492.90, category="reimbursements", description="Discovery Health Payment"):
-    return _Txn(9, description, amount, txn_type="CREDIT", category=category)
+def _credit(amount=492.90, category="reimbursements", description="Discovery Health Payment",
+            txn_date=datetime(2026, 10, 16)):
+    return _Txn(9, description, amount, txn_type="CREDIT", category=category, txn_date=txn_date)
 
 
 def _link(debit_transaction_id, credit_transaction_id, amount):
