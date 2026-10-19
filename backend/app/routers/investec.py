@@ -143,10 +143,22 @@ class TransactionUpdate(BaseModel):
     hidden: Optional[bool] = Field(None, description="Set true to hide this transaction from budgets and listings, false to unhide. Omitted leaves the flag untouched.")
 
 
+RULE_TRANSACTION_TYPES = ("CREDIT", "DEBIT")
+
+
+def _validate_rule_transaction_type(value: Optional[str]) -> None:
+    if value is not None and value not in RULE_TRANSACTION_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid transaction_type. Must be one of: CREDIT, DEBIT (or null for any type)"
+        )
+
+
 class CategorizationRuleCreate(BaseModel):
     pattern: str
     category: str = Field(..., description="One of: salary, side_income, investment_income, reimbursements, other_income, groceries, household_home, dining_takeaways, shopping_clothing, travel_accommodation, entertainment, health_wellness, bills, subscriptions, transport, savings, loan_repayment, irregular, refund, transfers")
     priority: int = Field(default=10, ge=0, le=100)
+    transaction_type: Optional[str] = Field(None, description='None = any type, or "CREDIT" / "DEBIT"')
 
 
 class CategorizationRuleUpdate(BaseModel):
@@ -154,6 +166,7 @@ class CategorizationRuleUpdate(BaseModel):
     category: Optional[str] = None
     priority: Optional[int] = Field(None, ge=0, le=100)
     is_active: Optional[bool] = None
+    transaction_type: Optional[str] = Field(None, description='None = any type, or "CREDIT" / "DEBIT". Explicit null clears the rule type; omitting the field leaves it untouched.')
 
 
 class CategorizationRuleResponse(BaseModel):
@@ -164,6 +177,7 @@ class CategorizationRuleResponse(BaseModel):
     is_active: bool
     usage_count: int
     created_from_correction: bool
+    transaction_type: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -1104,12 +1118,14 @@ async def create_rule(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid category. Must be one of: {', '.join(valid_categories)}"
         )
+    _validate_rule_transaction_type(rule.transaction_type)
 
     new_rule = models.CategorizationRule(
         user_id=current_user.id,
         pattern=rule.pattern,
         category=rule.category,
-        priority=rule.priority
+        priority=rule.priority,
+        transaction_type=rule.transaction_type
     )
 
     db.add(new_rule)
@@ -1143,6 +1159,9 @@ async def update_rule(
         rule.priority = update.priority
     if update.is_active is not None:
         rule.is_active = update.is_active
+    if "transaction_type" in update.model_fields_set:
+        _validate_rule_transaction_type(update.transaction_type)
+        rule.transaction_type = update.transaction_type
 
     db.commit()
     db.refresh(rule)

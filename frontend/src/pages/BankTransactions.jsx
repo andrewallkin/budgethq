@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import axios from 'axios'
-import { Search, ChevronDown, ChevronLeft, ChevronRight, AlertTriangle, RefreshCw, Sparkles, Download, Link2, SlidersHorizontal, Wallet } from 'lucide-react'
+import { Search, ChevronDown, ChevronLeft, ChevronRight, AlertTriangle, RefreshCw, Sparkles, Download, Link2, SlidersHorizontal, Wallet, Eye } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { formatCurrency, formatDateSafe } from '../utils/numberFormatting'
 import BlurredValue from '../components/BlurredValue'
@@ -351,6 +351,7 @@ export default function BankTransactions() {
     const [showDetailsModal, setShowDetailsModal] = useState(false)
     const [selectedTransaction, setSelectedTransaction] = useState(null)
     const [showExportModal, setShowExportModal] = useState(false)
+    const [showHidden, setShowHidden] = useState(false)
 
     const [filters, setFilters] = useState({
         from_date: '',
@@ -407,6 +408,7 @@ export default function BankTransactions() {
         if (merged.search) params.append('search', merged.search)
         if (merged.category) params.append('category', merged.category)
         params.append('limit', merged.limit)
+        params.append('include_hidden', (merged.include_hidden ?? showHidden) ? 'true' : 'false')
         return params
     }
 
@@ -463,6 +465,13 @@ export default function BankTransactions() {
 
     const handleLoadMore = () => {
         fetchTransactions(true)
+    }
+
+    const handleToggleShowHidden = () => {
+        const next = !showHidden
+        setShowHidden(next)
+        setLoading(true)
+        fetchTransactions(false, { include_hidden: next })
     }
 
     const handleCategoryChange = async (transactionId, newCategory) => {
@@ -536,6 +545,18 @@ export default function BankTransactions() {
             setError(err.response?.data?.detail || 'Failed to delete transaction')
         } finally {
             setDeletingId(null)
+        }
+    }
+
+    const handleUnhideTransaction = async (transactionId) => {
+        setError('')
+
+        try {
+            await axios.patch(`/api/investec/transactions/${transactionId}`, { hidden: false })
+            await fetchTransactions()
+        } catch (err) {
+            setError(err.response?.data?.detail || 'Failed to unhide transaction')
+            fetchTransactions()
         }
     }
 
@@ -670,21 +691,32 @@ export default function BankTransactions() {
                         onChange={handleAccountChange}
                     />
 
-                    <button
-                        type="button"
-                        onClick={openFilterDialog}
-                        className={`${paperBtnGhost} ${extraFilterCount > 0 ? 'border-[var(--paper-ink)]' : ''}`}
-                        aria-haspopup="dialog"
-                        aria-expanded={showFilterDialog}
-                    >
-                        <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
-                        Filters
-                        {extraFilterCount > 0 ? (
-                            <span className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-[var(--paper-ink)] px-1.5 text-[11px] font-medium text-[var(--paper-card)]">
-                                {extraFilterCount}
-                            </span>
-                        ) : null}
-                    </button>
+                    <div className="flex items-end gap-2">
+                        <button
+                            type="button"
+                            onClick={handleToggleShowHidden}
+                            aria-pressed={showHidden}
+                            className={showHidden ? paperBtnPrimary : paperBtnGhost}
+                        >
+                            <Eye className="h-4 w-4" aria-hidden="true" />
+                            Show hidden
+                        </button>
+                        <button
+                            type="button"
+                            onClick={openFilterDialog}
+                            className={`${paperBtnGhost} ${extraFilterCount > 0 ? 'border-[var(--paper-ink)]' : ''}`}
+                            aria-haspopup="dialog"
+                            aria-expanded={showFilterDialog}
+                        >
+                            <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
+                            Filters
+                            {extraFilterCount > 0 ? (
+                                <span className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-[var(--paper-ink)] px-1.5 text-[11px] font-medium text-[var(--paper-card)]">
+                                    {extraFilterCount}
+                                </span>
+                            ) : null}
+                        </button>
+                    </div>
                 </div>
             </PaperCard>
 
@@ -889,6 +921,17 @@ export default function BankTransactions() {
                                                                 >
                                                                     <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
                                                                     {categorizingId === txn.id ? 'Working…' : 'AI'}
+                                                                </button>
+                                                            )}
+                                                            {txn.hidden && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleUnhideTransaction(txn.id)}
+                                                                    className="inline-flex min-h-8 cursor-pointer items-center gap-1 rounded-md px-2 text-xs text-[var(--paper-muted)] transition-colors hover:bg-[var(--paper-canvas)] hover:text-[var(--paper-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--paper-accent)]/20"
+                                                                    aria-label={`Unhide ${txn.description}`}
+                                                                >
+                                                                    <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+                                                                    Unhide
                                                                 </button>
                                                             )}
                                                         </div>

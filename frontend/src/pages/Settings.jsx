@@ -1221,7 +1221,7 @@ export default function Settings() {
                                 />
                             ) : (
                                 <ConnectionStatusPanel
-                                    title="No investment API key"
+                                    title="No full-access API key"
                                     detail="Generate a key to let Grok or other tools call the external investments, budget, and transactions API."
                                     actions={
                                         <button
