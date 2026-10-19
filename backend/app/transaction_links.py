@@ -204,8 +204,15 @@ def create_transaction_link(
         .filter(models.TransactionLink.credit_transaction_id == credit_transaction_id)
         .all()
     )
-    if any(link.debit_transaction_id == debit_transaction_id for link in existing_credit_links):
-        raise HTTPException(status_code=400, detail="This credit is already linked to this debit")
+    existing = next(
+        (link for link in existing_credit_links if link.debit_transaction_id == debit_transaction_id),
+        None,
+    )
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail={"detail": "This credit is already linked to this debit", "existing_link_id": existing.id},
+        )
 
     existing_debit_total = (
         db.query(models.TransactionLink)
@@ -233,7 +240,18 @@ def create_transaction_link(
     except IntegrityError:
         # A concurrent request linked this credit to the same debit first.
         db.rollback()
-        raise HTTPException(status_code=400, detail="This credit is already linked to this debit")
+        existing = (
+            db.query(models.TransactionLink)
+            .filter(
+                models.TransactionLink.credit_transaction_id == credit_transaction_id,
+                models.TransactionLink.debit_transaction_id == debit_transaction_id,
+            )
+            .first()
+        )
+        detail = {"detail": "This credit is already linked to this debit"}
+        if existing:
+            detail["existing_link_id"] = existing.id
+        raise HTTPException(status_code=409, detail=detail)
     db.refresh(link)
     return link
 

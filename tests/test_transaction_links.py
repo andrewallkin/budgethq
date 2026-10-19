@@ -7,7 +7,9 @@ from fastapi import HTTPException
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend"))
 
-from app.transaction_links import resolve_link_amount
+from unittest.mock import MagicMock
+
+from app.transaction_links import create_transaction_link, resolve_link_amount
 
 
 class TestResolveLinkAmount:
@@ -53,3 +55,61 @@ class TestResolveLinkAmount:
                 credit_already_linked=400.0,
             )
         assert exc.value.status_code == 400
+
+
+class TestCreateTransactionLinkDuplicate:
+    def test_duplicate_pair_returns_409_with_existing_link_id(self):
+        from unittest.mock import MagicMock
+
+        from app.transaction_links import create_transaction_link
+
+        debit = MagicMock(id=88, amount=-655.0, transaction_type="DEBIT")
+        credit = MagicMock(id=9, amount=492.90, transaction_type="CREDIT", category="reimbursements")
+        existing_link = MagicMock(id=42, debit_transaction_id=88, credit_transaction_id=9)
+        db = MagicMock()
+
+        owned_results = [debit, credit]  # _get_owned_transaction is called debit-first
+
+        def query_side_effect(model):
+            q = MagicMock()
+            if model.__name__ == "BankTransaction":
+                q.filter.return_value.first.side_effect = lambda: owned_results.pop(0)
+            else:
+                q.filter.return_value.all.return_value = [existing_link]
+                q.filter.return_value.with_entities.return_value.all.return_value = []
+                q.filter.return_value.first.return_value = existing_link
+            return q
+
+        db.query.side_effect = query_side_effect
+
+        with pytest.raises(HTTPException) as exc:
+            create_transaction_link(db, 1, debit_transaction_id=88, credit_transaction_id=9)
+
+        assert exc.value.status_code == 409
+        assert exc.value.detail["existing_link_id"] == 42
+
+    def test_non_duplicate_link_amounts_still_resolve_normally(self):
+        from unittest.mock import MagicMock
+
+        from app.transaction_links import create_transaction_link
+
+        debit = MagicMock(id=88, amount=-655.0, transaction_type="DEBIT")
+        credit = MagicMock(id=9, amount=492.90, transaction_type="CREDIT", category="reimbursements")
+        db = MagicMock()
+
+        owned_results = [debit, credit]
+
+        def query_side_effect(model):
+            q = MagicMock()
+            if model.__name__ == "BankTransaction":
+                q.filter.return_value.first.side_effect = lambda: owned_results.pop(0)
+            else:
+                q.filter.return_value.all.return_value = []
+                q.filter.return_value.with_entities.return_value.all.return_value = []
+            return q
+
+        db.query.side_effect = query_side_effect
+
+        link = create_transaction_link(db, 1, debit_transaction_id=88, credit_transaction_id=9)
+        assert link.amount == 492.90  # auto-fit to the smaller side
+        db.add.assert_called_once()

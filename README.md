@@ -2,7 +2,7 @@
 
 BudgetHQ is a personal finance dashboard for **South African** users: budgeting against take-home pay, tax-oriented salary tooling, emergency savings targets, retirement annuity (RA) planning, optional **Investec banking** connectivity, and **investment portfolios** (including an automated TFSA view with ETFs, government bonds, Google Sheets pricing, FX-aware holdings, contribution limits, rebalancing helpers, and history).
 
-Primary stack: **React + Vite + TailwindCSS + Recharts** (`frontend/`), **FastAPI + SQLAlchemy + Pandas + APScheduler** (`backend/`), **PostgreSQL** with **Alembic** migrations (`backend/alembic/`), **Docker Compose** for dev and VPS-style production, **GitHub Actions** (`.github/workflows/deploy.yml`). A checked-in [openapi.json](openapi.json) reflects the REST API snapshot; interactive docs are at `/docs` when the backend is running.
+Primary stack: **React + Vite + TailwindCSS + Recharts** (`frontend/`), **FastAPI + SQLAlchemy + Pandas + APScheduler** (`backend/`), **PostgreSQL** with **Alembic** migrations (`backend/alembic/`), **Docker Compose** for dev and VPS-style production, **GitHub Actions** (`.github/workflows/deploy.yml`). Interactive API docs are at `/docs` when the backend is running; `openapi-budgethq.json` is the generated BudgetHQ API snapshot (regenerate with `make openapi` — CI fails if it drifts), and `openapi.json` is a vendored copy of the **Investec** account-info API spec used for reference.
 
 ---
 
@@ -33,7 +33,8 @@ Primary stack: **React + Vite + TailwindCSS + Recharts** (`frontend/`), **FastAP
 | `backend/alembic/versions/` | Migration scripts |
 | `tests/` | Python tests |
 | `docs/` | Product behaviour (payslip budget income, paper UI) |
-| `openapi.json` | API schema snapshot |
+| `openapi.json` | Vendored Investec account-info API spec (reference only) |
+| `openapi-budgethq.json` | Generated BudgetHQ API schema (`make openapi`; CI-verified) |
 
 ---
 
@@ -145,9 +146,9 @@ The bundled Vite config proxies `/api` to `http://backend:8000` for the **Docker
 
 ## API surface
 
-Prefer **Swagger UI** at `/docs` or the **`openapi.json`** snapshot for an accurate list of paths. Groups include auth, budget, salary, payslip uploads, emergency savings, RA, portfolio/TFSA contributions, ETFs and bonds (`/api/etf`, `/api/bond`), Sheets sync helpers, unified investments CRUD (`/api/investments`), manual accounts (`/api/manual-accounts`), Investec (`/api/investec`), analytics/portfolio-history endpoints (`/api/...`), tax and rebalancing calculators (`/api/calculate`), and optional admin endpoints.
+Prefer **Swagger UI** at `/docs` or the generated **`openapi-budgethq.json`** snapshot for an accurate list of paths. Groups include auth, budget, salary, payslip uploads, emergency savings, RA, portfolio/TFSA contributions, ETFs and bonds (`/api/etf`, `/api/bond`), Sheets sync helpers, unified investments CRUD (`/api/investments`), manual accounts (`/api/manual-accounts`), Investec (`/api/investec`), analytics/portfolio-history endpoints (`/api/...`), tax and rebalancing calculators (`/api/calculate`), and optional admin endpoints.
 
-**External read-only investments API** (for Grok and other integrations): see [docs/external-investments-api.md](docs/external-investments-api.md) for `GET /api/external/investments/summary` and `GET /api/external/investments/composition`.
+**External read-only investments API** (for Grok and other integrations): see [docs/external-investments-api.md](docs/external-investments-api.md) for `GET /api/external/investments/summary` and `GET /api/external/investments/composition`. The bot-facing budget/transactions API is documented in [docs/external-budget-transactions-api.md](docs/external-budget-transactions-api.md).
 
 ---
 

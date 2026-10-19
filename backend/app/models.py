@@ -24,6 +24,11 @@ class User(Base):
     external_api_key_hash = Column(String, nullable=True)
     external_api_key_created_at = Column(DateTime, nullable=True)
 
+    # Read-only external API key (hashed; prefix used for lookup). GET-only scope.
+    external_api_key_ro_prefix = Column(String(12), nullable=True, index=True)
+    external_api_key_ro_hash = Column(String, nullable=True)
+    external_api_key_ro_created_at = Column(DateTime, nullable=True)
+
     # Emergency fund designation
     emergency_fund_account_id = Column(Integer, ForeignKey("investec_accounts.id"), nullable=True)
 
@@ -537,6 +542,11 @@ class BankTransaction(Base):
     ai_category_confidence = Column(Float, nullable=True)  # 0.0 to 1.0
     user_corrected = Column(Boolean, default=False)  # User manually changed category
 
+    # Hidden via external bot/API or list toggle. Preserved across sync (sync
+    # only inserts newly-seen investec_uuid rows) and excluded from budgets,
+    # comparisons, and listings unless explicitly requested.
+    hidden = Column(Boolean, nullable=False, server_default="false", default=False)
+
     # Metadata
     synced_at = Column(DateTime, default=get_sast_now)
     created_at = Column(DateTime, default=get_sast_now)
@@ -622,6 +632,7 @@ class CategorizationRule(Base):
     is_active = Column(Boolean, default=True)
     created_from_correction = Column(Boolean, default=False)  # Auto-generated from user correction
     usage_count = Column(Integer, default=0)  # How many times this rule has matched
+    transaction_type = Column(String, nullable=True)  # None = any type; or "CREDIT"/"DEBIT"
     created_at = Column(DateTime, default=get_sast_now)
 
     # Relationships

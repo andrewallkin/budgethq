@@ -11,8 +11,9 @@ from openai import OpenAI
 from sqlalchemy.orm import Session
 from . import models
 from .logging_utils import redact_description
+from .rule_matching import matches_rule_pattern, rule_applies_to_type
 from .transaction_categories import is_valid_category
-import re
+from .transaction_categories import CATEGORY_DESCRIPTIONS
 import logging
 
 logger = logging.getLogger(__name__)
@@ -111,6 +112,8 @@ class TransactionCategorizer:
         for rule in sorted(user_rules, key=lambda r: r.priority, reverse=True):
             if not is_valid_category(rule.category):
                 continue
+            if not rule_applies_to_type(rule, transaction.get('type')):
+                continue
             if self._matches_rule(description, rule.pattern):
                 # Increment usage count
                 rule.usage_count += 1
@@ -137,12 +140,7 @@ class TransactionCategorizer:
 
     def _matches_rule(self, description: str, pattern: str) -> bool:
         """Check if description matches rule pattern (case-insensitive substring or regex)"""
-        try:
-            # Try regex match first
-            return bool(re.search(pattern, description, re.IGNORECASE))
-        except re.error:
-            # If invalid regex, fall back to substring match
-            return pattern.lower() in description.lower()
+        return matches_rule_pattern(description, pattern)
 
     def _categorize_with_ai(
         self,

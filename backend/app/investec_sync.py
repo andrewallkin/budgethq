@@ -7,6 +7,7 @@ Handles periodic syncing of accounts and transactions.
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from . import models
+from . import rule_matching
 from .database import SessionLocal
 from .investec_service import InvestecService
 from .transaction_categorizer import TransactionCategorizer
@@ -281,17 +282,15 @@ def _sync_account_transactions(db: Session, account: models.InvestecAccount):
         ).order_by(models.CategorizationRule.priority.desc()).all()
 
         # Try to match against rules
-        matched = False
-        for rule in rules:
-            if not is_valid_category(rule.category):
-                continue
-            if _matches_rule_pattern(new_txn.description, rule.pattern):
-                new_txn.category = rule.category
-                new_txn.ai_category_confidence = 1.0
-                rule.usage_count += 1
-                categorized_count += 1
-                matched = True
-                break
+        valid_rules = [rule for rule in rules if is_valid_category(rule.category)]
+        rule = rule_matching.get_matching_rule(
+            new_txn.description, new_txn.transaction_type, valid_rules
+        )
+        if rule is not None:
+            new_txn.category = rule.category
+            new_txn.ai_category_confidence = 1.0
+            rule.usage_count += 1
+            categorized_count += 1
 
         # If no rule matched, leave as uncategorized (category = None)
 
@@ -359,6 +358,7 @@ def sync_historical_transactions_for_user(
                 models.CategorizationRule.user_id == user.id,
                 models.CategorizationRule.is_active == True
             ).order_by(models.CategorizationRule.priority.desc()).all()
+            valid_rules = [rule for rule in rules if is_valid_category(rule.category)]
 
             # Track UUIDs we've seen in this batch to avoid duplicates from API
             seen_uuids = set()
@@ -414,17 +414,14 @@ def sync_historical_transactions_for_user(
                 total_new += 1
 
                 # Apply rule-based categorization
-                matched = False
-                for rule in rules:
-                    if not is_valid_category(rule.category):
-                        continue
-                    if _matches_rule_pattern(new_txn.description, rule.pattern):
-                        new_txn.category = rule.category
-                        new_txn.ai_category_confidence = 1.0
-                        rule.usage_count += 1
-                        total_categorized += 1
-                        matched = True
-                        break
+                rule = rule_matching.get_matching_rule(
+                    new_txn.description, new_txn.transaction_type, valid_rules
+                )
+                if rule is not None:
+                    new_txn.category = rule.category
+                    new_txn.ai_category_confidence = 1.0
+                    rule.usage_count += 1
+                    total_categorized += 1
 
             # Update account last synced timestamp
             account.last_synced = get_sast_now()
@@ -456,16 +453,6 @@ def sync_historical_transactions_for_user(
         'new_transactions': total_new,
         'categorized': total_categorized
     }
-
-
-def _matches_rule_pattern(description: str, pattern: str) -> bool:
-    """Check if description matches rule pattern (regex or substring)."""
-    import re
-    try:
-        return bool(re.search(pattern, description, re.IGNORECASE))
-    except re.error:
-        # Fallback to simple substring match if not valid regex
-        return pattern.lower() in description.lower()
 
 
 def _generate_transaction_uuid(api_txn: dict) -> str:

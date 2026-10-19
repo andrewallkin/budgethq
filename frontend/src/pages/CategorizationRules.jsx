@@ -174,6 +174,7 @@ export default function CategorizationRules() {
         pattern: '',
         category: '',
         priority: 10,
+        transaction_type: null,
     })
     const [formError, setFormError] = useState('')
 
@@ -237,9 +238,12 @@ export default function CategorizationRules() {
 
         setCreating(true)
         try {
-            await axios.post('/api/investec/rules', newRule)
+            await axios.post('/api/investec/rules', {
+                ...newRule,
+                transaction_type: newRule.transaction_type || null,
+            })
             setSuccess('Rule created')
-            setNewRule({ pattern: '', category: '', priority: 10 })
+            setNewRule({ pattern: '', category: '', priority: 10, transaction_type: null })
             await fetchRules()
         } catch (err) {
             setError(err.response?.data?.detail || 'Failed to create rule')
@@ -268,6 +272,7 @@ export default function CategorizationRules() {
             category: editingRule.category,
             priority: editingRule.priority,
             is_active: editingRule.is_active,
+            transaction_type: editingRule.transaction_type || null,
         })
     }
 
@@ -447,6 +452,14 @@ export default function CategorizationRules() {
                     </code>
                     <p className="mt-1 text-sm text-[var(--paper-muted)]">
                         {categoryLabel(rule.category)}
+                        {rule.transaction_type ? (
+                            <>
+                                <span aria-hidden="true"> · </span>
+                                <span className="inline-flex items-center whitespace-nowrap rounded-full border border-[var(--paper-line)] px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wide text-[var(--paper-ink)]">
+                                    {rule.transaction_type}
+                                </span>
+                            </>
+                        ) : null}
                         <span aria-hidden="true"> · </span>
                         Priority {rule.priority}
                         <span aria-hidden="true"> · </span>
@@ -624,6 +637,23 @@ export default function CategorizationRules() {
                             <CategoryOptions />
                         </select>
 
+                        <label htmlFor="new-rule-transaction-type" className={`${paperEyebrow} lg:col-start-2 lg:row-start-3`}>
+                            Type
+                        </label>
+                        <select
+                            id="new-rule-transaction-type"
+                            value={newRule.transaction_type || ''}
+                            onChange={(e) => {
+                                setFormError('')
+                                setNewRule({ ...newRule, transaction_type: e.target.value || null })
+                            }}
+                            className={`${paperField} h-10 lg:col-start-2 lg:row-start-4`}
+                        >
+                            <option value="">Any transaction type</option>
+                            <option value="CREDIT">Credits only</option>
+                            <option value="DEBIT">Debits only</option>
+                        </select>
+
                         <label htmlFor="new-rule-priority" className={`${paperEyebrow} mt-2.5 lg:col-start-3 lg:row-start-1 lg:mt-0`}>
                             Priority
                         </label>
@@ -648,7 +678,7 @@ export default function CategorizationRules() {
 
                         <p
                             id="new-rule-hint"
-                            className="text-xs leading-5 text-[var(--paper-muted)] lg:col-span-3 lg:row-start-3"
+                            className="text-xs leading-5 text-[var(--paper-muted)] lg:col-span-3 lg:row-start-5"
                         >
                             Case-insensitive. Use | for either/or.
                         </p>
@@ -821,6 +851,21 @@ export default function CategorizationRules() {
                                 className={paperField}
                             >
                                 <CategoryOptions />
+                            </select>
+                        </div>
+                        <div>
+                            <label htmlFor="edit-rule-transaction-type" className={`${paperEyebrow} mb-1.5 block`}>
+                                Type
+                            </label>
+                            <select
+                                id="edit-rule-transaction-type"
+                                value={editingRule.transaction_type || ''}
+                                onChange={(e) => setEditingRule({ ...editingRule, transaction_type: e.target.value || null })}
+                                className={paperField}
+                            >
+                                <option value="">Any transaction type</option>
+                                <option value="CREDIT">Credits only</option>
+                                <option value="DEBIT">Debits only</option>
                             </select>
                         </div>
                         <div>

@@ -23,6 +23,8 @@ from ..investec_sync import _sync_user_accounts, _sync_account_transactions
 from ..logging_utils import redact_description
 from ..transaction_budget_summary import build_budget_comparison
 from ..transaction_categories import VALID_TRANSACTION_CATEGORIES, is_valid_category
+from ..transaction_mutations import set_transaction_category, set_transaction_hidden
+from ..rule_matching import get_matching_rule, matches_rule_pattern, rule_applies_to_type
 from ..transaction_links import (
     create_transaction_link,
     delete_transaction_link,
@@ -113,6 +115,7 @@ class TransactionResponse(BaseModel):
     category: Optional[str]
     ai_category_confidence: Optional[float]
     user_corrected: bool
+    hidden: bool = False
     linked_credits: List[LinkedTransactionSummaryResponse] = []
     linked_debits: List[LinkedTransactionSummaryResponse] = []
     effective_amount: Optional[float] = None
@@ -137,12 +140,25 @@ class TransactionLinksResponse(BaseModel):
 
 class TransactionUpdate(BaseModel):
     category: Optional[str] = Field(None, description="One of: salary, side_income, investment_income, reimbursements, other_income, groceries, household_home, dining_takeaways, shopping_clothing, travel_accommodation, entertainment, health_wellness, bills, subscriptions, transport, savings, loan_repayment, irregular, refund, transfers, or empty string for uncategorized")
+    hidden: Optional[bool] = Field(None, description="Set true to hide this transaction from budgets and listings, false to unhide. Omitted leaves the flag untouched.")
+
+
+RULE_TRANSACTION_TYPES = ("CREDIT", "DEBIT")
+
+
+def _validate_rule_transaction_type(value: Optional[str]) -> None:
+    if value is not None and value not in RULE_TRANSACTION_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid transaction_type. Must be one of: CREDIT, DEBIT (or null for any type)"
+        )
 
 
 class CategorizationRuleCreate(BaseModel):
     pattern: str
     category: str = Field(..., description="One of: salary, side_income, investment_income, reimbursements, other_income, groceries, household_home, dining_takeaways, shopping_clothing, travel_accommodation, entertainment, health_wellness, bills, subscriptions, transport, savings, loan_repayment, irregular, refund, transfers")
     priority: int = Field(default=10, ge=0, le=100)
+    transaction_type: Optional[str] = Field(None, description='None = any type, or "CREDIT" / "DEBIT"')
 
 
 class CategorizationRuleUpdate(BaseModel):
@@ -150,6 +166,7 @@ class CategorizationRuleUpdate(BaseModel):
     category: Optional[str] = None
     priority: Optional[int] = Field(None, ge=0, le=100)
     is_active: Optional[bool] = None
+    transaction_type: Optional[str] = Field(None, description='None = any type, or "CREDIT" / "DEBIT". Explicit null clears the rule type; omitting the field leaves it untouched.')
 
 
 class CategorizationRuleResponse(BaseModel):
@@ -160,6 +177,7 @@ class CategorizationRuleResponse(BaseModel):
     is_active: bool
     usage_count: int
     created_from_correction: bool
+    transaction_type: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -492,6 +510,7 @@ def serialize_transaction(
         category=transaction.category,
         ai_category_confidence=transaction.ai_category_confidence,
         user_corrected=transaction.user_corrected,
+        hidden=transaction.hidden,
         linked_credits=linked_credits,
         linked_debits=linked_debits,
         effective_amount=effective_amount,
@@ -525,6 +544,8 @@ async def list_transactions(
     to_date: Optional[str] = None,
     search: Optional[str] = None,
     transaction_type: Optional[str] = None,
+    include_hidden: bool = False,
+    status: Optional[str] = None,
     limit: int = 50,
     offset: int = 0,
     current_user: models.User = Depends(auth.get_current_user),
@@ -540,6 +561,8 @@ async def list_transactions(
     - to_date: End date (YYYY-MM-DD)
     - search: Search in transaction description (case-insensitive)
     - transaction_type: CREDIT or DEBIT
+    - include_hidden: Include transactions hidden via the external API (default False)
+    - status: Filter by transaction status (e.g. PENDING, POSTED)
     - limit: Max results (default 50)
     - offset: Pagination offset
     """
@@ -552,6 +575,8 @@ async def list_transactions(
         to_date=to_date,
         search=search,
         transaction_type=transaction_type,
+        include_hidden=include_hidden,
+        status=status,
     )
 
     transactions = query.limit(limit).offset(offset).all()
@@ -806,39 +831,39 @@ async def get_transaction(
 
 
 @router.patch("/transactions/{transaction_id}", response_model=TransactionResponse)
-async def update_transaction_category(
+async def update_transaction(
     transaction_id: int,
     update: TransactionUpdate,
     current_user: models.User = Depends(auth.get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Update transaction category (user correction)."""
+    """Update transaction category (user correction) and/or hidden flag.
+
+    Only fields present in the request body are applied. When both are
+    present, category is applied first, then hidden.
+    """
+    provided_fields = update.model_fields_set
+
+    if "category" in provided_fields:
+        set_transaction_category(
+            db, current_user.id, transaction_id, update.category
+        )
+
+    if "hidden" in provided_fields:
+        set_transaction_hidden(
+            db, current_user.id, transaction_id, bool(update.hidden)
+        )
+
+    if not ("category" in provided_fields or "hidden" in provided_fields):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Provide at least one of: category, hidden",
+        )
+
     transaction = db.query(models.BankTransaction).filter(
         models.BankTransaction.id == transaction_id,
         models.BankTransaction.user_id == current_user.id
     ).first()
-
-    if not transaction:
-        raise HTTPException(status_code=404, detail="Transaction not found")
-
-    # Validate category (allow None or empty string for uncategorized)
-    valid_categories = VALID_TRANSACTION_CATEGORIES
-
-    # Handle uncategorized (empty string or None)
-    if update.category == "" or update.category is None:
-        transaction.category = None
-    elif update.category in valid_categories:
-        transaction.category = update.category
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid category. Must be one of: {', '.join(valid_categories)} or empty for uncategorized"
-        )
-
-    transaction.user_corrected = True
-
-    db.commit()
-    db.refresh(transaction)
 
     links = get_links_for_transaction(db, current_user.id, transaction.id)
     links_by_debit, link_by_credit = _build_link_indexes(links)
@@ -1093,12 +1118,14 @@ async def create_rule(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid category. Must be one of: {', '.join(valid_categories)}"
         )
+    _validate_rule_transaction_type(rule.transaction_type)
 
     new_rule = models.CategorizationRule(
         user_id=current_user.id,
         pattern=rule.pattern,
         category=rule.category,
-        priority=rule.priority
+        priority=rule.priority,
+        transaction_type=rule.transaction_type
     )
 
     db.add(new_rule)
@@ -1132,6 +1159,9 @@ async def update_rule(
         rule.priority = update.priority
     if update.is_active is not None:
         rule.is_active = update.is_active
+    if "transaction_type" in update.model_fields_set:
+        _validate_rule_transaction_type(update.transaction_type)
+        rule.transaction_type = update.transaction_type
 
     db.commit()
     db.refresh(rule)
@@ -1160,31 +1190,6 @@ async def delete_rule(
     return None
 
 
-def _matches_rule_pattern(description: str, pattern: str) -> bool:
-    """Check if description matches rule pattern (regex or substring)."""
-    import re
-    try:
-        return bool(re.search(pattern, description, re.IGNORECASE))
-    except re.error:
-        # Fallback to simple substring match if not valid regex
-        return pattern.lower() in description.lower()
-
-
-def _get_matching_rule(description: str, rules: list) -> Optional[tuple]:
-    """
-    Return (rule, proposed_category) for the first matching rule, or None.
-    Rules should be sorted by priority desc. Rules whose stored category is no
-    longer a valid slug (e.g. left over from an old taxonomy) are skipped so they
-    can't propagate dead categories onto transactions.
-    """
-    for rule in rules:
-        if not is_valid_category(rule.category):
-            continue
-        if _matches_rule_pattern(description, rule.pattern):
-            return (rule, rule.category)
-    return None
-
-
 @router.get("/rules/apply-to-existing/preview")
 async def preview_apply_rules_to_all(
     current_user: models.User = Depends(auth.get_current_user),
@@ -1201,6 +1206,7 @@ async def preview_apply_rules_to_all(
         models.CategorizationRule.user_id == current_user.id,
         models.CategorizationRule.is_active == True
     ).order_by(models.CategorizationRule.priority.desc()).all()
+    valid_rules = [rule for rule in rules if is_valid_category(rule.category)]
 
     # Uncategorized: only non-user-corrected (we won't overwrite explicit "leave uncategorized")
     uncategorized_txns = db.query(models.BankTransaction).filter(
@@ -1217,15 +1223,15 @@ async def preview_apply_rules_to_all(
 
     uncategorized_count = 0
     for txn in uncategorized_txns:
-        if _get_matching_rule(txn.description, rules):
+        if get_matching_rule(txn.description, txn.transaction_type, valid_rules):
             uncategorized_count += 1
 
     conflicts: List[ConflictPreviewItem] = []
     for txn in categorized_txns:
-        match = _get_matching_rule(txn.description, rules)
-        if not match:
+        rule = get_matching_rule(txn.description, txn.transaction_type, valid_rules)
+        if not rule:
             continue
-        rule, proposed_category = match
+        proposed_category = rule.category
         if txn.category != proposed_category:
             conflicts.append(ConflictPreviewItem(
                 id=txn.id,
@@ -1270,7 +1276,9 @@ async def apply_single_rule_to_existing_transactions(
     categorized_count = 0
     if is_valid_category(rule.category):
         for txn in transactions:
-            if _matches_rule_pattern(txn.description, rule.pattern):
+            if not rule_applies_to_type(rule, txn.transaction_type):
+                continue
+            if matches_rule_pattern(txn.description, rule.pattern):
                 txn.category = rule.category
                 txn.ai_category_confidence = 1.0
                 rule.usage_count += 1
@@ -1304,6 +1312,7 @@ async def apply_rules_to_existing_transactions(
         models.CategorizationRule.user_id == current_user.id,
         models.CategorizationRule.is_active == True
     ).order_by(models.CategorizationRule.priority.desc()).all()
+    valid_rules = [rule for rule in rules if is_valid_category(rule.category)]
 
     # 1. Apply to uncategorized transactions
     uncategorized_txns = db.query(models.BankTransaction).filter(
@@ -1314,15 +1323,12 @@ async def apply_rules_to_existing_transactions(
 
     categorized_count = 0
     for txn in uncategorized_txns:
-        for rule in rules:
-            if not is_valid_category(rule.category):
-                continue
-            if _matches_rule_pattern(txn.description, rule.pattern):
-                txn.category = rule.category
-                txn.ai_category_confidence = 1.0
-                rule.usage_count += 1
-                categorized_count += 1
-                break
+        rule = get_matching_rule(txn.description, txn.transaction_type, valid_rules)
+        if rule is not None:
+            txn.category = rule.category
+            txn.ai_category_confidence = 1.0
+            rule.usage_count += 1
+            categorized_count += 1
 
     # 2. Apply accepted conflict resolutions (include user_corrected - user explicitly accepted)
     conflicts_resolved = 0
@@ -1334,10 +1340,9 @@ async def apply_rules_to_existing_transactions(
         ).all()
 
         for txn in conflict_txns:
-            match = _get_matching_rule(txn.description, rules)
-            if match:
-                rule, proposed_category = match
-                txn.category = proposed_category
+            rule = get_matching_rule(txn.description, txn.transaction_type, valid_rules)
+            if rule:
+                txn.category = rule.category
                 txn.ai_category_confidence = 1.0
                 rule.usage_count += 1
                 conflicts_resolved += 1

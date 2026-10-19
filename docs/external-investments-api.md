@@ -409,3 +409,5 @@ Persist `since` from each successful note call and pass it on the next run.
 | Connected Playwright accounts | Each connected adapter account appears with `source: "playwright"` |
 
 Key management UI: **Settings → External API key**.
+
+Related: [External Budget & Transactions API](external-budget-transactions-api.md) — budget/transactions endpoints for external tools.
