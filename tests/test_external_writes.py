@@ -1,5 +1,5 @@
 # tests/test_external_writes.py
-"""Tests for external write endpoints: classify (single + batch) and hide."""
+"""Tests for external write endpoints: classify (single + batch), hide, and refund links."""
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -105,3 +105,62 @@ def test_patch_hidden_roundtrip():
         response = client.patch("/api/external/transactions/7/hidden", json={"hidden": True})
     assert response.status_code == 200
     assert response.json()["hidden"] is True
+
+
+class TestExternalTransactionLinks:
+    def test_create_external_link(self):
+        db = MagicMock()
+
+        class _Link:
+            id, debit_transaction_id, credit_transaction_id, amount = 42, 88, 9, 151.20
+            transaction_date = None
+
+        created = _Link()
+        with patch("app.routers.external_budget.create_transaction_link", return_value=created):
+            client = _client(db)
+            response = client.post(
+                "/api/external/transaction-links",
+                json={"debit_transaction_id": 88, "credit_transaction_id": 9, "amount": 151.20},
+            )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["link_id"] == 42 and body["amount"] == 151.20
+
+    def test_duplicate_link_conflict_shape(self):
+        db = MagicMock()
+        with patch(
+            "app.routers.external_budget.create_transaction_link",
+            side_effect=HTTPException(
+                status_code=409,
+                detail={"detail": "This credit is already linked to this debit", "existing_link_id": 42},
+            ),
+        ):
+            client = _client(db)
+            response = client.post(
+                "/api/external/transaction-links",
+                json={"debit_transaction_id": 88, "credit_transaction_id": 9},
+            )
+        assert response.status_code == 409
+        assert response.json()["detail"]["existing_link_id"] == 42
+
+    def test_delete_external_link_204(self):
+        db = MagicMock()
+        with patch("app.routers.external_budget.delete_transaction_link", return_value=None):
+            client = _client(db)
+            response = client.delete("/api/external/transaction-links/42")
+        assert response.status_code == 204
+
+    def test_link_candidates_route_uses_service(self):
+        db = MagicMock()
+        txn = MagicMock(id=5, description="Woolworths", amount=-655.0, transaction_type="DEBIT",
+                        category="health_wellness", account_id=1, hidden=False, status="POSTED",
+                        transaction_category="CardPurchases", user_corrected=False,
+                        ai_category_confidence=0.8, transaction_date=None, investec_uuid="u5", account=None)
+        candidate = {"transaction": txn, "match_score": 0.85,
+                     "match_reasons": ["partial_amount", "within_14_days"], "debit_remaining": 655.0}
+        with patch("app.routers.external_budget.find_link_candidates", return_value=[candidate]):
+            client = _client(db)
+            response = client.get("/api/external/transactions/link-candidates", params={"credit_id": 9})
+        assert response.status_code == 200
+        body = response.json()
+        assert body["candidates"][0]["match_reasons"] == ["partial_amount", "within_14_days"]

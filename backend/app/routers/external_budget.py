@@ -9,6 +9,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import PlainTextResponse
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from .. import auth, database, models
@@ -28,7 +29,11 @@ from ..transaction_categories import (
     CATEGORY_LABELS,
     VALID_TRANSACTION_CATEGORIES,
 )
-from ..transaction_links import get_links_for_transaction
+from ..transaction_links import (
+    create_transaction_link,
+    delete_transaction_link,
+    get_links_for_transaction,
+)
 from ..transaction_mutations import set_transaction_category, set_transaction_hidden
 from ..transaction_query import build_transactions_query
 
@@ -262,11 +267,12 @@ async def get_external_transaction(
     return get_transaction(db, current_user.id, transaction_id)
 
 
-# --- External write routes (classify single + batch, hide) ------------------
+# --- External write routes (classify single + batch, hide, refund links) ----
 # Ordering constraint: PATCH /transactions/categories (batch) MUST stay
 # registered above the /transactions/{transaction_id}/... PATCH routes below.
-# (Task 12 adds POST /transaction-links + DELETE /transaction-links/{link_id};
-# Task 13 adds POST /transactions/apply-rules — keep writes in this block.)
+# (Task 13 adds POST /transactions/apply-rules — keep writes in this block.
+# The /transaction-links routes below are on a distinct path, so they have no
+# ordering interaction with the /transactions/{transaction_id} routes.)
 
 
 async def _serialized_after_mutation(db, user_id, transaction_id) -> dict:
@@ -342,3 +348,42 @@ async def patch_external_transaction_hidden(
         raise HTTPException(status_code=400, detail="hidden must be true or false")
     set_transaction_hidden(db, current_user.id, transaction_id, hidden)
     return await _serialized_after_mutation(db, current_user.id, transaction_id)
+
+
+class ExternalLinkCreate(BaseModel):
+    debit_transaction_id: Optional[int] = None
+    credit_transaction_id: Optional[int] = None
+    amount: Optional[float] = None
+
+
+@router.post("/transaction-links")
+async def post_external_transaction_link(
+    body: ExternalLinkCreate,
+    current_user: models.User = Depends(auth.get_user_from_external_api_key_write),
+    db: Session = Depends(database.get_db),
+):
+    if body.debit_transaction_id is None or body.credit_transaction_id is None:
+        raise HTTPException(status_code=400, detail="debit_transaction_id and credit_transaction_id are required")
+    link = create_transaction_link(
+        db,
+        current_user.id,
+        debit_transaction_id=body.debit_transaction_id,
+        credit_transaction_id=body.credit_transaction_id,
+        amount=body.amount,
+    )
+    return {
+        "link_id": link.id,
+        "debit_transaction_id": link.debit_transaction_id,
+        "credit_transaction_id": link.credit_transaction_id,
+        "amount": link.amount,
+    }
+
+
+@router.delete("/transaction-links/{link_id}", status_code=204)
+async def delete_external_transaction_link(
+    link_id: int,
+    current_user: models.User = Depends(auth.get_user_from_external_api_key_write),
+    db: Session = Depends(database.get_db),
+):
+    delete_transaction_link(db, current_user.id, link_id)
+    return None
