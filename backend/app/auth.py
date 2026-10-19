@@ -104,25 +104,63 @@ def create_external_api_key_material() -> tuple[str, str, str]:
     return full_key, lookup_prefix, key_hash
 
 
-async def get_user_from_external_api_key(
-    credentials: HTTPAuthorizationCredentials = Depends(external_api_bearer),
-    db: Session = Depends(database.get_db),
-):
-    """Authenticate machine clients via per-user BudgetHQ API keys (bhq_...)."""
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Invalid or missing API key",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    token = (credentials.credentials or "").strip()
-    if not token.startswith(EXTERNAL_API_KEY_PREFIX) or len(token) < 20:
-        raise credentials_exception
-
+def _resolve_external_key(db, token: str) -> tuple | None:
+    """Return (user, scope) where scope is "write" or "read", else None."""
     lookup_prefix = token[:EXTERNAL_API_KEY_LOOKUP_LEN]
+
     user = db.query(models.User).filter(
         models.User.external_api_key_prefix == lookup_prefix,
         models.User.external_api_key_hash.isnot(None),
     ).first()
-    if user is None or not verify_password(token, user.external_api_key_hash):
-        raise credentials_exception
-    return user
+    if user is not None and verify_password(token, user.external_api_key_hash):
+        return user, "write"
+
+    user = db.query(models.User).filter(
+        models.User.external_api_key_ro_prefix == lookup_prefix,
+        models.User.external_api_key_ro_hash.isnot(None),
+    ).first()
+    if user is not None and verify_password(token, user.external_api_key_ro_hash):
+        return user, "read"
+
+    return None
+
+
+def _external_key_dependency(require_write: bool):
+    async def _dependency(
+        credentials: HTTPAuthorizationCredentials = Depends(external_api_bearer),
+        db: Session = Depends(database.get_db),
+    ):
+        credentials_exception = HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing API key",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+        token = (credentials.credentials or "").strip()
+        if not token.startswith(EXTERNAL_API_KEY_PREFIX) or len(token) < 20:
+            raise credentials_exception
+        resolved = _resolve_external_key(db, token)
+        if resolved is None:
+            raise credentials_exception
+        user, key_scope = resolved
+        if require_write and key_scope != "write":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="This endpoint requires the full-access API key",
+            )
+        return user
+
+    return _dependency
+
+
+async def get_user_from_external_api_key(
+    credentials: HTTPAuthorizationCredentials = Depends(external_api_bearer),
+    db: Session = Depends(database.get_db),
+):
+    """Authenticate machine clients via per-user BudgetHQ API keys (bhq_...).
+
+    Accepts both the full-access key and the read-only key.
+    """
+    return await _external_key_dependency(require_write=False)(credentials, db)
+
+
+get_user_from_external_api_key_write = _external_key_dependency(require_write=True)

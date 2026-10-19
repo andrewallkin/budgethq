@@ -225,6 +225,56 @@ async def revoke_external_api_key(
     return {"status": "success", "message": "External API key revoked successfully"}
 
 
+@router.post("/user/settings/external-api-key/readonly", response_model=ExternalApiKeyGenerateResponse)
+async def generate_external_api_key_readonly(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db),
+):
+    """Generate a read-only external API key. GET endpoints only; shown once; replaces any existing read-only key."""
+    full_key, lookup_prefix, key_hash = auth.create_external_api_key_material()
+    created_at = get_sast_now()
+    current_user.external_api_key_ro_prefix = lookup_prefix
+    current_user.external_api_key_ro_hash = key_hash
+    current_user.external_api_key_ro_created_at = created_at
+    db.commit()
+    logger.info("Read-only external API key generated", extra={"user_id": current_user.id})
+    return {
+        "api_key": full_key,
+        "prefix": f"{lookup_prefix}...",
+        "created_at": created_at.isoformat(),
+        "message": "Copy this key now. It will not be shown again.",
+    }
+
+
+@router.get("/user/settings/external-api-key/readonly", response_model=ExternalApiKeyStatus)
+async def get_external_api_key_readonly_status(
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Check whether the user has a read-only external API key configured."""
+    has_key = bool(current_user.external_api_key_ro_hash)
+    prefix = f"{current_user.external_api_key_ro_prefix}..." if current_user.external_api_key_ro_prefix else None
+    created_at = (
+        current_user.external_api_key_ro_created_at.isoformat()
+        if current_user.external_api_key_ro_created_at
+        else None
+    )
+    return {"has_key": has_key, "prefix": prefix, "created_at": created_at}
+
+
+@router.delete("/user/settings/external-api-key/readonly")
+async def revoke_external_api_key_readonly(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db),
+):
+    """Revoke the user's read-only external API key."""
+    current_user.external_api_key_ro_prefix = None
+    current_user.external_api_key_ro_hash = None
+    current_user.external_api_key_ro_created_at = None
+    db.commit()
+    logger.info("Read-only external API key revoked", extra={"user_id": current_user.id})
+    return {"status": "success", "message": "Read-only external API key revoked successfully"}
+
+
 @router.get("/user/preferences", response_model=UserPreferences)
 async def get_user_preferences(
     current_user: models.User = Depends(auth.get_current_user)
