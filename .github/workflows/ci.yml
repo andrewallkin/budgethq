@@ -37,6 +37,15 @@ jobs:
           ENCRYPTION_KEY: test-encryption-key-not-real
         run: uv run pytest
 
+      - name: Verify openapi snapshot is current
+        run: |
+          uv run python scripts/generate_openapi.py
+          if ! git diff --quiet openapi-budgethq.json; then
+            echo "::error::openapi-budgethq.json is stale. Run 'make openapi' and commit the result."
+            git diff openapi-budgethq.json | head -40
+            exit 1
+          fi
+
   frontend:
     name: Frontend checks
     runs-on: ubuntu-latest
