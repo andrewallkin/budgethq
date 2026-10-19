@@ -145,3 +145,25 @@ class TestBudgetComparison:
         body = response.json()
         assert body["rows"] == []
         assert body["totals"] == {"budgeted": 0.0, "spent": 0.0, "remaining": 0.0}
+
+    def test_comparison_rejects_malformed_and_out_of_range_period(self):
+        user = MagicMock(id=1)
+        budget = MagicMock(id=5, budget_period_start_day=1)
+        budget_query = MagicMock()
+        budget_query.filter.return_value.first.return_value = budget
+        db = MagicMock()
+        # return_value (not side_effect): the same Budget query must answer
+        # every request in the loop below.
+        db.query.return_value = budget_query
+
+        with patch("app.routers.external_budget.get_period_dates_for_end_month",
+                   return_value=(date(2026, 9, 22), date(2026, 10, 21))), \
+             patch("app.routers.external_budget.build_transactions_query") as txn_query, \
+             patch("app.routers.external_budget.build_budget_comparison"):
+            client = _make_client(db, user=user)
+            for period in ["2026-10-15", "junk", "2026", "2026-13", "1900-01"]:
+                response = client.get("/api/external/budget/comparison", params={"period": period})
+                assert response.status_code == 400, period
+                assert response.json()["detail"] == "period must be YYYY-MM", period
+
+        assert not txn_query.called

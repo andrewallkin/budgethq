@@ -129,7 +129,10 @@ async def get_external_budget_comparison(
     start_day = (budget.budget_period_start_day if budget else 1) or 1
 
     if period:
-        year, month = (int(p) for p in period.split("-"))
+        try:
+            year, month = (int(p) for p in period.split("-"))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="period must be YYYY-MM") from None
         if not (2000 <= year <= 2100 and 1 <= month <= 12):
             raise HTTPException(status_code=400, detail="period must be YYYY-MM")
         from_date, to_date = get_period_dates_for_end_month(year, month, start_day)
