@@ -164,3 +164,31 @@ class TestExternalTransactionLinks:
         assert response.status_code == 200
         body = response.json()
         assert body["candidates"][0]["match_reasons"] == ["partial_amount", "within_14_days"]
+
+
+class TestExternalApplyRules:
+    def test_apply_rules_endpoint_dry_run(self):
+        db = MagicMock()
+        result = {
+            "matched": 1, "changed": 0, "skipped_user_corrected": [],
+            "changes": [{"id": 11, "description": "DISC REFUND", "old_category": None, "new_category": "refund"}],
+        }
+        with patch("app.routers.external_budget.apply_rules_to_history", return_value=result) as apply_mock:
+            client = _client(db)
+            response = client.post(
+                "/api/external/transactions/apply-rules",
+                json={"from_date": "2026-10-14", "to_date": "2026-10-17", "dry_run": True},
+            )
+        assert response.status_code == 200
+        assert response.json()["changes"][0]["new_category"] == "refund"
+        assert apply_mock.call_args.kwargs["dry_run"] is True
+
+    def test_apply_rules_requires_scope(self):
+        db = MagicMock()
+        with patch(
+            "app.routers.external_budget.apply_rules_to_history",
+            side_effect=HTTPException(status_code=400, detail="Provide rule_id or a from_date/to_date"),
+        ):
+            client = _client(db)
+            response = client.post("/api/external/transactions/apply-rules", json={})
+        assert response.status_code == 400

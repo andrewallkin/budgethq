@@ -21,6 +21,7 @@ from ..external_transactions import (
 )
 from ..payslip_budget import monthly_budget_income_for_user
 from ..refund_matching import find_link_candidates
+from ..rule_application import apply_rules_to_history
 from ..transaction_budget_summary import build_budget_comparison
 from ..transaction_categories import (
     BUDGET_LINKABLE_CATEGORIES,
@@ -348,6 +349,31 @@ async def patch_external_transaction_hidden(
         raise HTTPException(status_code=400, detail="hidden must be true or false")
     set_transaction_hidden(db, current_user.id, transaction_id, hidden)
     return await _serialized_after_mutation(db, current_user.id, transaction_id)
+
+
+# NOTE: POST /transactions/apply-rules sits alongside the literal-path write
+# routes above; there is no POST /transactions/{transaction_id} route, so the
+# literal path cannot be shadowed (GET/PATCH {id} routes use different methods).
+@router.post("/transactions/apply-rules")
+async def post_external_apply_rules(
+    body: dict,
+    current_user: models.User = Depends(auth.get_user_from_external_api_key_write),
+    db: Session = Depends(database.get_db),
+):
+    """Run active categorization rules over historical transactions.
+
+    Requires rule_id or a date range. dry_run=true reports without writing;
+    user_corrected rows are never modified (reported as skipped_user_corrected).
+    """
+    body = body or {}
+    return apply_rules_to_history(
+        db,
+        current_user.id,
+        rule_id=body.get("rule_id"),
+        from_date=body.get("from_date"),
+        to_date=body.get("to_date"),
+        dry_run=bool(body.get("dry_run", False)),
+    )
 
 
 class ExternalLinkCreate(BaseModel):
