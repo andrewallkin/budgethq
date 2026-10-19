@@ -85,10 +85,11 @@ def test_exact_beats_partial():
 
 def test_saturated_and_hidden_and_window_excluded():
     credit = _credit(amount=492.90, category="refund", txn_date=datetime(2026, 10, 17))
-    saturated = _Txn(1, "REFUND", -492.90)   # link below gives debit 1 debit_remaining of 0
-    old_debit = _Txn(2, "REFUND", -492.90, txn_date=datetime(2026, 6, 1))  # > 90 days before credit
-    hidden_debit = _Txn(3, "REFUND", -492.90, hidden=True)
-    links = [_link(debit_transaction_id=1, credit_transaction_id=9, amount=492.90)]
+    saturated = _Txn(1, "REFUND", -100.00)   # link below gives debit 1 debit_remaining of 0
+    old_debit = _Txn(2, "REFUND", -100.00, txn_date=datetime(2026, 6, 1))  # SQL: > 90 days before credit; loop: 100 < credit_remaining → skipped
+    hidden_debit = _Txn(3, "REFUND", -100.00, hidden=True)  # SQL: hidden; loop: 100 < credit_remaining → skipped
+    eligible = _Txn(4, "REFUND", -392.90)
+    links = [_link(debit_transaction_id=1, credit_transaction_id=9, amount=100.00)]
     db = MagicMock()
     link_q = MagicMock()
     link_q.options.return_value.filter.return_value.all.return_value = links
@@ -96,7 +97,7 @@ def test_saturated_and_hidden_and_window_excluded():
     def bt_query():
         q = MagicMock()
         q.filter.return_value.first.return_value = credit
-        q.filter.return_value.all.return_value = [saturated, old_debit, hidden_debit]
+        q.filter.return_value.all.return_value = [saturated, old_debit, hidden_debit, eligible]
         return q
 
     db.query.side_effect = lambda m: (bt_query() if m.__name__ == "BankTransaction" else link_q)
@@ -105,6 +106,9 @@ def test_saturated_and_hidden_and_window_excluded():
     ids = [c["transaction"].id for c in candidates]
     assert 2 not in ids
     assert 3 not in ids
+    assert 1 not in ids  # saturated debit: debit_remaining = 0
+    assert 4 in ids      # eligible debit: |392.90 - 392.90| / 392.90 = 0 → exact tier
+    assert "amount_exact" in next(c for c in candidates if c["transaction"].id == 4)["match_reasons"]
 
 
 def test_non_offset_credit_rejected():
