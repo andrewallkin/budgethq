@@ -59,4 +59,4 @@ docs/superpowers/
 !CLAUDE.md
 !docs/external-investments-api.md
 
-.DS_Store
+.DS_Store.worktrees/
