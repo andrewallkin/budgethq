@@ -53,6 +53,7 @@ def test_patch_category_returns_payload():
 
 def test_batch_partial_results():
     db = MagicMock()
+    db.query.return_value.filter.return_value.first.return_value = MagicMock(id=123)
 
     def fake_set(db_, user_id, txn_id, category):
         if txn_id == 124:
@@ -82,6 +83,16 @@ def test_batch_rejects_over_100():
         json={"updates": [{"id": i, "category": "groceries"} for i in range(101)]},
     )
     assert response.status_code == 400
+
+
+def test_batch_route_reachable_with_empty_body():
+    # PATCH /transactions/categories must resolve to the batch handler (400
+    # naming "updates"), not be swallowed by an {id} route.
+    db = MagicMock()
+    client = _client(db)
+    response = client.patch("/api/external/transactions/categories", json={})
+    assert response.status_code == 400
+    assert "updates" in response.json()["detail"]
 
 
 def test_patch_hidden_roundtrip():
