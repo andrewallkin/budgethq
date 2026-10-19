@@ -85,6 +85,20 @@ def test_batch_rejects_over_100():
     assert response.status_code == 400
 
 
+def test_batch_skips_non_object_updates():
+    # A non-dict item must become a per-item error result, not a 500.
+    db = MagicMock()
+    client = _client(db)
+    response = client.patch(
+        "/api/external/transactions/categories",
+        json={"updates": ["oops", {"id": 123, "category": "groceries"}]},
+    )
+    body = response.json()
+    assert response.status_code == 200
+    assert body["results"][0] == {"id": None, "status": "error", "detail": "update must be an object"}
+    assert body["results"][1]["status"] == "ok"
+
+
 def test_batch_route_reachable_with_empty_body():
     # PATCH /transactions/categories must resolve to the batch handler (400
     # naming "updates"), not be swallowed by an {id} route.

@@ -112,6 +112,24 @@ async def get_external_budget_summary(
             .all()
         ]
 
+    # Mirror routers/budget.py: when no payslip-backed income exists, fall back
+    # to the budget's salary, with payslip fields unset.
+    if income is not None:
+        income_amount = income.amount
+        income_year = income.year
+        income_month = income.month
+        income_skipped_additional = bool(income.skipped_additional)
+    elif budget is not None and budget.salary:
+        income_amount = budget.salary
+        income_year = None
+        income_month = None
+        income_skipped_additional = False
+    else:
+        income_amount = None
+        income_year = None
+        income_month = None
+        income_skipped_additional = False
+
     start_day = (budget.budget_period_start_day if budget else 1) or 1
     # get_current_period(reference_date, start_day) — see budget_period.py:43
     from_date, to_date = get_current_period(date.today(), start_day)
@@ -123,10 +141,10 @@ async def get_external_budget_summary(
         expected_totals[item["type"]] = expected_totals.get(item["type"], 0.0) + item["amount"]
 
     return {
-        "income": income.amount if income else None,
-        "income_payslip_year": income.year if income else None,
-        "income_payslip_month": income.month if income else None,
-        "income_skipped_additional": bool(income.skipped_additional) if income else False,
+        "income": income_amount,
+        "income_payslip_year": income_year,
+        "income_payslip_month": income_month,
+        "income_skipped_additional": income_skipped_additional,
         "budget_period_start_day": start_day,
         "current_period": {"from_date": from_date.isoformat(), "to_date": to_date.isoformat()},
         "expected_totals": expected_totals,
@@ -241,6 +259,7 @@ async def get_external_transactions(
     status: Optional[str] = None,
     search: Optional[str] = None,
     account_id: Optional[int] = None,
+    account_ids: Optional[list[int]] = Query(None),
     include_transfers: bool = False,
     include_hidden: bool = False,
     limit: int = Query(100, ge=1, le=500),
@@ -248,11 +267,18 @@ async def get_external_transactions(
     current_user: models.User = Depends(auth.get_user_from_external_api_key),
     db: Session = Depends(database.get_db),
 ):
-    account_ids = [account_id] if account_id else None
+    # Prefer the repeatable account_ids list when both it and the legacy
+    # single account_id are given.
+    if account_ids:
+        effective_account_ids = account_ids
+    elif account_id:
+        effective_account_ids = [account_id]
+    else:
+        effective_account_ids = None
     return list_transactions(
         db, current_user.id, from_date=from_date, to_date=to_date, category=category,
         transaction_type=transaction_type, status=status, search=search,
-        account_ids=account_ids, include_transfers=include_transfers,
+        account_ids=effective_account_ids, include_transfers=include_transfers,
         include_hidden=include_hidden, limit=limit, offset=offset,
     )
 
@@ -300,7 +326,10 @@ async def patch_external_transaction_categories(
     if not updates or len(updates) > 100:
         raise HTTPException(status_code=400, detail="updates must contain 1..100 items")
     results = []
-    for update in updates[:100]:
+    for update in updates:
+        if not isinstance(update, dict):
+            results.append({"id": None, "status": "error", "detail": "update must be an object"})
+            continue
         txn_id = update.get("id")
         category = update.get("category")
         try:

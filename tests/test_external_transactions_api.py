@@ -112,3 +112,30 @@ def test_status_filter_param_accepted():
         response = client.get("/api/external/transactions", params={"status": "POSTED"})
     assert response.status_code == 200
     assert bq.call_args.kwargs.get("status") == "POSTED"
+
+
+def test_repeatable_account_ids_param_accepted():
+    db = MagicMock()
+    query = MagicMock()
+    query.limit.return_value.offset.return_value.all.return_value = []
+    query.count.return_value = 0
+    with patch("app.external_transactions.build_transactions_query", return_value=query) as bq:
+        client = _make_client(db, MagicMock(id=1))
+        response = client.get(
+            "/api/external/transactions",
+            params=[("account_ids", "1"), ("account_ids", "2")],
+        )
+    assert response.status_code == 200
+    assert bq.call_args.kwargs.get("account_ids") == [1, 2]
+
+
+def test_single_account_id_still_supported():
+    db = MagicMock()
+    query = MagicMock()
+    query.limit.return_value.offset.return_value.all.return_value = []
+    query.count.return_value = 0
+    with patch("app.external_transactions.build_transactions_query", return_value=query) as bq:
+        client = _make_client(db, MagicMock(id=1))
+        response = client.get("/api/external/transactions", params={"account_id": "7"})
+    assert response.status_code == 200
+    assert bq.call_args.kwargs.get("account_ids") == [7]

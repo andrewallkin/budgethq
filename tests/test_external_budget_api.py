@@ -49,6 +49,30 @@ class TestCategoriesEndpoint:
 
 
 class TestBudgetSummary:
+    def test_summary_falls_back_to_budget_salary_without_payslips(self):
+        user = MagicMock(id=1)
+        budget = MagicMock(id=5, budget_period_start_day=22, salary=48000.0)
+        budget_query = MagicMock()
+        budget_query.filter.return_value.first.return_value = budget
+        category_query = MagicMock()
+        category_query.filter.return_value.all.return_value = []
+
+        db = MagicMock()
+        db.query.side_effect = [budget_query, category_query]
+
+        with patch("app.routers.external_budget.monthly_budget_income_for_user", return_value=None), \
+             patch("app.routers.external_budget.get_current_period",
+                   return_value=(date(2026, 9, 22), date(2026, 10, 21))):
+            client = _make_client(db, user=user)
+            response = client.get("/api/external/budget/summary")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["income"] == 48000.0
+        assert body["income_payslip_year"] is None
+        assert body["income_payslip_month"] is None
+        assert body["income_skipped_additional"] is False
+
     def test_summary_splits_excluded_items(self):
         user = MagicMock(id=1)
         income = MagicMock(amount=45000.0, year=2026, month=9, skipped_additional=True)
