@@ -18,8 +18,10 @@ ENV PATH="/app/.venv/bin:$PATH"
 # Copy application code from backend directory
 COPY backend/app ./app
 
-# External API documentation (served at GET /api/external/investments/docs)
+# External API documentation (served at GET /api/external/investments/docs
+# and GET /api/external/budget-transactions/docs)
 COPY docs/external-investments-api.md ./docs/external-investments-api.md
+COPY docs/external-budget-transactions-api.md ./docs/external-budget-transactions-api.md
 
 # Install Chromium for Playwright automation
 RUN playwright install --with-deps chromium

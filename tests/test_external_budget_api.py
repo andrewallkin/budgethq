@@ -167,3 +167,13 @@ class TestBudgetComparison:
                 assert response.json()["detail"] == "period must be YYYY-MM", period
 
         assert not txn_query.called
+
+
+class TestDocsEndpoint:
+    def test_docs_endpoint_serves_markdown(self):
+        client = _make_client(MagicMock())
+        with patch("app.routers.external_budget._DOCS_CANDIDATES", (Path(__file__).resolve().parent.parent / "docs" / "external-budget-transactions-api.md",)):
+            response = client.get("/api/external/budget-transactions/docs")
+        assert response.status_code == 200
+        assert "text/markdown" in response.headers["content-type"]
+        assert "budgethq.andrewallkin.com" in response.text
