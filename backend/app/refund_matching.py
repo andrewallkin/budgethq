@@ -45,6 +45,8 @@ def find_link_candidates(db: Session, user_id: int, credit_id: int) -> list[dict
     credit_remaining = abs(credit.amount) - linked_by_credit.get(credit.id, 0.0)
     if credit_remaining <= 1e-9:
         return []
+    if credit.transaction_date is None:
+        return []
 
     window_start = credit.transaction_date - timedelta(days=WINDOW_DAYS)
     debits = (

@@ -35,6 +35,23 @@ def _client(db):
     return TestClient(app)
 
 
+def _readonly_auth_client(db):
+    """TestClient that uses the real auth dependencies (no overrides).
+
+    We patch auth._resolve_external_key in each test to simulate a read-only
+    key resolving to (user, "read"), so the 403 write-scope guard in
+    _external_key_dependency runs end-to-end.
+    """
+    app = FastAPI()
+    app.include_router(external_budget.router, prefix="/api")
+
+    def override_get_db():
+        yield db
+
+    app.dependency_overrides[database.get_db] = override_get_db
+    return TestClient(app)
+
+
 def _ok_payload(id_):
     return {"id": id_, "category": "groceries"}
 
@@ -206,3 +223,40 @@ class TestExternalApplyRules:
             client = _client(db)
             response = client.post("/api/external/transactions/apply-rules", json={})
         assert response.status_code == 400
+
+
+class TestExternalReadOnlyKey403:
+    """Endpoint-level read-only-key 403 coverage (real auth dependencies active).
+
+    We do not override the auth dependencies here: auth._resolve_external_key
+    is patched to return (user, "read") so the write-scope 403 guard in
+    _external_key_dependency runs end-to-end.
+    """
+
+    def test_patch_batch_categories_forbidden(self):
+        db = MagicMock()
+        user = MagicMock(id=1)
+        client = _readonly_auth_client(db)
+
+        with patch("app.auth._resolve_external_key", return_value=(user, "read")):
+            response = client.patch(
+                "/api/external/transactions/categories",
+                json={"updates": [{"id": 1, "category": "groceries"}]},
+                headers={"Authorization": "Bearer bhq_read_only_key_123456789"},
+            )
+
+        assert response.status_code == 403
+
+    def test_apply_rules_forbidden(self):
+        db = MagicMock()
+        user = MagicMock(id=1)
+        client = _readonly_auth_client(db)
+
+        with patch("app.auth._resolve_external_key", return_value=(user, "read")):
+            response = client.post(
+                "/api/external/transactions/apply-rules",
+                json={"dry_run": True},
+                headers={"Authorization": "Bearer bhq_read_only_key_123456789"},
+            )
+
+        assert response.status_code == 403

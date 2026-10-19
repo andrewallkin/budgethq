@@ -125,3 +125,21 @@ def test_non_offset_credit_rejected():
     with pytest.raises(HTTPException) as exc:
         refund_matching.find_link_candidates(db, 1, 9)
     assert exc.value.status_code == 400
+
+
+def test_credit_with_null_txn_date_returns_empty():
+    db = MagicMock()
+    link_q = MagicMock()
+    link_q.options.return_value.filter.return_value.all.return_value = []
+
+    credit = _Txn(9, "REFUND", 492.90, txn_type="CREDIT", category="refund", txn_date=None)
+
+    def bt_query():
+        q = MagicMock()
+        q.filter.return_value.first.return_value = credit
+        q.filter.return_value.all.return_value = []
+        return q
+
+    db.query.side_effect = lambda m: (bt_query() if m.__name__ == "BankTransaction" else link_q)
+
+    assert refund_matching.find_link_candidates(db, 1, 9) == []

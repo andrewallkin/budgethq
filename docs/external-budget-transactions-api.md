@@ -860,7 +860,7 @@ The API is deliberately scoped:
 
 | Setting | Effect on API |
 |---------|----------------|
-| Full-access API key (shown under **Investment API key** in Settings) | Required for all write endpoints; also works on every GET |
+| Full-access API key (shown under **Full-access API key** in Settings) | Required for all write endpoints; also works on every GET |
 | Read-only API key | GET endpoints only; writes return `403` |
 | Categorization rules (Banking) | What `apply-rules` executes — including the CREDIT-only `REFUND` rule and the separate `reimbursements` rule for `DISC MEMB` credits |
 | Show hidden toggle (Banking transactions list) | Unhide rows hidden via the API |
