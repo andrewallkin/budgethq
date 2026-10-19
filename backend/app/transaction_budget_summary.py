@@ -103,6 +103,8 @@ def compute_actual_spending(
     totals = _empty_category_totals()
 
     for txn in transactions:
+        if getattr(txn, "hidden", False):
+            continue
         if not txn.category:
             if txn.transaction_type == "DEBIT":
                 totals["uncategorized"] += abs(txn.amount)

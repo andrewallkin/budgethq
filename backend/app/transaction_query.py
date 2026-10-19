@@ -21,8 +21,15 @@ def build_transactions_query(
     search: Optional[str] = None,
     transaction_type: Optional[str] = None,
     include_transfers: bool = True,
+    include_hidden: bool = False,
+    status: Optional[str] = None,
 ) -> Query:
-    """Build a filtered BankTransaction query scoped to the user."""
+    """Build a filtered BankTransaction query scoped to the user.
+
+    Hidden transactions (e.g. hidden via the external bot/API) are excluded
+    unless ``include_hidden`` is True, so listings, Budget Analysis and PDF
+    exports all agree on what is visible.
+    """
     query = db.query(models.BankTransaction).filter(models.BankTransaction.user_id == user_id)
 
     if account_ids:
@@ -71,6 +78,12 @@ def build_transactions_query(
                 models.BankTransaction.category != "transfers",
             )
         )
+
+    if not include_hidden:
+        query = query.filter(models.BankTransaction.hidden.isnot(True))
+
+    if status:
+        query = query.filter(models.BankTransaction.status == status)
 
     return query.order_by(models.BankTransaction.transaction_date.desc())
 

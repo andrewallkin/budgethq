@@ -23,6 +23,7 @@ from ..investec_sync import _sync_user_accounts, _sync_account_transactions
 from ..logging_utils import redact_description
 from ..transaction_budget_summary import build_budget_comparison
 from ..transaction_categories import VALID_TRANSACTION_CATEGORIES, is_valid_category
+from ..transaction_mutations import set_transaction_category, set_transaction_hidden
 from ..rule_matching import get_matching_rule, matches_rule_pattern, rule_applies_to_type
 from ..transaction_links import (
     create_transaction_link,
@@ -114,6 +115,7 @@ class TransactionResponse(BaseModel):
     category: Optional[str]
     ai_category_confidence: Optional[float]
     user_corrected: bool
+    hidden: bool = False
     linked_credits: List[LinkedTransactionSummaryResponse] = []
     linked_debits: List[LinkedTransactionSummaryResponse] = []
     effective_amount: Optional[float] = None
@@ -138,6 +140,7 @@ class TransactionLinksResponse(BaseModel):
 
 class TransactionUpdate(BaseModel):
     category: Optional[str] = Field(None, description="One of: salary, side_income, investment_income, reimbursements, other_income, groceries, household_home, dining_takeaways, shopping_clothing, travel_accommodation, entertainment, health_wellness, bills, subscriptions, transport, savings, loan_repayment, irregular, refund, transfers, or empty string for uncategorized")
+    hidden: Optional[bool] = Field(None, description="Set true to hide this transaction from budgets and listings, false to unhide. Omitted leaves the flag untouched.")
 
 
 class CategorizationRuleCreate(BaseModel):
@@ -493,6 +496,7 @@ def serialize_transaction(
         category=transaction.category,
         ai_category_confidence=transaction.ai_category_confidence,
         user_corrected=transaction.user_corrected,
+        hidden=transaction.hidden,
         linked_credits=linked_credits,
         linked_debits=linked_debits,
         effective_amount=effective_amount,
@@ -526,6 +530,8 @@ async def list_transactions(
     to_date: Optional[str] = None,
     search: Optional[str] = None,
     transaction_type: Optional[str] = None,
+    include_hidden: bool = False,
+    status: Optional[str] = None,
     limit: int = 50,
     offset: int = 0,
     current_user: models.User = Depends(auth.get_current_user),
@@ -541,6 +547,8 @@ async def list_transactions(
     - to_date: End date (YYYY-MM-DD)
     - search: Search in transaction description (case-insensitive)
     - transaction_type: CREDIT or DEBIT
+    - include_hidden: Include transactions hidden via the external API (default False)
+    - status: Filter by transaction status (e.g. PENDING, POSTED)
     - limit: Max results (default 50)
     - offset: Pagination offset
     """
@@ -553,6 +561,8 @@ async def list_transactions(
         to_date=to_date,
         search=search,
         transaction_type=transaction_type,
+        include_hidden=include_hidden,
+        status=status,
     )
 
     transactions = query.limit(limit).offset(offset).all()
@@ -807,39 +817,39 @@ async def get_transaction(
 
 
 @router.patch("/transactions/{transaction_id}", response_model=TransactionResponse)
-async def update_transaction_category(
+async def update_transaction(
     transaction_id: int,
     update: TransactionUpdate,
     current_user: models.User = Depends(auth.get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Update transaction category (user correction)."""
+    """Update transaction category (user correction) and/or hidden flag.
+
+    Only fields present in the request body are applied. When both are
+    present, category is applied first, then hidden.
+    """
+    provided_fields = update.model_fields_set
+
+    if "category" in provided_fields:
+        set_transaction_category(
+            db, current_user.id, transaction_id, update.category
+        )
+
+    if "hidden" in provided_fields:
+        set_transaction_hidden(
+            db, current_user.id, transaction_id, bool(update.hidden)
+        )
+
+    if not ("category" in provided_fields or "hidden" in provided_fields):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Provide at least one of: category, hidden",
+        )
+
     transaction = db.query(models.BankTransaction).filter(
         models.BankTransaction.id == transaction_id,
         models.BankTransaction.user_id == current_user.id
     ).first()
-
-    if not transaction:
-        raise HTTPException(status_code=404, detail="Transaction not found")
-
-    # Validate category (allow None or empty string for uncategorized)
-    valid_categories = VALID_TRANSACTION_CATEGORIES
-
-    # Handle uncategorized (empty string or None)
-    if update.category == "" or update.category is None:
-        transaction.category = None
-    elif update.category in valid_categories:
-        transaction.category = update.category
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid category. Must be one of: {', '.join(valid_categories)} or empty for uncategorized"
-        )
-
-    transaction.user_corrected = True
-
-    db.commit()
-    db.refresh(transaction)
 
     links = get_links_for_transaction(db, current_user.id, transaction.id)
     links_by_debit, link_by_credit = _build_link_indexes(links)
