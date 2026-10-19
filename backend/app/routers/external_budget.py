@@ -28,6 +28,8 @@ from ..transaction_categories import (
     CATEGORY_LABELS,
     VALID_TRANSACTION_CATEGORIES,
 )
+from ..transaction_links import get_links_for_transaction
+from ..transaction_mutations import set_transaction_category, set_transaction_hidden
 from ..transaction_query import build_transactions_query
 
 router = APIRouter(prefix="/external", tags=["external"])
@@ -37,7 +39,9 @@ router = APIRouter(prefix="/external", tags=["external"])
 # {transaction_id} path param will shadow "link-candidates".
 #
 # (Transaction read routes are registered at the end of this module, in the
-# required order: link-candidates, list, then {transaction_id}.)
+# required order: link-candidates, list, then {transaction_id}. Write PATCH
+# routes follow the reads, with the batch /transactions/categories route
+# registered above the /transactions/{transaction_id}/... PATCH routes.)
 
 _DOCS_CANDIDATES = (
     Path(__file__).resolve().parents[2] / "docs" / "external-budget-transactions-api.md",
@@ -256,3 +260,85 @@ async def get_external_transaction(
     db: Session = Depends(database.get_db),
 ):
     return get_transaction(db, current_user.id, transaction_id)
+
+
+# --- External write routes (classify single + batch, hide) ------------------
+# Ordering constraint: PATCH /transactions/categories (batch) MUST stay
+# registered above the /transactions/{transaction_id}/... PATCH routes below.
+# (Task 12 adds POST /transaction-links + DELETE /transaction-links/{link_id};
+# Task 13 adds POST /transactions/apply-rules — keep writes in this block.)
+
+
+async def _serialized_after_mutation(db, user_id, transaction_id) -> dict:
+    txn = (
+        db.query(models.BankTransaction)
+        .filter(
+            models.BankTransaction.id == transaction_id,
+            models.BankTransaction.user_id == user_id,
+        )
+        .first()
+    )
+    links = get_links_for_transaction(db, user_id, transaction_id)
+    return transaction_payload(txn, links)
+
+
+@router.patch("/transactions/categories")
+async def patch_external_transaction_categories(
+    body: dict,
+    current_user: models.User = Depends(auth.get_user_from_external_api_key_write),
+    db: Session = Depends(database.get_db),
+):
+    """Batch classification. Per-item results; max 100 updates per call."""
+    updates = (body or {}).get("updates") or []
+    if not updates or len(updates) > 100:
+        raise HTTPException(status_code=400, detail="updates must contain 1..100 items")
+    results = []
+    for update in updates[:100]:
+        txn_id = update.get("id")
+        category = update.get("category")
+        try:
+            set_transaction_category(db, current_user.id, txn_id, category)
+            txn = (
+                db.query(models.BankTransaction)
+                .filter(
+                    models.BankTransaction.id == txn_id,
+                    models.BankTransaction.user_id == current_user.id,
+                )
+                .first()
+            )
+            links = get_links_for_transaction(db, current_user.id, txn_id)
+            results.append({
+                "id": txn_id,
+                "status": "ok",
+                "transaction": transaction_payload(txn, links),
+            })
+        except HTTPException as exc:
+            db.rollback()
+            results.append({"id": txn_id, "status": "error", "detail": str(exc.detail)})
+    return {"results": results}
+
+
+@router.patch("/transactions/{transaction_id}/category")
+async def patch_external_transaction_category(
+    transaction_id: int,
+    body: dict,
+    current_user: models.User = Depends(auth.get_user_from_external_api_key_write),
+    db: Session = Depends(database.get_db),
+):
+    category = (body or {}).get("category")
+    set_transaction_category(db, current_user.id, transaction_id, category)
+    return await _serialized_after_mutation(db, current_user.id, transaction_id)
+
+
+@router.patch("/transactions/{transaction_id}/hidden")
+async def patch_external_transaction_hidden(
+    transaction_id: int,
+    body: dict,
+    current_user: models.User = Depends(auth.get_user_from_external_api_key_write),
+    db: Session = Depends(database.get_db),
+):
+    hidden = (body or {}).get("hidden")
+    if not isinstance(hidden, bool):
+        raise HTTPException(status_code=400, detail="hidden must be true or false")
+    set_transaction_hidden(db, current_user.id, transaction_id, hidden)
+    return await _serialized_after_mutation(db, current_user.id, transaction_id)
