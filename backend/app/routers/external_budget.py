@@ -13,7 +13,13 @@ from sqlalchemy.orm import Session
 
 from .. import auth, database, models
 from ..budget_period import get_current_period, get_period_dates_for_end_month
+from ..external_transactions import (
+    get_transaction,
+    list_transactions,
+    transaction_payload,
+)
 from ..payslip_budget import monthly_budget_income_for_user
+from ..refund_matching import find_link_candidates
 from ..transaction_budget_summary import build_budget_comparison
 from ..transaction_categories import (
     BUDGET_LINKABLE_CATEGORIES,
@@ -26,12 +32,12 @@ from ..transaction_query import build_transactions_query
 
 router = APIRouter(prefix="/external", tags=["external"])
 
-# Task 10 ordering constraint: the future GET /transactions/link-candidates
-# route MUST be registered above any later /transactions/{transaction_id}
-# routes added to this router, or the {transaction_id} path param will
-# shadow "link-candidates".
+# Task 10 ordering constraint: GET /transactions/link-candidates MUST stay
+# registered above the /transactions/{transaction_id} routes, or the
+# {transaction_id} path param will shadow "link-candidates".
 #
-# (Task 10 will append transaction routes here.)
+# (Transaction read routes are registered at the end of this module, in the
+# required order: link-candidates, list, then {transaction_id}.)
 
 _DOCS_CANDIDATES = (
     Path(__file__).resolve().parents[2] / "docs" / "external-budget-transactions-api.md",
@@ -193,3 +199,60 @@ async def get_external_budget_docs():
                 media_type="text/markdown; charset=utf-8",
             )
     raise HTTPException(status_code=404, detail="External budget API documentation not found")
+
+
+@router.get("/transactions/link-candidates")
+async def get_external_link_candidates(
+    credit_id: int = Query(...),
+    current_user: models.User = Depends(auth.get_user_from_external_api_key),
+    db: Session = Depends(database.get_db),
+):
+    """Debit candidates that a refund/reimbursement credit could offset."""
+    candidates = find_link_candidates(db, current_user.id, credit_id)
+    return {
+        "candidates": [
+            {
+                **transaction_payload(c["transaction"]),
+                "match_score": c["match_score"],
+                "match_reasons": c["match_reasons"],
+                "debit_remaining": c["debit_remaining"],
+            }
+            for c in candidates
+        ]
+    }
+
+
+@router.get("/transactions")
+async def get_external_transactions(
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    category: Optional[list[str]] = Query(None),
+    transaction_type: Optional[str] = None,
+    status: Optional[str] = None,
+    search: Optional[str] = None,
+    account_id: Optional[int] = None,
+    include_transfers: bool = False,
+    include_hidden: bool = False,
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    current_user: models.User = Depends(auth.get_user_from_external_api_key),
+    db: Session = Depends(database.get_db),
+):
+    account_ids = [account_id] if account_id else None
+    return list_transactions(
+        db, current_user.id, from_date=from_date, to_date=to_date, category=category,
+        transaction_type=transaction_type, status=status, search=search,
+        account_ids=account_ids, include_transfers=include_transfers,
+        include_hidden=include_hidden, limit=limit, offset=offset,
+    )
+
+
+# NOTE: /transactions/{transaction_id} routes MUST stay below the literal
+# "link-candidates" route above (FastAPI registration order).
+@router.get("/transactions/{transaction_id}")
+async def get_external_transaction(
+    transaction_id: int,
+    current_user: models.User = Depends(auth.get_user_from_external_api_key),
+    db: Session = Depends(database.get_db),
+):
+    return get_transaction(db, current_user.id, transaction_id)
