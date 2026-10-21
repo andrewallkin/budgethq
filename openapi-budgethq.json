@@ -7392,6 +7392,28 @@
         }
       }
     },
+    "/api/external/manual-accounts/docs": {
+      "get": {
+        "tags": [
+          "external"
+        ],
+        "summary": "Get External Manual Accounts Docs",
+        "description": "Markdown documentation for the external manual accounts API.",
+        "operationId": "get_external_manual_accounts_docs_api_external_manual_accounts_docs_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/external/manual-accounts": {
       "get": {
         "tags": [
