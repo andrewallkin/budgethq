@@ -7391,6 +7391,174 @@
           }
         }
       }
+    },
+    "/api/external/manual-accounts": {
+      "get": {
+        "tags": [
+          "external"
+        ],
+        "summary": "List External Manual Accounts",
+        "description": "List all manual bank accounts for the key's owner.",
+        "operationId": "list_external_manual_accounts_api_external_manual_accounts_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "external"
+        ],
+        "summary": "Create External Manual Account",
+        "description": "Create a new manual bank account.",
+        "operationId": "create_external_manual_account_api_external_manual_accounts_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExternalManualAccountCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/external/manual-accounts/{account_id}": {
+      "get": {
+        "tags": [
+          "external"
+        ],
+        "summary": "Get External Manual Account",
+        "description": "Get a single manual bank account by id.",
+        "operationId": "get_external_manual_account_api_external_manual_accounts__account_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "account_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Account Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "external"
+        ],
+        "summary": "Update External Manual Account",
+        "description": "Update a manual bank account's balance.",
+        "operationId": "update_external_manual_account_api_external_manual_accounts__account_id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "account_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Account Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExternalManualAccountUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -8566,6 +8734,42 @@
         },
         "type": "object",
         "title": "ExternalLinkCreate"
+      },
+      "ExternalManualAccountCreate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "balance": {
+            "type": "number",
+            "title": "Balance",
+            "default": 0
+          },
+          "is_emergency_savings": {
+            "type": "boolean",
+            "title": "Is Emergency Savings",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "ExternalManualAccountCreate"
+      },
+      "ExternalManualAccountUpdate": {
+        "properties": {
+          "balance": {
+            "type": "number",
+            "title": "Balance"
+          }
+        },
+        "type": "object",
+        "required": [
+          "balance"
+        ],
+        "title": "ExternalManualAccountUpdate"
       },
       "FinancialYearSummary": {
         "properties": {
