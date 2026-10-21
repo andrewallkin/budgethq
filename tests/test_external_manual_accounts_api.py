@@ -204,14 +204,18 @@ def _route_methods(path):
 def test_write_routes_require_full_access_key_dependency():
     write_dep = auth.get_user_from_external_api_key_write
 
-    post_routes = _routes_for_path("/external/manual-accounts")
-    post_routes = [r for r in post_routes if "POST" in r.methods]
+    def _dep_calls(route):
+        # Parameter-level Depends() live in dependant.dependencies, not route.dependencies.
+        return [d.call for d in route.dependant.dependencies]
+
+    post_routes = [r for r in _routes_for_path("/external/manual-accounts")
+                   if "POST" in r.methods]
     patch_routes = [r for r in _routes_for_path("/external/manual-accounts/{account_id}")
                     if "PATCH" in r.methods]
 
     assert post_routes and patch_routes
-    assert write_dep in post_routes[0].dependencies
-    assert write_dep in patch_routes[0].dependencies
+    assert write_dep in _dep_calls(post_routes[0])
+    assert write_dep in _dep_calls(patch_routes[0])
 
     get_routes = [r for r in _routes_for_path("/external/manual-accounts")
                   if "GET" in r.methods]
@@ -219,9 +223,9 @@ def test_write_routes_require_full_access_key_dependency():
                   if "GET" in r.methods]
 
     assert get_routes and get_single
-    assert write_dep not in get_routes[0].dependencies
-    assert write_dep not in get_single[0].dependencies
-    assert auth.get_user_from_external_api_key in get_routes[0].dependencies
+    assert write_dep not in _dep_calls(get_routes[0])
+    assert write_dep not in _dep_calls(get_single[0])
+    assert auth.get_user_from_external_api_key in _dep_calls(get_routes[0])
 
 
 def test_docs_route_serves_markdown():
