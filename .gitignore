@@ -59,5 +59,7 @@ docs/superpowers/
 !CLAUDE.md
 !docs/external-investments-api.md
 !docs/external-budget-transactions-api.md
+!docs/external-manual-accounts-api.md
 
-.DS_Store.worktrees/
+.DS_Store
+.worktrees/

@@ -411,3 +411,4 @@ Persist `since` from each successful note call and pass it on the next run.
 Key management UI: **Settings → External API key**.
 
 Related: [External Budget & Transactions API](external-budget-transactions-api.md) — budget/transactions endpoints for external tools.
+Related: [External Manual Accounts API](external-manual-accounts-api.md) — create manual bank accounts and keep their balances current.
