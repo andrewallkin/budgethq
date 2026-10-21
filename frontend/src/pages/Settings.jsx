@@ -1177,6 +1177,15 @@ export default function Settings() {
                             >
                                 View Budget API docs
                             </a>
+                            {' · '}
+                            <a
+                                href="/api/external/manual-accounts/docs"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[var(--paper-ink)] underline decoration-[var(--paper-line)] underline-offset-2 hover:decoration-[var(--paper-ink)]"
+                            >
+                                View Manual Accounts docs
+                            </a>
                             .
                         </p>
 

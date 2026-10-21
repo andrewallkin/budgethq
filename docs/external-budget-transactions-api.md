@@ -852,7 +852,7 @@ The API is deliberately scoped:
 - **No pending ingestion** — the API reads what the scheduled Investec sync has already stored; it cannot trigger a sync or ingest new transactions.
 - **Manual bank accounts have no transactions** — they are balance-only, so only Investec-linked accounts produce rows here.
 - **No pagination guarantees beyond `limit`/`offset`** — no cursors or next-page links; paginate over `from_date`/`to_date` windows.
-- No CSV/PDF export, no account management (connect/disconnect), no multi-user access — data is scoped to the key's owner.
+- No CSV/PDF export, no Investec account management (connect/disconnect), no multi-user access — data is scoped to the key's owner. Manual bank accounts (create and balance updates, no delete) are managed via the separate [External Manual Accounts API](external-manual-accounts-api.md).
 
 ---
 

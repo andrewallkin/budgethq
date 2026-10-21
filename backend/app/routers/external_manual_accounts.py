@@ -6,13 +6,33 @@ full-access key. Router pattern mirrors routers/external_budget.py.
 Deliberately excludes DELETE — external consumers must not be able to
 remove the user's manual accounts.
 """
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from .. import auth, database, models
 
 router = APIRouter(prefix="/external/manual-accounts", tags=["external"])
+
+_DOCS_CANDIDATES = (
+    Path(__file__).resolve().parents[2] / "docs" / "external-manual-accounts-api.md",
+    Path(__file__).resolve().parents[3] / "docs" / "external-manual-accounts-api.md",
+)
+
+
+@router.get("/docs", response_class=PlainTextResponse)
+async def get_external_manual_accounts_docs():
+    """Markdown documentation for the external manual accounts API."""
+    for path in _DOCS_CANDIDATES:
+        if path.is_file():
+            return PlainTextResponse(
+                path.read_text(encoding="utf-8"),
+                media_type="text/markdown; charset=utf-8",
+            )
+    raise HTTPException(status_code=404, detail="External manual accounts API documentation not found")
 
 
 def _serialize(account: models.ManualBankAccount) -> dict:
