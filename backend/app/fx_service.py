@@ -24,13 +24,14 @@ from __future__ import annotations
 import base64
 import json
 import logging
-import os
 import threading
 import time
 from dataclasses import dataclass
 from typing import Any, Optional
 
 from google.oauth2.service_account import Credentials
+
+from .config import get_settings
 from googleapiclient.discovery import build
 
 logger = logging.getLogger(__name__)
@@ -61,23 +62,23 @@ class FxRatesResult:
 
 
 def investments_fx_base_currency() -> str:
-    return (os.getenv("INVESTMENTS_FX_BASE_CURRENCY") or "ZAR").strip().upper()
+    return (get_settings().investments_fx_base_currency or "ZAR").strip().upper()
 
 
 def _fx_ttl_seconds() -> int:
     try:
-        return max(60, int(os.getenv("INVESTMENTS_FX_CACHE_SECONDS") or "900"))
+        return max(60, int(get_settings().investments_fx_cache_seconds))
     except ValueError:
         return 900
 
 
 def _fx_spreadsheet_id() -> Optional[str]:
-    sid = os.getenv("GOOGLE_SPREADSHEET_ID")
+    sid = get_settings().google_spreadsheet_id
     return sid.strip() if sid else None
 
 
 def _fx_range() -> str:
-    return (os.getenv("GOOGLE_FX_RANGE") or "BudgetHQ_FX!A2:B").strip()
+    return (get_settings().google_fx_range or "BudgetHQ_FX!A2:B").strip()
 
 
 def _fx_sheet_title() -> str:
@@ -180,7 +181,7 @@ def ensure_fx_rates_tab(sheets_api_service, spreadsheet_id: str) -> None:
 
 
 def _build_sheets_client():
-    credentials_b64 = os.getenv("GCP_SERVICE_ACCOUNT_CREDENTIALS")
+    credentials_b64 = get_settings().gcp_service_account_credentials
     if not credentials_b64:
         logger.warning("FX: GCP_SERVICE_ACCOUNT_CREDENTIALS not set")
         return None
@@ -262,7 +263,7 @@ def get_fx_rates_cached(force_refresh: bool = False) -> FxRatesResult:
                     rates=dict(_cache_rates),
                     fetched_at_unix=_cache_fetched_at,
                     source="google_sheets",
-                    configured=bool(_fx_spreadsheet_id() and os.getenv("GCP_SERVICE_ACCOUNT_CREDENTIALS")),
+                    configured=bool(_fx_spreadsheet_id() and get_settings().gcp_service_account_credentials),
                     error_message=_cache_error,
                 )
 
@@ -287,7 +288,7 @@ def get_fx_rates_cached(force_refresh: bool = False) -> FxRatesResult:
                 rates={},
                 fetched_at_unix=None,
                 source="google_sheets",
-                configured=bool(_fx_spreadsheet_id() and os.getenv("GCP_SERVICE_ACCOUNT_CREDENTIALS")),
+                configured=bool(_fx_spreadsheet_id() and get_settings().gcp_service_account_credentials),
                 error_message=err,
             )
 

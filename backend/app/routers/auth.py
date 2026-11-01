@@ -53,7 +53,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.get("/config", response_model=AuthConfig)
 def get_auth_config():
-    return AuthConfig(restrict_authorized_users=auth.is_authorized_users_restriction_enabled())
+    return AuthConfig(restrict_authorized_users=bool(auth.get_authorized_users_list()))
 
 @router.post("/register", response_model=Token)
 def register(user: UserCreate, db: Session = Depends(database.get_db)):

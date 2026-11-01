@@ -24,7 +24,6 @@ help:
 	@echo ""
 	@echo "Utilities:"
 	@echo "  make clean           - Remove containers and images"
-	@echo "  make openapi         - Regenerate openapi-budgethq.json (API schema snapshot)"
 	@echo ""
 	@echo "Examples:"
 	@echo "  make dev-up"
@@ -85,9 +84,6 @@ prod-up:
 prod-down:
 	docker compose down
 # Utilities
-openapi:
-	uv run python scripts/generate_openapi.py
-
 clean:
 	docker compose -f docker-compose.dev.yml down -v
 	docker system prune -af

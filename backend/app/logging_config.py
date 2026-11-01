@@ -6,6 +6,8 @@ from contextvars import ContextVar
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 
+from .config import get_settings
+
 # Context vars for request-scoped log metadata (set by middleware)
 request_id_var: ContextVar[str | None] = ContextVar("request_id", default=None)
 user_id_var: ContextVar[str | None] = ContextVar("user_id", default=None)
@@ -50,14 +52,14 @@ def configure_logging():
     Includes structured logging, file rotation, and appropriate log levels for web service.
     Use LOG_FORMAT=json for production; human-readable default for development.
     """
-    log_dir = os.getenv("LOG_DIR")
+    log_dir = get_settings().log_dir
     if not log_dir:
         # Use ./logs for local dev, /app/logs in Docker
         log_dir = "logs" if not os.path.exists("/app") else "/app/logs"
     log_dir = os.path.abspath(log_dir)
     os.makedirs(log_dir, exist_ok=True)
 
-    use_json = os.getenv("LOG_FORMAT", "").lower() == "json"
+    use_json = (get_settings().log_format or "").lower() == "json"
 
     # Human-readable formatters
     console_formatter = logging.Formatter(

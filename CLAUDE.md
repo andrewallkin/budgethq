@@ -49,7 +49,6 @@ Prefer static inspection, targeted code reading, and editor diagnostics. If veri
 - `backend/alembic/versions/` contains database migrations.
 - `tests/` contains Python tests.
 - `docs/` contains product behaviour and UI conventions.
-- `openapi.json` is the checked-in API schema snapshot.
 
 ## Frontend Conventions
 

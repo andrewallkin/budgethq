@@ -12,6 +12,8 @@ from typing import Optional
 from google.cloud import storage
 from io import BytesIO
 
+from .config import get_settings
+
 # Initialize logger
 logger = logging.getLogger(__name__)
 
@@ -21,13 +23,13 @@ class PayslipGCSService:
 
     def __init__(self):
         self.client: Optional[storage.Client] = None
-        self.bucket_name = os.getenv("GCS_PAYSLIPS_BUCKET_NAME")
+        self.bucket_name = get_settings().gcs_payslips_bucket_name
         self._temp_credentials_file: Optional[str] = None
         self._initialize_service()
 
     def _initialize_service(self):
         """Initialize the Google Cloud Storage client using base64-encoded credentials."""
-        credentials_b64 = os.getenv("GCP_SERVICE_ACCOUNT_CREDENTIALS")
+        credentials_b64 = get_settings().gcp_service_account_credentials
 
         if not credentials_b64:
             logger.warning("GCP_SERVICE_ACCOUNT_CREDENTIALS environment variable not set")
