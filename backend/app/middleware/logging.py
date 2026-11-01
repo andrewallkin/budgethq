@@ -6,11 +6,12 @@ Disabled by default; set REQUEST_LOGGING=true to enable.
 """
 
 import logging
-import os
 import time
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
+
+from ..config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
     """Log request method, path, status, duration. Optional via REQUEST_LOGGING env."""
 
     async def dispatch(self, request: Request, call_next):
-        if os.getenv("REQUEST_LOGGING", "").lower() not in ("true", "1", "yes"):
+        if (get_settings().request_logging or "").lower() not in ("true", "1", "yes"):
             return await call_next(request)
 
         start = time.monotonic()

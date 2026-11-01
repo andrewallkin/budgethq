@@ -4,6 +4,8 @@ from cryptography.fernet import Fernet
 import os
 import base64
 
+from .config import get_settings
+
 def get_sast_now():
     """
     Returns the current time in South Africa Standard Time (UTC+2).
@@ -54,10 +56,10 @@ def format_sa_financial_year_label(financial_year_start: int) -> str:
 
 def get_encryption_key() -> bytes:
     """
-    Get or generate encryption key from environment variable.
+    Get the Fernet encryption key from settings.
     The key should be a base64-encoded Fernet key.
     """
-    key_str = os.getenv("ENCRYPTION_KEY")
+    key_str = get_settings().encryption_key
     if not key_str:
         raise ValueError("ENCRYPTION_KEY environment variable not set")
     return key_str.encode()

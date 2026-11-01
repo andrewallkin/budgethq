@@ -4,13 +4,13 @@ Handles reading prices and managing ETF entries in the Google Sheet.
 """
 
 import logging
-import os
 import json
 import base64
 from typing import List, Dict, Optional
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+from .config import get_settings
 from .database import get_db
 from . import models
 from .portfolio_service import ensure_default_tfsa_portfolio
@@ -29,7 +29,7 @@ class GoogleSheetsService:
 
     def __init__(self, user_id: int, portfolio_id: Optional[int] = None):
         self.service = None
-        self.spreadsheet_id = os.getenv('GOOGLE_SPREADSHEET_ID')
+        self.spreadsheet_id = get_settings().google_spreadsheet_id
         self.user_id = user_id
         self.portfolio_id = portfolio_id
         self._sheet_name = None  # Lazy-loaded
@@ -137,7 +137,7 @@ class GoogleSheetsService:
     
     def _initialize_service(self):
         """Initialize the Google Sheets API service using base64-encoded credentials."""
-        credentials_b64 = os.getenv('GCP_SERVICE_ACCOUNT_CREDENTIALS')
+        credentials_b64 = get_settings().gcp_service_account_credentials
         
         if not credentials_b64:
             logger.warning("GCP_SERVICE_ACCOUNT_CREDENTIALS environment variable not set")

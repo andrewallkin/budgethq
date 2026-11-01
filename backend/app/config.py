@@ -1,30 +1,67 @@
-import os
-from dataclasses import dataclass
 from functools import lru_cache
 
-from dotenv import load_dotenv
+from pydantic import field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-@dataclass(frozen=True)
-class Settings:
-    database_url: str
-    postgres_host: str | None
-    postgres_port: str | None
-    postgres_db: str | None
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    # database
+    postgres_user: str
+    postgres_password: str
+    postgres_db: str
+    postgres_host: str = "postgres"
+    postgres_port: int = 5432
+
+    # auth
+    jwt_secret_key: str
+    jwt_access_token_expire_minutes: int = 60
+    authorized_users: str = ""
+
+    # cors
+    cors_origins: str = "http://localhost:3000,http://localhost:5173"
+
+    # secrets at rest (Fernet; required to store OpenAI/Investec credentials)
+    encryption_key: str = ""
+
+    # google sheets / gcs (optional)
+    gcp_service_account_credentials: str = ""
+    google_spreadsheet_id: str | None = None
+    google_fx_range: str = "BudgetHQ_FX!A2:B"
+    investments_fx_base_currency: str = "ZAR"
+    investments_fx_cache_seconds: int = 900
+    gcs_payslips_bucket_name: str | None = None
+
+    # logging (optional)
+    log_dir: str | None = None
+    log_format: str = ""
+    request_logging: str = ""
+
+    @field_validator("investments_fx_cache_seconds", mode="before")
+    @classmethod
+    def _fx_cache_seconds_fallback(cls, value):
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return 900
+
+    @property
+    def database_url(self) -> str:
+        return (
+            f"postgresql://{self.postgres_user}:{self.postgres_password}"
+            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+        )
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def authorized_users_list(self) -> list[str]:
+        return [u.strip() for u in self.authorized_users.split(",") if u.strip()]
 
 
 @lru_cache
 def get_settings() -> Settings:
-    load_dotenv()
-    user = os.getenv("POSTGRES_USER")
-    password = os.getenv("POSTGRES_PASSWORD")
-    port = os.getenv("POSTGRES_PORT")
-    name = os.getenv("POSTGRES_DB")
-    host = os.getenv("POSTGRES_HOST")
-    database_url = f"postgresql://{user}:{password}@{host}:{port}/{name}"
-    return Settings(
-        database_url=database_url,
-        postgres_host=host,
-        postgres_port=port,
-        postgres_db=name,
-    )
+    return Settings()
