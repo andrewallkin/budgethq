@@ -1,8 +1,9 @@
 """Monthly budget income from payslips.
 
-If the latest payslip has additional income (bonus, backpay), skip it and use
-the most recent payslip that does not. A once-a-year bonus should not change
-how the month is budgeted, and SARS does not split PAYE in a way we can undo.
+If the latest payslip has bonus, backpay, or commission, skip it and use the
+most recent payslip that does not. An expense claim is not a bonus month.
+A once-a-year bonus should not change how the month is budgeted, and SARS
+does not split PAYE in a way we can undo.
 """
 
 from dataclasses import dataclass
