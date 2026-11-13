@@ -1015,7 +1015,7 @@ export default function BankTransactions() {
                 open={showBulkCategorizeModal}
                 onClose={() => setShowBulkCategorizeModal(false)}
                 title="Categorize all with AI?"
-                description="This uses your OpenAI key on every uncategorized transaction and may incur costs."
+                description="This uses your OpenRouter key on every uncategorized transaction and may incur costs."
                 disableClose={bulkCategorizing}
                 footer={
                     <>

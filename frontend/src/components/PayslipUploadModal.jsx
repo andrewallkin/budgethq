@@ -9,7 +9,7 @@ const btnPrimary = `${btnBase} bg-[var(--paper-ink)] text-[var(--paper-card)] ho
 const btnGhost = `${btnBase} border border-[var(--paper-line)] bg-[var(--paper-card)] text-[var(--paper-ink)] hover:bg-[var(--paper-canvas)]`
 const fieldInput = 'w-full rounded-md border border-[var(--paper-line)] bg-[var(--paper-card)] px-3 py-2.5 text-sm text-[var(--paper-ink)] outline-none transition-colors focus:ring-2 focus:ring-[var(--paper-accent)]/20'
 
-export default function PayslipUploadModal({ isOpen, onClose, onSuccess, initialMonth, initialYear, isUpdate = false, hasOpenAIKey = true }) {
+export default function PayslipUploadModal({ isOpen, onClose, onSuccess, initialMonth, initialYear, isUpdate = false, hasOpenRouterKey = true }) {
     const [file, setFile] = useState(null)
     const [month, setMonth] = useState(initialMonth || new Date().getMonth() + 1)
     const [year, setYear] = useState(initialYear || new Date().getFullYear())
@@ -214,17 +214,17 @@ export default function PayslipUploadModal({ isOpen, onClose, onSuccess, initial
                         </div>
                     </div>
 
-                    {!hasOpenAIKey ? (
+                    {!hasOpenRouterKey ? (
                         <div className="flex flex-col items-center gap-4 py-6 text-center">
                             <div className="rounded-full border border-[var(--paper-line)] bg-[var(--paper-canvas)] p-4">
                                 <KeyRound className="h-10 w-10 text-[var(--paper-muted)]" aria-hidden="true" />
                             </div>
                             <div>
                                 <h3 className="mb-1 text-base font-semibold text-[var(--paper-ink)]">
-                                    OpenAI API Key Required
+                                    OpenRouter API Key Required
                                 </h3>
                                 <p className="max-w-sm text-sm text-[var(--paper-muted)]">
-                                    Automatic payslip extraction uses the <strong className="font-medium text-[var(--paper-ink)]">OpenAI API</strong> to read and interpret your payslip PDF. You need to add your OpenAI API key before you can use this feature.
+                                    Automatic payslip extraction uses your <strong className="font-medium text-[var(--paper-ink)]">OpenRouter</strong> key to read the payslip PDF. Add that key in Settings before using this feature.
                                 </p>
                             </div>
                             <a href="/settings" className={btnPrimary}>
@@ -233,12 +233,12 @@ export default function PayslipUploadModal({ isOpen, onClose, onSuccess, initial
                             <p className="text-xs text-[var(--paper-muted)]">
                                 You can get an API key at{' '}
                                 <a
-                                    href="https://platform.openai.com/api-keys"
+                                    href="https://openrouter.ai/keys"
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="text-[var(--paper-ink)] underline decoration-[var(--paper-line)] underline-offset-2 hover:decoration-[var(--paper-ink)]"
                                 >
-                                    platform.openai.com/api-keys
+                                    openrouter.ai/keys
                                 </a>
                             </p>
                         </div>
@@ -338,7 +338,7 @@ export default function PayslipUploadModal({ isOpen, onClose, onSuccess, initial
                                         <li>Job title and company name</li>
                                         <li>Gross salary and net pay</li>
                                         <li>PAYE and UIF deductions</li>
-                                        <li>Company contributions and personal deductions</li>
+                                        <li>Company contributions and other deductions</li>
                                         <li>Additional income (bonuses, claims)</li>
                                     </ul>
                                     <p className="mt-2 text-sm text-[var(--paper-muted)]">
@@ -358,9 +358,9 @@ export default function PayslipUploadModal({ isOpen, onClose, onSuccess, initial
                         disabled={uploading}
                         className={btnGhost}
                     >
-                        {hasOpenAIKey ? 'Cancel' : 'Close'}
+                        {hasOpenRouterKey ? 'Cancel' : 'Close'}
                     </button>
-                    {hasOpenAIKey && (
+                    {hasOpenRouterKey && (
                         <button
                             type="button"
                             onClick={handleUpload}

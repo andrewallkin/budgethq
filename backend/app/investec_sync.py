@@ -492,8 +492,8 @@ def _parse_date(date_str: str) -> datetime:
 
 def _categorize_new_transaction(db: Session, user: models.User, api_txn: dict) -> dict:
     """Categorize a newly synced transaction"""
-    openai_key = decrypt_api_key(user.openai_api_key)
-    categorizer = TransactionCategorizer(openai_key, db)
+    api_key = decrypt_api_key(user.openrouter_api_key)
+    categorizer = TransactionCategorizer(api_key, db)
 
     transaction_dict = {
         'description': api_txn.get('description', ''),

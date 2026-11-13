@@ -28,7 +28,7 @@ class TestMonthlyBudgetIncome:
                 year=2026,
                 month=8,
                 net_pay=114157.51,
-                additional_income=[SimpleNamespace(amount=116671.25)],
+                additional_income=[SimpleNamespace(description="Annual Bonus", amount=116671.25)],
             ),
             _payslip(year=2026, month=7, net_pay=45231.10, additional_income=[]),
         ])
@@ -39,8 +39,8 @@ class TestMonthlyBudgetIncome:
 
     def test_skips_multiple_bonus_months(self):
         income = monthly_budget_income([
-            _payslip(year=2026, month=8, net_pay=100000.0, additional_income=[SimpleNamespace(amount=1)]),
-            _payslip(year=2026, month=7, net_pay=90000.0, additional_income=[SimpleNamespace(amount=1)]),
+            _payslip(year=2026, month=8, net_pay=100000.0, additional_income=[SimpleNamespace(description="Bonus", amount=1)]),
+            _payslip(year=2026, month=7, net_pay=90000.0, additional_income=[SimpleNamespace(description="Backpay", amount=1)]),
             _payslip(year=2026, month=6, net_pay=40000.0, additional_income=[]),
         ])
         assert income.amount == 40000.0
@@ -48,9 +48,23 @@ class TestMonthlyBudgetIncome:
 
     def test_all_bonus_months_fall_back_to_latest(self):
         income = monthly_budget_income([
-            _payslip(year=2026, month=8, net_pay=114157.51, additional_income=[SimpleNamespace(amount=1)]),
+            _payslip(year=2026, month=8, net_pay=114157.51, additional_income=[SimpleNamespace(description="Commission", amount=1)]),
         ])
         assert income.amount == 114157.51
+        assert income.skipped_additional is False
+
+    def test_expense_claim_does_not_skip_the_month(self):
+        income = monthly_budget_income([
+            _payslip(
+                year=2026,
+                month=5,
+                net_pay=44856.11,
+                additional_income=[SimpleNamespace(description="Expense Claims", amount=18415.35)],
+            ),
+            _payslip(year=2026, month=4, net_pay=40000.0, additional_income=[]),
+        ])
+        assert income.amount == 44856.11
+        assert income.month == 5
         assert income.skipped_additional is False
 
     def test_empty(self):

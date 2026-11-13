@@ -1,15 +1,15 @@
 """
 AI-Powered Transaction Categorization Service
 
-Uses OpenAI structured output to categorize bank transactions into 6 simplified categories.
+Uses OpenRouter structured output to categorize bank transactions.
 Implements self-learning via user corrections and rule-based fallback.
 """
 
 from pydantic import BaseModel, Field
 from typing import List, Dict, Optional
-from openai import OpenAI
 from sqlalchemy.orm import Session
 from . import models
+from .openrouter import OPENROUTER_MODEL, openrouter_client
 from .logging_utils import redact_description
 from .rule_matching import matches_rule_pattern, rule_applies_to_type
 from .transaction_categories import is_valid_category
@@ -69,8 +69,8 @@ class TransactionCategorizer:
         "transfers": "Money movements between your own accounts, bank-to-bank transfers, inter-account transfers"
     }
 
-    def __init__(self, openai_api_key: str, db: Session):
-        self.client = OpenAI(api_key=openai_api_key)
+    def __init__(self, api_key: str, db: Session):
+        self.client = openrouter_client(api_key)
         self.db = db
 
     def categorize_transaction(
@@ -84,7 +84,7 @@ class TransactionCategorizer:
 
         Process:
         1. Check user-defined rules first (substring/regex match)
-        2. If no rule match, use OpenAI with structured output
+        2. If no rule match, use Gemini 2.5 Flash with structured output
         3. Track user corrections as new rules (self-learning)
 
         Args:
@@ -135,7 +135,7 @@ class TransactionCategorizer:
                     'reasoning': f'Matched rule: {rule.pattern}'
                 }
 
-        # Step 2: Use OpenAI for categorization
+        # Step 2: Use the model for categorization
         return self._categorize_with_ai(description, amount, txn_type, user_id)
 
     def _matches_rule(self, description: str, pattern: str) -> bool:
@@ -150,8 +150,9 @@ class TransactionCategorizer:
         user_id: int
     ) -> Dict:
         """
-        Use OpenAI structured output to categorize transaction.
+        Use Gemini 2.5 Flash structured output to categorize the transaction.
 
+        Thinking tokens are disabled so this high-volume call stays on the text rates.
         Uses few-shot learning with user's historical corrections.
         """
         # Get user's past corrections for few-shot examples
@@ -162,18 +163,28 @@ class TransactionCategorizer:
         user_prompt = self._build_user_prompt(description, amount, txn_type, corrections)
 
         try:
-            # Call OpenAI with structured output
-            response = self.client.beta.chat.completions.parse(
-                model="gpt-4o-2024-08-06",
+            response = self.client.chat.completions.create(
+                model=OPENROUTER_MODEL,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                response_format=TransactionCategorization,
-                temperature=0.3  # Low temperature for consistency
+                temperature=0,
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": TransactionCategorization.__name__,
+                        "strict": True,
+                        "schema": TransactionCategorization.model_json_schema(),
+                    },
+                },
+                extra_body={
+                    "provider": {"require_parameters": True},
+                    "reasoning": {"max_tokens": 0},
+                },
             )
-
-            categorization = response.choices[0].message.parsed
+            content = response.choices[0].message.content or ""
+            categorization = TransactionCategorization.model_validate_json(content)
             category = self._category_from_ai(categorization.category)
 
             logger.info(
@@ -192,7 +203,7 @@ class TransactionCategorizer:
 
         except Exception as e:
             logger.exception(
-                "OpenAI categorization failed: %s: %s",
+                "OpenRouter categorization failed: %s: %s",
                 type(e).__name__,
                 e,
             )

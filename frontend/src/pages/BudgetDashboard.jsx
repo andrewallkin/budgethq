@@ -7,7 +7,7 @@ import { useAuth } from '../context/AuthContext'
 import { formatCurrency, formatDateSafe, formatNumber, formatPercent } from '../utils/numberFormatting'
 import BlurredValue from '../components/BlurredValue'
 import { BUDGET_TRANSACTION_CATEGORIES, CATEGORY_LABELS, CATEGORY_COLORS } from '../utils/transactionCategories'
-import { additionalIncomeTotal, hasAdditionalIncome, payslipMonthLabel } from '../utils/payslipBudget'
+import { additionalIncomeTotal, cashEarnings, hasAdditionalIncome, payslipMonthLabel } from '../utils/payslipBudget'
 import {
     AllocationRow,
     PAPER_BUDGET_COLORS,
@@ -211,9 +211,10 @@ export default function BudgetDashboard() {
         formatPercent(Math.abs(value), { minimumFractionDigits: 0, maximumFractionDigits: 0 })
     const incomeRows = latestPayslip
         ? [
+              { label: 'Total earnings', value: formatCurrency(cashEarnings(latestPayslip)) },
               { label: 'Gross', value: formatCurrency(latestPayslip.gross_salary) },
               ...(hasAdditional
-                  ? [{ label: 'Additional income', value: formatCurrency(additionalIncome) }]
+                  ? [{ label: 'Other earnings', value: formatCurrency(additionalIncome) }]
                   : []),
               { label: 'PAYE', value: formatCurrency(latestPayslip.paye) },
               { label: 'UIF', value: formatCurrency(latestPayslip.uif_employee_portion) },
@@ -326,13 +327,18 @@ export default function BudgetDashboard() {
                     <h2 className="text-lg font-semibold text-[var(--paper-ink)]">Income breakdown</h2>
                     <div className={`mt-2 ${paperDivider}`}>
                         <MetaRow
+                            label="Total earnings"
+                            tone={paperMoneyTone(1)}
+                            value={<BlurredValue>{formatCurrency(cashEarnings(latestPayslip))}</BlurredValue>}
+                        />
+                        <MetaRow
                             label="Gross salary"
                             tone={paperMoneyTone(1)}
                             value={<BlurredValue>{formatCurrency(latestPayslip.gross_salary)}</BlurredValue>}
                         />
                         {hasAdditional ? (
                             <MetaRow
-                                label="Additional income"
+                                label="Other earnings"
                                 tone={paperMoneyTone(1)}
                                 value={<BlurredValue>{formatCurrency(additionalIncome)}</BlurredValue>}
                             />

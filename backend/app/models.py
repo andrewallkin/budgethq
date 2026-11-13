@@ -10,7 +10,7 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True)
     hashed_password = Column(String)
-    openai_api_key = Column(String, nullable=True)  # Encrypted OpenAI API key
+    openrouter_api_key = Column(String, nullable=True)  # Encrypted OpenRouter API key
 
     # Encrypted Investec credentials
     investec_client_id = Column(String, nullable=True)

@@ -79,8 +79,11 @@ export default function PayslipReviewModal({ isOpen, onClose, onConfirm, extract
     const totalCompanyContrib = companyContributions.reduce((sum, item) => sum + (item.amount || 0), 0)
     const totalPersonalDeduct = personalDeductions.reduce((sum, item) => sum + (item.amount || 0), 0)
     
-    const costToCompany = grossSalary + totalAdditionalIncome + totalCompanyContrib
-    const calculatedNetPay = grossSalary + totalAdditionalIncome - paye - uif - totalPersonalDeduct
+    const totalEarnings = (parseFloat(grossSalary) || 0) + totalAdditionalIncome
+    const printedTotalEarnings = parseFloat(extractedData?.total_earnings) || 0
+    const earningsGap = printedTotalEarnings > 0 && Math.abs(totalEarnings - printedTotalEarnings) > 0.01
+    const costToCompany = totalEarnings + totalCompanyContrib
+    const calculatedNetPay = totalEarnings - paye - uif - totalPersonalDeduct
 
     if (!isOpen) return null
 
@@ -151,7 +154,7 @@ export default function PayslipReviewModal({ isOpen, onClose, onConfirm, extract
                                         Company contributions increase Cost to Company
                                     </p>
                                     <p className="mt-1 text-xs text-[var(--paper-muted)]">
-                                        These are paid by your employer (not to you) but increase your taxable income.
+                                        Added to cost to company. SDL and employer UIF are left out. These are not paid to you.
                                     </p>
                                 </div>
                                 <ItemList
@@ -163,7 +166,7 @@ export default function PayslipReviewModal({ isOpen, onClose, onConfirm, extract
                                 />
                             </Section>
 
-                            <Section title="Personal Deductions">
+                            <Section title="Other deductions">
                                 <ItemList
                                     items={personalDeductions}
                                     onUpdate={(idx, field, val) => updateItem(personalDeductions, setPersonalDeductions, idx, field, val)}
@@ -187,8 +190,21 @@ export default function PayslipReviewModal({ isOpen, onClose, onConfirm, extract
                                 </div>
                                 <div className="space-y-3 p-4 text-sm">
                                     <SummaryRow label="Gross Salary" value={grossSalary} tone="positive" />
-                                    <SummaryRow label="Additional Income" value={totalAdditionalIncome} tone="positive" />
-                                    
+                                    <SummaryRow label="Other earnings" value={totalAdditionalIncome} tone="positive" />
+                                    <div className="flex justify-between font-semibold text-[var(--paper-ink)]">
+                                        <span>Total earnings</span>
+                                        <BlurredValue>
+                                            <span className={`${paperMoney} text-[var(--paper-ink)]`}>
+                                                {formatCurrency(totalEarnings)}
+                                            </span>
+                                        </BlurredValue>
+                                    </div>
+                                    {earningsGap ? (
+                                        <p className="text-xs text-[var(--paper-brick)]" role="alert">
+                                            Printed total earnings {formatCurrency(printedTotalEarnings)} does not match the earnings lines.
+                                        </p>
+                                    ) : null}
+
                                     <div className="my-2 border-t border-[var(--paper-line)]" />
                                     
                                     {totalCompanyContrib > 0 && (
@@ -214,7 +230,7 @@ export default function PayslipReviewModal({ isOpen, onClose, onConfirm, extract
 
                                     <SummaryRow label="PAYE (Tax)" value={paye} tone="negative" prefix="- " />
                                     <SummaryRow label="UIF" value={uif} tone="negative" prefix="- " />
-                                    <SummaryRow label="Personal Deductions" value={totalPersonalDeduct} tone="negative" prefix="- " />
+                                    <SummaryRow label="Other deductions" value={totalPersonalDeduct} tone="negative" prefix="- " />
 
                                     <div className="my-3 border-t-2 border-[var(--paper-line)]" />
 

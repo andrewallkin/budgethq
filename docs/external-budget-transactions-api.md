@@ -204,7 +204,7 @@ curl -s "https://budgethq.andrewallkin.com/api/external/budget/summary" \
 |-------|-------------|
 | `income` | Monthly budget income derived from your payslips (ZAR). `null` if no payslip data yet |
 | `income_payslip_year` / `income_payslip_month` | Payslip year/month the income figure derives from |
-| `income_skipped_additional` | `true` when the payslip had bonus/additional income that was deliberately **not** counted as monthly budget money |
+| `income_skipped_additional` | `true` when the latest payslip has bonus, backpay, or commission, so `income` comes from the most recent payslip without those. An expense claim or other reimbursement does not set this |
 | `budget_period_start_day` | Day of month the budget period starts (1–31; 1 = calendar month) |
 | `current_period.from_date` / `to_date` | Date range of the period containing today (inclusive) |
 | `expected_totals` | Sum of **included** line items per type: `needs`, `wants`, `savings` |
@@ -220,7 +220,7 @@ curl -s "https://budgethq.andrewallkin.com/api/external/budget/summary" \
 
 - **Use `current_period` dates as the default date window** for transaction queries — the budget month is usually not the calendar month (see `budget_period_start_day`).
 - **Excluded items are deliberate.** They represent money that never flows through the Investec accounts (for example savings pot contributions made elsewhere). They contribute nothing to `expected_totals` and never appear in transaction actuals.
-- **Income is payslip-derived, not transaction-derived.** Bonus months do not inflate the monthly budget; when additional payslip income was skipped, `income_skipped_additional` is `true`.
+- **Income is payslip-derived, not transaction-derived.** Bonus, backpay, and commission months do not inflate the monthly budget; when one of those was skipped, `income_skipped_additional` is `true`. An expense claim stays in that month's own payslip and does not change `income`.
 
 ---
 
