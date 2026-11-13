@@ -22,10 +22,10 @@ class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str
 
-class OpenAIKeyRequest(BaseModel):
+class OpenRouterKeyRequest(BaseModel):
     api_key: str
 
-class OpenAIKeyStatus(BaseModel):
+class OpenRouterKeyStatus(BaseModel):
     has_key: bool
 
 class ExternalApiKeyStatus(BaseModel):
@@ -126,13 +126,13 @@ async def change_password(
     return {"status": "success", "message": "Password changed successfully"}
 
 
-@router.put("/user/settings/openai-key")
-async def save_openai_key(
-    request: OpenAIKeyRequest,
+@router.put("/user/settings/openrouter-key")
+async def save_openrouter_key(
+    request: OpenRouterKeyRequest,
     current_user: models.User = Depends(auth.get_current_user),
     db: Session = Depends(database.get_db)
 ):
-    """Save or update user's OpenAI API key (encrypted)."""
+    """Save or update user's OpenRouter API key (encrypted)."""
     if not request.api_key or len(request.api_key.strip()) == 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -142,37 +142,37 @@ async def save_openai_key(
     # Encrypt the API key
     try:
         encrypted_key = encrypt_api_key(request.api_key.strip())
-        current_user.openai_api_key = encrypted_key
+        current_user.openrouter_api_key = encrypted_key
         db.commit()
-        logger.info("OpenAI API key saved", extra={"user_id": current_user.id})
-        return {"status": "success", "message": "OpenAI API key saved successfully"}
+        logger.info("OpenRouter API key saved", extra={"user_id": current_user.id})
+        return {"status": "success", "message": "OpenRouter API key saved successfully"}
     except Exception as e:
-        logger.exception("OpenAI API key save failed: %s: %s", type(e).__name__, e)
+        logger.exception("OpenRouter API key save failed: %s: %s", type(e).__name__, e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to save API key: {str(e)}"
         )
 
 
-@router.get("/user/settings/openai-key", response_model=OpenAIKeyStatus)
-async def check_openai_key(
+@router.get("/user/settings/openrouter-key", response_model=OpenRouterKeyStatus)
+async def check_openrouter_key(
     current_user: models.User = Depends(auth.get_current_user)
 ):
-    """Check if user has an OpenAI API key configured."""
-    has_key = current_user.openai_api_key is not None and len(current_user.openai_api_key) > 0
+    """Check if user has an OpenRouter API key configured."""
+    has_key = current_user.openrouter_api_key is not None and len(current_user.openrouter_api_key) > 0
     return {"has_key": has_key}
 
 
-@router.delete("/user/settings/openai-key")
-async def delete_openai_key(
+@router.delete("/user/settings/openrouter-key")
+async def delete_openrouter_key(
     current_user: models.User = Depends(auth.get_current_user),
     db: Session = Depends(database.get_db)
 ):
-    """Delete user's OpenAI API key."""
-    current_user.openai_api_key = None
+    """Delete user's OpenRouter API key."""
+    current_user.openrouter_api_key = None
     db.commit()
-    logger.info("OpenAI API key deleted", extra={"user_id": current_user.id})
-    return {"status": "success", "message": "OpenAI API key deleted successfully"}
+    logger.info("OpenRouter API key deleted", extra={"user_id": current_user.id})
+    return {"status": "success", "message": "OpenRouter API key deleted successfully"}
 
 
 @router.post("/user/settings/external-api-key", response_model=ExternalApiKeyGenerateResponse)

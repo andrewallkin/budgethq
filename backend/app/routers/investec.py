@@ -700,10 +700,10 @@ async def categorize_all_transactions_with_ai(
     Categorize all uncategorized transactions using AI.
     Only processes transactions that haven't been manually corrected.
     """
-    if not current_user.openai_api_key:
+    if not current_user.openrouter_api_key:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="OpenAI API key not configured. Please add your API key in Settings."
+            detail="OpenRouter API key not configured. Please add your API key in Settings."
         )
 
     # Get all uncategorized transactions that haven't been manually corrected
@@ -722,8 +722,8 @@ async def categorize_all_transactions_with_ai(
         }
 
     # Initialize categorizer
-    openai_key = decrypt_api_key(current_user.openai_api_key)
-    categorizer = TransactionCategorizer(openai_key, db)
+    api_key = decrypt_api_key(current_user.openrouter_api_key)
+    categorizer = TransactionCategorizer(api_key, db)
 
     categorized_count = 0
     failed_count = 0
@@ -981,16 +981,16 @@ async def categorize_transaction_with_ai(
     if not transaction:
         raise HTTPException(status_code=404, detail="Transaction not found")
 
-    if not current_user.openai_api_key:
+    if not current_user.openrouter_api_key:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="OpenAI API key not configured. Please add your API key in Settings."
+            detail="OpenRouter API key not configured. Please add your API key in Settings."
         )
 
     # Categorize using AI
     try:
-        openai_key = decrypt_api_key(current_user.openai_api_key)
-        categorizer = TransactionCategorizer(openai_key, db)
+        api_key = decrypt_api_key(current_user.openrouter_api_key)
+        categorizer = TransactionCategorizer(api_key, db)
 
         transaction_dict = {
             'description': transaction.description or '',
@@ -1063,9 +1063,9 @@ async def create_rule_from_transaction(
         )
 
     # Use transaction categorizer to create rule
-    if current_user.openai_api_key:
-        openai_key = decrypt_api_key(current_user.openai_api_key)
-        categorizer = TransactionCategorizer(openai_key, db)
+    if current_user.openrouter_api_key:
+        api_key = decrypt_api_key(current_user.openrouter_api_key)
+        categorizer = TransactionCategorizer(api_key, db)
         rule = categorizer.create_rule_from_transaction(transaction, pattern)
         return {"message": "Rule created successfully", "rule_id": rule.id}
     else:

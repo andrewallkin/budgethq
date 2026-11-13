@@ -221,7 +221,7 @@ export default function Settings() {
     const [usernameLoading, setUsernameLoading] = useState(false)
     const [restrictAuthorizedUsers, setRestrictAuthorizedUsers] = useState(true)
 
-    const [openaiApiKey, setOpenaiApiKey] = useState('')
+    const [openrouterApiKey, setOpenrouterApiKey] = useState('')
     const [hasApiKey, setHasApiKey] = useState(false)
     const [apiKeyChecked, setApiKeyChecked] = useState(false)
     const [replacingApiKey, setReplacingApiKey] = useState(false)
@@ -295,7 +295,7 @@ export default function Settings() {
     useEffect(() => {
         const checkApiKey = async () => {
             try {
-                const response = await axios.get('/api/auth/user/settings/openai-key')
+                const response = await axios.get('/api/auth/user/settings/openrouter-key')
                 setHasApiKey(response.data.has_key)
             } catch (err) {
                 console.error('Failed to check API key status', err)
@@ -506,7 +506,7 @@ export default function Settings() {
         setApiKeyError('')
         setApiKeySuccess('')
 
-        if (!openaiApiKey.trim()) {
+        if (!openrouterApiKey.trim()) {
             setApiKeyError('API key cannot be empty')
             return
         }
@@ -514,12 +514,12 @@ export default function Settings() {
         setApiKeyLoading(true)
 
         try {
-            await axios.put('/api/auth/user/settings/openai-key', {
-                api_key: openaiApiKey,
+            await axios.put('/api/auth/user/settings/openrouter-key', {
+                api_key: openrouterApiKey,
             })
-            setApiKeySuccess('OpenAI API key saved')
+            setApiKeySuccess('OpenRouter API key saved')
             setHasApiKey(true)
-            setOpenaiApiKey('')
+            setOpenrouterApiKey('')
             setReplacingApiKey(false)
         } catch (err) {
             setApiKeyError(err.response?.data?.detail || 'Failed to save API key')
@@ -534,10 +534,10 @@ export default function Settings() {
         setApiKeyLoading(true)
 
         try {
-            await axios.delete('/api/auth/user/settings/openai-key')
-            setApiKeySuccess('OpenAI API key removed')
+            await axios.delete('/api/auth/user/settings/openrouter-key')
+            setApiKeySuccess('OpenRouter API key removed')
             setHasApiKey(false)
-            setOpenaiApiKey('')
+            setOpenrouterApiKey('')
             setReplacingApiKey(false)
         } catch (err) {
             setApiKeyError(err.response?.data?.detail || 'Failed to delete API key')
@@ -1072,14 +1072,14 @@ export default function Settings() {
                     <PaperCard className="p-5 sm:p-6">
                         <p className={paperEyebrow}>Payslip extraction</p>
                         <p id={apiKeyHintId} className="mt-2 text-sm leading-relaxed text-[var(--paper-muted)]">
-                            Encrypted OpenAI key used to read uploaded payslips.{' '}
+                            Encrypted OpenRouter key used to read payslips and categorise transactions.{' '}
                             <a
-                                href="https://platform.openai.com/api-keys"
+                                href="https://openrouter.ai/keys"
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="text-[var(--paper-ink)] underline decoration-[var(--paper-line)] underline-offset-2 hover:decoration-[var(--paper-ink)]"
                             >
-                                Get a key on OpenAI Platform
+                                Get a key on OpenRouter
                             </a>
                             .
                         </p>
@@ -1092,13 +1092,13 @@ export default function Settings() {
                                 <ConnectionStatusPanel
                                     loading
                                     title="Checking API key…"
-                                    detail="Looking up whether an OpenAI key is stored on this account."
+                                    detail="Looking up whether an OpenRouter key is stored on this account."
                                 />
                             ) : hasApiKey ? (
                                 <ConnectionStatusPanel
                                     ok
                                     title="API key is saved"
-                                    detail="An encrypted OpenAI key is stored on this account. Payslip uploads can be extracted automatically."
+                                    detail="An encrypted OpenRouter key is stored on this account. Payslip uploads can be extracted automatically."
                                     actions={
                                         <>
                                             <button
@@ -1125,24 +1125,24 @@ export default function Settings() {
                             ) : (
                                 <ConnectionStatusPanel
                                     title="No API key saved"
-                                    detail="Payslip extraction is unavailable until you add an OpenAI API key."
+                                    detail="Payslip extraction is unavailable until you add an OpenRouter API key."
                                 />
                             )}
 
                             {apiKeyChecked && (!hasApiKey || replacingApiKey) ? (
                                 <form onSubmit={handleSaveApiKey} className="space-y-3">
                                     <div>
-                                        <label htmlFor="openai-api-key" className="mb-1.5 block text-sm font-medium text-[var(--paper-ink)]">
+                                        <label htmlFor="openrouter-api-key" className="mb-1.5 block text-sm font-medium text-[var(--paper-ink)]">
                                             {hasApiKey ? 'New API key' : 'API key'}
                                         </label>
                                         <input
-                                            id="openai-api-key"
+                                            id="openrouter-api-key"
                                             type="password"
                                             autoComplete="off"
                                             required
-                                            value={openaiApiKey}
-                                            onChange={(e) => setOpenaiApiKey(e.target.value)}
-                                            placeholder="sk-…"
+                                            value={openrouterApiKey}
+                                            onChange={(e) => setOpenrouterApiKey(e.target.value)}
+                                            placeholder="sk-or-…"
                                             aria-describedby={apiKeyHintId}
                                             className={paperField}
                                         />
@@ -1382,8 +1382,8 @@ export default function Settings() {
                 isOpen={showDeleteApiKeyConfirm}
                 onClose={() => setShowDeleteApiKeyConfirm(false)}
                 onConfirm={doDeleteApiKey}
-                title="Remove OpenAI API Key?"
-                message="Your encrypted API key will be permanently deleted. You will no longer be able to extract payslip data automatically."
+                title="Remove OpenRouter API Key?"
+                message="Your encrypted API key will be permanently deleted. Payslip extraction and automatic transaction categorisation will stop until you add a new key."
                 confirmText="Remove Key"
                 cancelText="Cancel"
                 variant="danger"

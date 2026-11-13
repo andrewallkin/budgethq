@@ -37,7 +37,7 @@ browser ── Cloudflare TLS ──▶ VPS nginx (subdomain vhost)
                           frontend (nginx, static SPA)
                                  │  /api proxy
                                  ▼  backend:8000 (compose network)
-                          backend (FastAPI) ──▶ postgres ──▶ GCS / Google Sheets / Investec / OpenAI
+                          backend (FastAPI) ──▶ postgres ──▶ GCS / Google Sheets / Investec / OpenRouter
 ```
 
 - `frontend/` — React + Vite + TailwindCSS + Recharts SPA; the bundled nginx container serves static assets and proxies `/api/` to the backend, so the browser sees a single origin in production.

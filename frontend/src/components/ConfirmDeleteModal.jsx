@@ -47,7 +47,7 @@ export default function ConfirmDeleteModal({ isOpen, onClose, onConfirm, title, 
                         <ul className="text-sm text-red-800 dark:text-red-300 space-y-1 list-disc list-inside">
                             <li>Gross salary and company details</li>
                             <li>All company contributions</li>
-                            <li>All personal deductions</li>
+                            <li>All other deductions</li>
                             <li>Additional income items</li>
                             <li>Uploaded PDF file from cloud storage</li>
                         </ul>

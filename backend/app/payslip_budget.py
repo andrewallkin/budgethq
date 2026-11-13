@@ -10,8 +10,6 @@ from typing import Any, Optional, Sequence
 
 from sqlalchemy.orm import Session
 
-from . import models
-
 
 @dataclass(frozen=True)
 class MonthlyBudgetIncome:
@@ -21,6 +19,9 @@ class MonthlyBudgetIncome:
     skipped_additional: bool
 
 
+_BONUS_MARKERS = ("bonus", "backpay", "back pay", "commission")
+
+
 def additional_income_total(payslip: Optional[Any]) -> float:
     if payslip is None:
         return 0.0
@@ -28,7 +29,25 @@ def additional_income_total(payslip: Optional[Any]) -> float:
     return float(sum((getattr(item, "amount", 0) or 0) for item in items))
 
 
+def _is_bonus_item(item: Any) -> bool:
+    description = (getattr(item, "description", None) or "")
+    if isinstance(item, dict):
+        description = item.get("description") or ""
+    text = str(description).casefold()
+    return any(marker in text for marker in _BONUS_MARKERS)
+
+
+def bonus_income_total(payslip: Optional[Any]) -> float:
+    """Bonus, backpay, and commission. An expense claim is not a bonus month."""
+    if payslip is None:
+        return 0.0
+    items = getattr(payslip, "additional_income", None) or []
+    return float(sum((getattr(item, "amount", 0) or 0) for item in items if _is_bonus_item(item)))
+
+
 def load_user_payslips_newest_first(db: Session, user_id: int) -> list:
+    from . import models
+
     return (
         db.query(models.MonthlyPayslip)
         .filter(models.MonthlyPayslip.user_id == user_id)
@@ -42,16 +61,16 @@ def monthly_budget_income(payslips: Sequence[Any]) -> Optional[MonthlyBudgetInco
         return None
 
     latest = payslips[0]
-    latest_has_additional = additional_income_total(latest) > 0
+    latest_has_additional = bonus_income_total(latest) > 0
     chosen = latest
 
     if latest_has_additional:
         for payslip in payslips:
-            if additional_income_total(payslip) <= 0:
+            if bonus_income_total(payslip) <= 0:
                 chosen = payslip
                 break
 
-    skipped = latest_has_additional and additional_income_total(chosen) <= 0
+    skipped = latest_has_additional and bonus_income_total(chosen) <= 0
     return MonthlyBudgetIncome(
         amount=round(float(getattr(chosen, "net_pay", 0) or 0), 2),
         year=getattr(chosen, "year", None),

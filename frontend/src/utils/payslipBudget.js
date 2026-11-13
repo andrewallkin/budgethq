@@ -7,6 +7,14 @@ export function hasAdditionalIncome(payslip) {
     return additionalIncomeTotal(payslip) > 0
 }
 
+const BONUS_INCOME = /bonus|back\s*pay|commission/i
+
+export function hasBonusIncome(payslip) {
+    return (payslip?.additional_income || []).some(
+        (item) => BONUS_INCOME.test(item?.description || '') && Number(item.amount) > 0,
+    )
+}
+
 export function cashEarnings(payslip) {
     return (Number(payslip?.gross_salary) || 0) + additionalIncomeTotal(payslip)
 }

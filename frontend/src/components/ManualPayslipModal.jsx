@@ -258,7 +258,7 @@ export default function ManualPayslipModal({ isOpen, onClose, onSuccess, initial
                             </Section>
 
                             {/* Personal Deductions */}
-                            <Section title="Personal Deductions">
+                            <Section title="Other deductions">
                                 <ItemList
                                     items={personalDeductions}
                                     onUpdate={(idx, field, val) => updateItem(personalDeductions, setPersonalDeductions, idx, field, val)}
@@ -308,7 +308,7 @@ export default function ManualPayslipModal({ isOpen, onClose, onSuccess, initial
 
                                     <SummaryRow label="PAYE (Tax)" value={payeVal} tone="negative" />
                                     <SummaryRow label="UIF" value={uifVal} tone="negative" />
-                                    <SummaryRow label="Personal Deductions" value={totalPersonalDeduct} tone="negative" />
+                                    <SummaryRow label="Other deductions" value={totalPersonalDeduct} tone="negative" />
 
                                     <div className="my-3 border-t-2 border-[var(--paper-line)]" />
 

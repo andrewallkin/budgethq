@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     # cors
     cors_origins: str = "http://localhost:3000,http://localhost:5173"
 
-    # secrets at rest (Fernet; required to store OpenAI/Investec credentials)
+    # secrets at rest (Fernet; required to store OpenRouter/Investec credentials)
     encryption_key: str = ""
 
     # google sheets / gcs (optional)

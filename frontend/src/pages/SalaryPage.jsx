@@ -4,7 +4,7 @@ import { Trash2, ArrowLeft, ChevronLeft, ChevronRight, Upload, PenLine } from 'l
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { formatCurrency, formatDateSafe } from '../utils/numberFormatting'
-import { hasAdditionalIncome, payslipMonthLabel } from '../utils/payslipBudget'
+import { cashEarnings, hasBonusIncome, payslipMonthLabel } from '../utils/payslipBudget'
 import {
     PAPER_CHART,
     PaperCard,
@@ -45,7 +45,7 @@ export default function SalaryPage() {
     const [manualModalOpen, setManualModalOpen] = useState(false)
     const [deleteModalOpen, setDeleteModalOpen] = useState(false)
     const [deletePayslipError, setDeletePayslipError] = useState('')
-    const [hasOpenAIKey, setHasOpenAIKey] = useState(false)
+    const [hasOpenRouterKey, setHasOpenRouterKey] = useState(false)
     const [fyData, setFyData] = useState(null)
     
     // Month/Year state - will be set from latest payslip
@@ -77,12 +77,12 @@ export default function SalaryPage() {
         }
     }
 
-    // Load latest payslip, budget income, and OpenAI key status on mount
+    // Load latest payslip, budget income, and OpenRouter key status on mount
     useEffect(() => {
         loadLatestPayslip()
         fetchBudgetIncome()
-        axios.get('/api/auth/user/settings/openai-key')
-            .then(res => setHasOpenAIKey(res.data.has_key))
+        axios.get('/api/auth/user/settings/openrouter-key')
+            .then(res => setHasOpenRouterKey(res.data.has_key))
             .catch(() => {})
     }, [])
 
@@ -352,7 +352,7 @@ export default function SalaryPage() {
                     initialMonth={currentDate.getMonth() + 1}
                     initialYear={currentDate.getFullYear()}
                     isUpdate={false}
-                    hasOpenAIKey={hasOpenAIKey}
+                    hasOpenRouterKey={hasOpenRouterKey}
                 />
                 <ManualPayslipModal
                     isOpen={manualModalOpen}
@@ -417,7 +417,7 @@ export default function SalaryPage() {
                     initialMonth={selectedMonth}
                     initialYear={selectedYear}
                     isUpdate={false}
-                    hasOpenAIKey={hasOpenAIKey}
+                    hasOpenRouterKey={hasOpenRouterKey}
                 />
                 <ManualPayslipModal
                     isOpen={manualModalOpen}
@@ -442,13 +442,13 @@ export default function SalaryPage() {
     const totalCompanyContrib = companyContributions.reduce((sum, item) => sum + item.amount, 0)
     const totalPersonalDeduct = personalDeductions.reduce((sum, item) => sum + item.amount, 0)
     // Total income (display) = base gross + company contributions (benefits) + additional income
-    const totalIncome = payslipData.gross_salary + totalCompanyContrib + totalAdditionalIncome
+    const totalEarnings = cashEarnings(payslipData)
+    const totalIncome = totalEarnings + totalCompanyContrib
     const totalDeductions =
         (payslipData.paye || 0) +
         (payslipData.uif_employee_portion || 0) +
-        totalPersonalDeduct +
-        totalCompanyContrib
-    const hasBonus = hasAdditionalIncome(payslipData)
+        totalPersonalDeduct
+    const hasBonus = hasBonusIncome(payslipData)
     const fyMonths = fyData?.months?.filter((month) => month.has_data) || []
 
     return (
@@ -520,7 +520,7 @@ export default function SalaryPage() {
                 initialMonth={selectedMonth}
                 initialYear={selectedYear}
                 isUpdate={true}
-                hasOpenAIKey={hasOpenAIKey}
+                hasOpenRouterKey={hasOpenRouterKey}
             />
             <ManualPayslipModal
                 isOpen={manualModalOpen}
@@ -568,8 +568,7 @@ export default function SalaryPage() {
                 </div>
                 <div className="mt-6 space-y-5 border-t border-[var(--paper-line)] pt-5">
                     <div className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">
-                        <Stat label="Gross" value={payslipData.gross_salary} tone={paperMoneyTone(1)} />
-                        <Stat label="Additional income" value={totalAdditionalIncome} tone={paperMoneyTone(1)} />
+                        <Stat label="Total earnings" value={totalEarnings} tone={paperMoneyTone(1)} />
                         {totalCompanyContrib > 0 ? (
                             <Stat label="Company contributions" value={totalCompanyContrib} />
                         ) : null}
@@ -581,9 +580,9 @@ export default function SalaryPage() {
                             <Stat label="UIF" value={payslipData.uif_employee_portion} tone={paperMoneyTone(-1)} />
                         ) : null}
                         {totalPersonalDeduct > 0 ? (
-                            <Stat label="Personal deductions" value={totalPersonalDeduct} tone={paperMoneyTone(-1)} />
+                            <Stat label="Other deductions" value={totalPersonalDeduct} tone={paperMoneyTone(-1)} />
                         ) : null}
-                        <Stat label="Deductions" value={totalDeductions} tone={paperMoneyTone(-1)} />
+                        <Stat label="Total deductions" value={totalDeductions} tone={paperMoneyTone(-1)} />
                     </div>
                 </div>
             </PaperCard>
@@ -623,7 +622,7 @@ export default function SalaryPage() {
                         </div>
                         <div>
                             <h2 className="text-lg font-semibold text-[var(--paper-ink)]">Company contributions</h2>
-                            <p className="mt-1 text-sm text-[var(--paper-muted)]">Counted in cost to company, not take-home.</p>
+                            <p className="mt-1 text-sm text-[var(--paper-muted)]">Added to cost to company. SDL and employer UIF are left out. Not part of take-home.</p>
                             <div className="mt-3">
                                 <ItemList
                                     items={companyContributions}
@@ -637,7 +636,8 @@ export default function SalaryPage() {
                     </div>
                     <div className="space-y-10 lg:border-l lg:border-[var(--paper-line)] lg:pl-12">
                         <div>
-                            <h2 className="text-lg font-semibold text-[var(--paper-ink)]">Personal deductions</h2>
+                            <h2 className="text-lg font-semibold text-[var(--paper-ink)]">Other deductions</h2>
+                            <p className="mt-1 text-sm text-[var(--paper-muted)]">Medical aid and similar amounts taken off your pay. PAYE and UIF are separate, and all three add up to total deductions.</p>
                             <div className="mt-3">
                                 <ItemList
                                     items={personalDeductions}

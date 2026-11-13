@@ -15,6 +15,7 @@ from ..models import User, MonthlyPayslip, PayslipItem, PayslipAdditionalIncome
 from ..auth import get_current_user
 from ..gcs_service import PayslipGCSService
 from ..payslip_extraction import extract_payslip_data, FinancialEntry, PayslipExtraction
+from ..payslip_reconcile import expected_net_pay
 from ..utils import decrypt_api_key, get_sast_now
 
 router = APIRouter()
@@ -95,6 +96,7 @@ class PayslipExtractionPreview(BaseModel):
     title: Optional[str]
     company_name: Optional[str]
     gross_salary: float
+    total_earnings: float = 0
     paye: float
     uif_employee_portion: float
     net_pay: float
@@ -154,16 +156,18 @@ class FinancialYearSummary(BaseModel):
 
 def recalculate_net_pay(payslip: MonthlyPayslip, db: Session) -> None:
     """
-    Recalculate and update the net pay for a payslip based on all components.
-    
-    Net Pay = Gross Salary + Additional Income - PAYE - UIF - Company Contributions - Personal Deductions
+    Recalculate take-home from the line items.
+
+    Net pay = gross salary + additional income - PAYE - employee UIF - personal deductions.
+    Company contributions are cost to company and are not subtracted.
     """
-    total_additional_income = sum(item.amount for item in payslip.additional_income)
-    total_income = payslip.gross_salary + total_additional_income
-    total_company_contrib = sum(item.amount for item in payslip.items if item.item_type == 'company_contribution')
-    total_personal_deduct = sum(item.amount for item in payslip.items if item.item_type == 'personal_deduction')
-    
-    payslip.net_pay = total_income - payslip.paye - payslip.uif_employee_portion - total_company_contrib - total_personal_deduct
+    payslip.net_pay = expected_net_pay(
+        payslip.gross_salary,
+        [item.amount for item in payslip.additional_income],
+        payslip.paye,
+        payslip.uif_employee_portion,
+        [item.amount for item in payslip.items if item.item_type == "personal_deduction"],
+    )
 
 
 def get_payslip_or_404(
@@ -234,11 +238,11 @@ async def extract_payslip_preview(
             status_code=400, detail="Only PDF files are supported"
         )
 
-    # Check user has OpenAI API key
-    if not current_user.openai_api_key:
+    # Check user has an OpenRouter API key
+    if not current_user.openrouter_api_key:
         raise HTTPException(
             status_code=400,
-            detail="OpenAI API key not configured. Please add it in Settings.",
+            detail="OpenRouter API key not configured. Please add it in Settings.",
         )
 
     # Read file content
@@ -265,8 +269,8 @@ async def extract_payslip_preview(
         blob = bucket.blob(gcs_path)
         blob.upload_from_file(BytesIO(file_content), content_type="application/pdf")
 
-        # Extract data using OpenAI
-        api_key = decrypt_api_key(current_user.openai_api_key)
+        # Extract data with Gemini 2.5 Flash via OpenRouter
+        api_key = decrypt_api_key(current_user.openrouter_api_key)
         try:
             extracted_data = extract_payslip_data(file_content, api_key)
         except Exception as e:
@@ -283,6 +287,7 @@ async def extract_payslip_preview(
             title=extracted_data.title,
             company_name=extracted_data.company_name,
             gross_salary=extracted_data.gross_salary,
+            total_earnings=extracted_data.total_earnings,
             paye=extracted_data.paye,
             uif_employee_portion=extracted_data.uif_employee_portion,
             net_pay=extracted_data.net_pay,
@@ -564,7 +569,7 @@ async def upload_payslip(
     db: Session = Depends(get_db),
 ):
     """
-    Upload a payslip PDF and extract data using OpenAI.
+    Upload a payslip PDF and extract data with Gemini 2.5 Flash via OpenRouter.
     If a payslip already exists for this month/year, it will be replaced.
     """
     # Validate month
@@ -577,11 +582,11 @@ async def upload_payslip(
             status_code=400, detail="Only PDF files are supported"
         )
 
-    # Check user has OpenAI API key
-    if not current_user.openai_api_key:
+    # Check user has an OpenRouter API key
+    if not current_user.openrouter_api_key:
         raise HTTPException(
             status_code=400,
-            detail="OpenAI API key not configured. Please add it in Settings.",
+            detail="OpenRouter API key not configured. Please add it in Settings.",
         )
 
     # Read file content
@@ -606,8 +611,8 @@ async def upload_payslip(
         if not gcs_path:
             raise HTTPException(status_code=500, detail="Failed to upload file")
 
-        # Extract data using OpenAI
-        api_key = decrypt_api_key(current_user.openai_api_key)
+        # Extract data with Gemini 2.5 Flash via OpenRouter
+        api_key = decrypt_api_key(current_user.openrouter_api_key)
         try:
             extracted_data = extract_payslip_data(file_content, api_key)
         except Exception as e:
