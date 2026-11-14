@@ -1,92 +1,155 @@
 # BudgetHQ
 
-Personal finance dashboard for **South African** users: budgeting against take-home pay, tax-oriented salary and payslip tooling, emergency savings targets, retirement annuity planning, optional **Investec** banking connectivity, and investment portfolios (TFSA view, ETFs via Google Sheets pricing, government bonds, FX-aware holdings, rebalancing helpers).
+Personal finance dashboard for **South African** users: budgeting against take-home pay, SARS-oriented payslip tooling, emergency savings and retirement annuity planning, investment portfolios (TFSA, ETFs, bonds, optional Sygnia sync), and optional Investec banking when you connect your own credentials.
 
 [![CI](https://github.com/andrewallkin/budgethq/actions/workflows/ci.yml/badge.svg)](https://github.com/andrewallkin/budgethq/actions/workflows/ci.yml)
 
+![Home overview](docs/images/hero.png)
+
+## Overview
+
+BudgetHQ keeps needs, wants, and savings in one place, aligned to monthly net income from payslips or manual salary entry. Investments track TFSA and other portfolios with local holdings and optional Google Sheets pricing. Auth is JWT-based with per-user data isolation.
+
 ## Features
 
-- **Budget** — Needs / wants / savings structure with charts, autosaved per authenticated user
-- **Tax & payslip** — SARS-aligned PAYE/UIF/medical rebate logic driven by FY-specific tables; payslip model with fringe benefits; optional PDF storage in Google Cloud Storage
-- **Emergency savings** — goals tied to budget "Needs" (3/6/12 months) with progress and time-to-goal views
-- **RA** — performance and tax-benefit scenarios using the same tax engine as the budget flow
-- **Investments** — account hub at `/investments` (Sheets and Sygnia), target allocation, transactions, Sheets-backed ETF prices, FX worksheet integration, snapshots and scheduled summaries
-- **Investec** (optional) — account sync, transactions, categorization rules, budget analysis; per-user credentials stored encrypted (`ENCRYPTION_KEY`)
-- **External API** — per-user `bhq_` API keys (full-access and read-only) for bot integrations
-- **Auth** — JWT login with optional username allowlist; per-user data isolation
+- **Budget** — Needs / wants / savings with charts and autosave
+- **Payslip & tax** — SARS-aligned PAYE/UIF tables, PDF or manual payslip capture, fringe-benefit line items
+- **Emergency savings** — Targets tied to budget needs (3/6/12 months)
+- **Retirement annuity** — Contributions, performance history, tax scenarios
+- **Investments** — Portfolios at `/investments` (Sheets-backed ETFs, Sygnia accounts, target allocation, bonds)
+- **Investec** (optional) — Account sync, transactions, rules, budget analysis when credentials are configured
+- **External API** — Per-user `bhq_` API keys for bot integrations
+- **Auth** — JWT login with optional username allowlist
 
-Product docs live in [docs/](docs/): [monthly budget income](docs/monthly-budget-income.md), [budget analysis after pots](docs/future-budget-analysis-pots.md), [paper UI conventions](docs/ui.md), [external investments API](docs/external-investments-api.md), [external budget/transactions API](docs/external-budget-transactions-api.md).
+## Screenshots
 
-## Quick start
+| | |
+|---|---|
+| Budget dashboard | Investments hub |
+| ![Budget](docs/images/feature-01.png) | ![Investments](docs/images/feature-02.png) |
+
+Figures in these images come from the **local seed** (synthetic data). They are not production balances.
+
+## Architecture
+
+```mermaid
+flowchart LR
+  subgraph browser["Browser"]
+    SPA["React SPA"]
+  end
+  subgraph standalone["Standalone / dev Compose"]
+    FE["frontend nginx :80"]
+    BE["FastAPI backend :8000"]
+    PG["Postgres 15"]
+  end
+  subgraph vps["VPS control panel deploy"]
+    FE2["frontend 127.0.0.1"]
+    BE2["backend 127.0.0.1"]
+    EXT["external postgres-net"]
+  end
+  SPA --> FE
+  FE -->|"/api proxy"| BE
+  BE --> PG
+  SPA --> FE2
+  FE2 --> BE2
+  BE2 --> EXT
+```
+
+- **Frontend** (`frontend/`) — React, Vite, Tailwind, Recharts. Production image serves the SPA and proxies `/api` to the backend.
+- **Backend** (`backend/app/`) — FastAPI routers, SQLAlchemy models, Alembic migrations, APScheduler for price sync jobs.
+- **Postgres** — Application data store. Bundled in `docker-compose.dev.yml` and `docker-compose.standalone.yml`; shared instance on the VPS via external `postgres-net` in `docker-compose.yml`.
+- **Auth** — JWT issued by `/api/auth/login`; optional `AUTHORIZED_USERS` allowlist.
+- **External services** — Google Sheets/GCS, OpenRouter (payslip extraction), Investec API, Sygnia portal scraping when configured.
+
+**Control panel boundary:** On the VPS, [vps-control-panel](https://github.com/andrewallkin/vps-control-panel) deploys `docker-compose.yml` in image mode: prebuilt Docker Hub images, loopback host ports, panel-managed `.env` and migrations, nginx + Cloudflare TLS. That host config is not in this repo. **Standalone** (`docker-compose.standalone.yml`) is the self-contained path: bundled Postgres, local builds, frontend on all interfaces, backend on loopback for `/docs`.
+
+## Technology stack
+
+| Layer | Technologies |
+|--------|----------------|
+| Frontend | React 18, Vite 5, Tailwind CSS, Recharts, axios, react-router-dom |
+| Backend | Python 3.11, FastAPI, SQLAlchemy, Alembic, pydantic-settings, APScheduler |
+| Database | PostgreSQL 15 |
+| Auth | JWT (python-jose), bcrypt passwords, optional Fernet for stored API keys |
+| Integrations | Google Sheets/GCS, OpenRouter, Investec, Sygnia (Playwright) |
+| Runtime | Docker Compose (dev / standalone / panel), nginx (production frontend) |
+
+## Getting started
+
+**Demo login (freshly seeded local database only):**
+
+- Username: `sandi.molefe@example.com`
+- Password: `demo-local-only`
 
 ```bash
-cp .env.example .env   # fill in values (see .env.example for every variable)
-make dev-up            # docker-compose -f docker-compose.dev.yml up -d
+cp .env.example .env
+# Required: JWT_SECRET_KEY (e.g. openssl rand -hex 32)
+# For open registration locally, leave AUTHORIZED_USERS unset or add the demo username.
+
+docker compose -f docker-compose.dev.yml up --build
+docker compose -f docker-compose.dev.yml exec backend uv run alembic upgrade head
+docker compose -f docker-compose.dev.yml exec backend uv run python /app/scripts/seed_db.py --force
 ```
 
-- **Frontend:** http://localhost:3000 (Vite HMR; rebuild with `make dev-build` after `package.json` changes)
-- **Backend / API docs:** http://localhost:8000 and http://localhost:8000/docs
+- **Frontend:** http://localhost:3000 (Vite HMR on port 5173 inside the container)
+- **Backend / OpenAPI:** http://localhost:8000 and http://localhost:8000/docs
+- **Health:** http://localhost:8000/api/health
 - **Postgres (host):** `localhost:${POSTGRES_PORT:-5432}`
 
-## How it works
+## Configuration
 
-```
-browser ── Cloudflare TLS ──▶ VPS nginx (subdomain vhost)
-                                 │
-                                 ▼  127.0.0.1:${FRONTEND_PORT}
-                          frontend (nginx, static SPA)
-                                 │  /api proxy
-                                 ▼  backend:8000 (compose network)
-                          backend (FastAPI) ──▶ postgres ──▶ GCS / Google Sheets / Investec / OpenRouter
-```
+Copy [.env.example](.env.example) to `.env`. The backend builds `DATABASE_URL` from `POSTGRES_*` only. For **dev** and **standalone**, set `POSTGRES_HOST=postgres`. The **control panel** overrides production `POSTGRES_*` and `DOCKER_IMAGE_*` tags on the VPS.
 
-- `frontend/` — React + Vite + TailwindCSS + Recharts SPA; the bundled nginx container serves static assets and proxies `/api/` to the backend, so the browser sees a single origin in production.
-- `backend/app/` — FastAPI app: `routers/` by feature, SQLAlchemy models in `models.py`, settings in `config.py` (pydantic-settings), auth in `auth.py`, Alembic migrations in `backend/alembic/`.
-- `docker-compose.yml` — production-style stack; host ports loopback-bound (`127.0.0.1:`), the control panel fronts them with nginx + TLS. `docker-compose.dev.yml` — local dev with `--reload`, bind-mounted frontend source, exposed Postgres.
-- `backend/app/scheduler.py` — APScheduler jobs for periodic ETF/FX price sync.
+## Deployment
 
-## Environment
+| Mode | Compose file | Notes |
+|------|----------------|-------|
+| Local development | `docker-compose.dev.yml` | Hot reload, bundled Postgres |
+| Standalone | `docker-compose.standalone.yml` | Production images, bundled Postgres |
+| VPS (panel) | `docker-compose.yml` | External `postgres-net`, prebuilt images |
 
-**Single source of truth: [.env.example](.env.example)** — copy it to `.env` and fill in values. Every variable the backend reads is documented there with its default. Notes:
+See [docs/deployment.md](docs/deployment.md) for migrate/seed commands, logs, and database backup steps.
 
-- The backend **builds** the database URL from `POSTGRES_USER/PASSWORD/DB/HOST/PORT`; it does not read a separate `DATABASE_URL`.
-- `JWT_SECRET_KEY` is required — generate with `openssl rand -hex 32`.
-- `AUTHORIZED_USERS`: empty/unset = open access; populated = only those usernames may register, login, or change username.
-- `CORS_ORIGINS`: only mounted when non-empty. Leave unset when UI and API share an origin (the VPS setup).
-- `GCP_SERVICE_ACCOUNT_CREDENTIALS` must be the service account JSON **Base64-encoded** (not a file path).
+## API
 
-## Deployment (VPS control panel)
+Interactive docs: **http://localhost:8000/docs** (when the backend is reachable).
 
-The panel deploys budgethq in **image mode**: it manages `.env` on the VPS, pulls images from Docker Hub by tag, runs migrations, and health-checks `/api/health`.
+| Area | Prefix / docs |
+|------|----------------|
+| Auth | `/api/auth/*` — register, login, user settings |
+| Budget | `/api/budget/*` |
+| Payslip | `/api/payslip/*` |
+| Investments | `/api/investments`, `/api/investments-v2/*` |
+| Emergency / RA | `/api/emergency-savings/*`, `/api/ra/*` |
+| Investec | `/api/investec/*` (optional) |
+| Health | `GET /api/health` |
+| External bots | [external-investments-api.md](docs/external-investments-api.md), [external-budget-transactions-api.md](docs/external-budget-transactions-api.md) |
 
-- CI builds and pushes `backend`/`frontend` images to Docker Hub on every push to `main` ([deploy.yml](.github/workflows/deploy.yml)).
-- The panel's `.env` overrides `POSTGRES_*`, `BACKEND_PORT`/`FRONTEND_PORT` (allocated in the 10000–19999 range), and image tags.
-- Migrations run via `run_migrations.sh` inside the backend container (`docker compose run --rm --no-deps backend ...`).
-- Schema changes are Alembic migrations in `backend/alembic/versions/`; never edit tables by hand.
-
-## External API (bots)
-
-Machine clients (Grok bots etc.) authenticate with per-user API keys generated in Settings — full-access (`bhq_...`) or read-only — passed as `Authorization: Bearer` tokens and verified against bcrypt hashes stored per user. Endpoints:
-
-| Area | Docs |
-|------|------|
-| Investments summary / composition | [docs/external-investments-api.md](docs/external-investments-api.md) |
-| Budget & transactions (read + write) | [docs/external-budget-transactions-api.md](docs/external-budget-transactions-api.md) |
-| Manual accounts | [docs/](docs/) (`external_manual_accounts` router) |
+SPA routes: `/`, `/budget`, `/salary`, `/investments`, `/settings`, and optional `/investec/*`.
 
 ## Development
 
 ```bash
-# backend tests (from repo root)
+# Backend tests
 uv sync --frozen --extra backend --extra dev
 uv run pytest
 
-# frontend checks
+# Frontend unit tests
 cd frontend && npm test
 
-# migrations loop
-make migrate-create MSG='short_description'   # review the generated script
-make migrate                                  # against a disposable dev DB first
+# Migrations (dev stack running)
+make migrate
+make migrate-create MSG='short_description'
+
+# Synthetic data + README screenshots (standalone stack)
+docker compose -f docker-compose.standalone.yml up --build -d
+docker compose -f docker-compose.standalone.yml run --rm --no-deps backend bash /app/run_migrations.sh
+docker compose -f docker-compose.standalone.yml exec backend uv run python /app/scripts/seed_db.py --force
+cd scripts && npm install && npx playwright install chromium
+node ../scripts/capture-screenshots.mjs
+docker compose -f docker-compose.standalone.yml down
 ```
 
-Interactive API docs are at `/docs` when the backend is running. Makefile helpers: `make dev-up / dev-build / dev-down / dev-logs / dev-shell`, `make prod-up / prod-down`, `make migrate*`, `make clean`.
+Makefile helpers: `make dev-up`, `dev-build`, `dev-down`, `dev-logs`, `dev-shell`, `migrate*`, `prod-up` (panel `docker-compose.yml` against pulled images).
+
+Product notes: [docs/](docs/) — [monthly budget income](docs/monthly-budget-income.md), [UI conventions](docs/ui.md), external API guides.

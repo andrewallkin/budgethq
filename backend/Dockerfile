@@ -32,6 +32,7 @@ COPY backend/alembic ./alembic
 
 # Migration script run by the control panel: bash /app/run_migrations.sh
 COPY backend/run_migrations.sh /app/run_migrations.sh
+COPY scripts/seed_db.py /app/scripts/seed_db.py
 RUN chmod +x /app/run_migrations.sh
 
 # Expose port

@@ -1,4 +1,4 @@
-.PHONY: help dev-up dev-down dev-build dev-logs dev-shell migrate migrate-create migrate-stamp migrate-history migrate-rollback clean prod-up prod-down
+.PHONY: help dev-up dev-down dev-build dev-logs dev-shell migrate migrate-create migrate-stamp migrate-history migrate-rollback seed-demo clean prod-up prod-down
 
 # Default command
 help:
@@ -76,6 +76,9 @@ migrate-history:
 
 migrate-rollback:
 	docker compose -f docker-compose.dev.yml exec backend uv run alembic downgrade -1
+
+seed-demo:
+	docker compose -f docker-compose.dev.yml exec backend uv run python /app/scripts/seed_db.py --force
 
 # Production (for testing prod images locally; the VPS control panel runs docker compose itself)
 prod-up:
