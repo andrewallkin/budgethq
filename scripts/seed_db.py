@@ -68,6 +68,7 @@ def _clear_user_seed_data(db: Session, user_id: int) -> None:
         (models.RAValueHistory, "user_id"),
         (models.ETFHolding, "user_id"),
         (models.UserSheet, "user_id"),
+        (models.ManualBankAccount, "user_id"),
         (models.InvestmentPortfolio, "user_id"),
     ]:
         db.query(model).filter(getattr(model, field) == user_id).delete(synchronize_session=False)
@@ -170,6 +171,30 @@ def _seed_payslip(db: Session, user: models.User) -> None:
 
 
 def _seed_emergency_and_ra(db: Session, user: models.User) -> None:
+    db.add(
+        models.ManualBankAccount(
+            user_id=user.id,
+            name="Fictional cheque account",
+            balance=18_400.0,
+            is_emergency_savings=False,
+        )
+    )
+    db.add(
+        models.ManualBankAccount(
+            user_id=user.id,
+            name="Fictional notice deposit",
+            balance=26_500.0,
+            is_emergency_savings=False,
+        )
+    )
+    db.add(
+        models.ManualBankAccount(
+            user_id=user.id,
+            name="Vehicle finance",
+            balance=86_400.0,
+            is_emergency_savings=False,
+        )
+    )
     db.add(
         models.EmergencySavings(
             user_id=user.id,

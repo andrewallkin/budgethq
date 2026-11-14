@@ -22,7 +22,7 @@ const VIEWPORT = { width: 1440, height: 900 };
 const SHOTS = [
   { file: "hero.png", path: "/", waitMs: 1500 },
   { file: "feature-01.png", path: "/budget", waitMs: 1200 },
-  { file: "feature-02.png", path: "/investments", waitMs: 1500 },
+  { file: "feature-02.png", path: "/investments/sheets/tfsa", waitMs: 1500 },
 ];
 
 async function login(page) {
@@ -39,7 +39,7 @@ async function main() {
   const browser = await chromium.launch();
   const context = await browser.newContext({
     viewport: VIEWPORT,
-    deviceScaleFactor: 1,
+    deviceScaleFactor: 2,
   });
   const page = await context.newPage();
 
