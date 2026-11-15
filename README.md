@@ -28,7 +28,7 @@ BudgetHQ keeps needs, wants, and savings in one place, aligned to monthly net in
 | Budget dashboard | Investments hub |
 | ![Budget](docs/images/feature-01.png) | ![Investments](docs/images/feature-02.png) |
 
-Figures in these images come from the **local seed** (synthetic data). They are not production balances.
+Figures in these images are fictional examples. They are not production balances.
 
 ## Architecture
 
@@ -76,19 +76,13 @@ flowchart LR
 
 ## Getting started
 
-**Demo login (freshly seeded local database only):**
-
-- Username: `sandi.molefe@example.com`
-- Password: `demo-local-only`
-
 ```bash
 cp .env.example .env
 # Required: JWT_SECRET_KEY (e.g. openssl rand -hex 32)
-# For open registration locally, leave AUTHORIZED_USERS unset or add the demo username.
+# For open registration locally, leave AUTHORIZED_USERS unset.
 
 docker compose -f docker-compose.dev.yml up --build
 docker compose -f docker-compose.dev.yml exec backend uv run alembic upgrade head
-docker compose -f docker-compose.dev.yml exec backend uv run python /app/scripts/seed_db.py --force
 ```
 
 - **Frontend:** http://localhost:3000 (Vite HMR on port 5173 inside the container)
@@ -108,7 +102,7 @@ Copy [.env.example](.env.example) to `.env`. The backend builds `DATABASE_URL` f
 | Standalone | `docker-compose.standalone.yml` | Production images, bundled Postgres |
 | VPS (panel) | `docker-compose.yml` | External `postgres-net`, prebuilt images |
 
-See [docs/deployment.md](docs/deployment.md) for migrate/seed commands, logs, and database backup steps.
+See [docs/deployment.md](docs/deployment.md) for migrate commands, logs, and database backup steps.
 
 ## API
 
@@ -140,14 +134,6 @@ cd frontend && npm test
 # Migrations (dev stack running)
 make migrate
 make migrate-create MSG='short_description'
-
-# Synthetic data + README screenshots (standalone stack)
-docker compose -f docker-compose.standalone.yml up --build -d
-docker compose -f docker-compose.standalone.yml run --rm --no-deps backend bash /app/run_migrations.sh
-docker compose -f docker-compose.standalone.yml exec backend uv run python /app/scripts/seed_db.py --force
-cd scripts && npm install && npx playwright install chromium
-node ../scripts/capture-screenshots.mjs
-docker compose -f docker-compose.standalone.yml down
 ```
 
 Makefile helpers: `make dev-up`, `dev-build`, `dev-down`, `dev-logs`, `dev-shell`, `migrate*`, `prod-up` (panel `docker-compose.yml` against pulled images).

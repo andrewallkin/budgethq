@@ -20,7 +20,6 @@ Run BudgetHQ without the VPS control panel or shared `postgres-net`:
 cp .env.example .env
 docker compose -f docker-compose.standalone.yml up --build -d
 docker compose -f docker-compose.standalone.yml run --rm --no-deps backend bash /app/run_migrations.sh
-docker compose -f docker-compose.standalone.yml exec backend uv run python /app/scripts/seed_db.py --force
 ```
 
 Open http://localhost:3000. The backend listens on `127.0.0.1:${BACKEND_PORT:-8000}` for `/docs`. Postgres runs in Compose only (no host port).
