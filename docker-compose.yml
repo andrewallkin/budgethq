@@ -1,3 +1,4 @@
+# VPS control panel: image-mode deploy on external shared Postgres network.
 services:
   backend:
     image: andrewallkin/budgethq:${DOCKER_IMAGE_BACKEND:-backend-main-latest}

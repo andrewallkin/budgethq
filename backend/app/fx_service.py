@@ -213,10 +213,10 @@ def _fetch_sheet_rates() -> tuple[dict[str, float], Optional[str]]:
     spreadsheet_id = _fx_spreadsheet_id()
     rng = _fx_range()
     if not spreadsheet_id:
-        return {}, "FX spreadsheet ID not configured (GOOGLE_SPREADSHEET_ID)"
+        return {}, None
     svc = _build_sheets_client()
     if svc is None:
-        return {}, "Google Sheets credentials unavailable"
+        return {}, None
 
     ensure_fx_rates_tab(svc, spreadsheet_id)
 
@@ -229,7 +229,7 @@ def _fetch_sheet_rates() -> tuple[dict[str, float], Optional[str]]:
         )
     except Exception as e:
         logger.exception("FX: sheet read failed: %s", e)
-        return {}, f"Sheets read failed: {e!s}"
+        return {}, "Sheets read failed"
 
     values = result.get("values") or []
     rates: dict[str, float] = {}

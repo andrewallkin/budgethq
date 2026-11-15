@@ -1,14 +1,20 @@
+# Local development: hot reload, bind mounts, and bundled Postgres.
 services:
-  # Persistent database (default development mode)
   postgres:
     image: postgres:15
     ports:
-      - "${POSTGRES_PORT:-5432}:5432" # Expose for local DB access
+      - "${POSTGRES_PORT:-5432}:5432"
     env_file:
       - .env
     restart: unless-stopped
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-budget_user} -d ${POSTGRES_DB:-budget_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
     networks: [postgres-net]
 
   backend:
@@ -23,7 +29,7 @@ services:
       - ./backend/app:/app/app # Hot reload for code changes
     depends_on:
       postgres:
-        condition: service_started
+        condition: service_healthy
     env_file:
       - .env
     restart: unless-stopped
