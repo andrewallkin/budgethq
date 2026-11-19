@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, Date, DateTime, UniqueConstraint, Boolean, Text
+from sqlalchemy import Column, Index, Integer, String, Float, ForeignKey, Date, DateTime, UniqueConstraint, Boolean, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from .database import Base
@@ -817,3 +818,24 @@ class SygniaContribution(Base):
     updated_at = Column(DateTime, default=get_sast_now, onupdate=get_sast_now)
 
     account = relationship("SygniaAccount", back_populates="contributions")
+
+
+class McpOAuthClient(Base):
+    __tablename__ = "mcp_oauth_clients"
+
+    client_id = Column(String(255), primary_key=True)
+    payload = Column(JSONB, nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=get_sast_now)
+
+
+class McpOAuthGrant(Base):
+    __tablename__ = "mcp_oauth_grants"
+    __table_args__ = (Index("idx_mcp_oauth_grants_user", "user_id", "kind"),)
+
+    token_hash = Column(String(64), primary_key=True)
+    kind = Column(String(16), nullable=False)
+    client_id = Column(String(255), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    partner_hash = Column(String(64), nullable=True)
+    payload = Column(JSONB, nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=True)

@@ -42,6 +42,25 @@ services:
       - default
       - postgres-net
 
+  mcp:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ["python", "-m", "app.mcp.server"]
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: postgres
+    ports:
+      - "127.0.0.1:${MCP_PORT:-8004}:8000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - default
+      - postgres-net
+
   frontend:
     build:
       context: ./frontend

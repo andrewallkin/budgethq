@@ -29,6 +29,21 @@ services:
         condition: service_healthy
     restart: always
 
+  mcp:
+    image: andrewallkin/budgethq:${DOCKER_IMAGE_MCP:-mcp-main-latest}
+    command: ["python", "-m", "app.mcp.server"]
+    ports:
+      - "127.0.0.1:${MCP_PORT:-8004}:8000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    env_file:
+      - .env
+    restart: always
+    networks:
+      - default
+      - postgres-net
+
 networks:
   default:
   postgres-net:

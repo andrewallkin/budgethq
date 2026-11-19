@@ -1,5 +1,5 @@
 import logging
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, Response, status, Depends
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -56,7 +56,7 @@ def get_auth_config():
     return AuthConfig(restrict_authorized_users=bool(auth.get_authorized_users_list()))
 
 @router.post("/register", response_model=Token)
-def register(user: UserCreate, db: Session = Depends(database.get_db)):
+def register(user: UserCreate, response: Response, db: Session = Depends(database.get_db)):
     auth.ensure_username_authorized(user.username, context="registration")
 
     db_user = db.query(models.User).filter(models.User.username == user.username).first()
@@ -70,6 +70,7 @@ def register(user: UserCreate, db: Session = Depends(database.get_db)):
     db.refresh(new_user)
 
     access_token = auth.create_access_token(data={"sub": new_user.username})
+    auth.set_auth_cookie(response, access_token)
     logger.info(
         "User registered",
         extra={"user_id": new_user.id, "username": redact_email(new_user.username)},
@@ -77,7 +78,11 @@ def register(user: UserCreate, db: Session = Depends(database.get_db)):
     return {"access_token": access_token, "token_type": "bearer"}
 
 @router.post("/login", response_model=Token)
-def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(database.get_db)):
+def login(
+    response: Response,
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(database.get_db),
+):
     user = db.query(models.User).filter(models.User.username == form_data.username).first()
     if not user or not auth.verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
@@ -93,6 +98,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     )
 
     access_token = auth.create_access_token(data={"sub": user.username})
+    auth.set_auth_cookie(response, access_token)
     logger.info(
         "User logged in",
         extra={"user_id": user.id, "username": redact_email(user.username)},
