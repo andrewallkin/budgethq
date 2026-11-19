@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 from collections.abc import Callable
 from typing import Any
 
@@ -53,12 +54,24 @@ def _run_route(operation: Callable[..., Any], **kwargs: Any) -> Any:
     return operation(**kwargs)
 
 
+def _route_kwargs(operation: Callable[..., Any], *, user: Any, db: Any, extra: dict[str, Any]) -> dict[str, Any]:
+    """Pass db and current_user only when the route function declares them."""
+    params = inspect.signature(operation).parameters
+    accepts_any = any(param.kind == inspect.Parameter.VAR_KEYWORD for param in params.values())
+    kwargs = dict(extra)
+    if accepts_any or "db" in params:
+        kwargs["db"] = db
+    if accepts_any or "current_user" in params:
+        kwargs["current_user"] = user
+    return kwargs
+
+
 def invoke_external(operation: Callable[..., Any], **kwargs: Any) -> dict:
     """Call one external API route function and return its JSON body."""
     try:
         user = require_mcp_user()
         with SessionLocal() as db:
-            result = _run_route(operation, db=db, current_user=user, **kwargs)
+            result = _run_route(operation, **_route_kwargs(operation, user=user, db=db, extra=kwargs))
     except McpAuthError as exc:
         return {"error": {"code": "unauthorized", "message": str(exc)}}
     except HTTPException as exc:

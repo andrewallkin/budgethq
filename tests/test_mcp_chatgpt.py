@@ -17,6 +17,7 @@ from app.mcp.auth import McpAuthError
 from app.mcp.external_tools import (
     TOOL_ROUTE_HANDLERS,
     budget_summary,
+    categories,
     invoke_external,
     investments_summary,
     register_external_tools,
@@ -123,6 +124,15 @@ def test_tool_returns_external_route_payload(monkeypatch, tool_fn, route_path, k
     assert tool_fn(**kwargs) == expected
     assert "db" in seen
     assert "current_user" in seen
+
+
+def test_categories_calls_the_route_without_a_database_session(monkeypatch) -> None:
+    monkeypatch.setattr("app.mcp.external_tools.require_mcp_user", lambda: object())
+
+    payload = categories()
+
+    assert payload["categories"]
+    assert payload["categories"][0]["slug"]
 
 
 def test_invoke_external_passes_database_and_user(monkeypatch) -> None:
