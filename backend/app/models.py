@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Index, Integer, String, Float, ForeignKey, Date, DateTime, UniqueConstraint, Boolean, Text
+from sqlalchemy import Column, Index, Integer, String, Float, ForeignKey, Date, DateTime, UniqueConstraint, Boolean, Text, JSON
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -824,7 +824,7 @@ class McpOAuthClient(Base):
     __tablename__ = "mcp_oauth_clients"
 
     client_id = Column(String(255), primary_key=True)
-    payload = Column(JSONB, nullable=False)
+    payload = Column(JSON().with_variant(JSONB(), "postgresql"), nullable=False)
     created_at = Column(DateTime(timezone=True), nullable=False, default=get_sast_now)
 
 
@@ -837,5 +837,5 @@ class McpOAuthGrant(Base):
     client_id = Column(String(255), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     partner_hash = Column(String(64), nullable=True)
-    payload = Column(JSONB, nullable=False)
+    payload = Column(JSON().with_variant(JSONB(), "postgresql"), nullable=False)
     expires_at = Column(DateTime(timezone=True), nullable=True)
