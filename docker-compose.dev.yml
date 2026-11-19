@@ -36,6 +36,23 @@ services:
     command: uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload # Enable hot reload
     networks: [default, postgres-net]
 
+  mcp:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ["python", "-m", "app.mcp.server"]
+    ports:
+      - "127.0.0.1:${MCP_PORT:-8004}:8000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    env_file:
+      - .env
+    volumes:
+      - ./backend/app:/app/app
+    restart: unless-stopped
+    networks: [default, postgres-net]
+
   frontend:
     build:
       context: ./frontend

@@ -18,6 +18,13 @@ class Settings(BaseSettings):
     jwt_secret_key: str
     jwt_access_token_expire_minutes: int = 60
     authorized_users: str = ""
+    cookie_secure: bool = False
+    frontend_base_url: str = ""
+    public_base_url: str = ""
+    mcp_public_base_url: str = ""
+
+    app_host: str = "0.0.0.0"
+    app_port: int = 8000
 
     # cors
     cors_origins: str = "http://localhost:3000,http://localhost:5173"
@@ -60,6 +67,13 @@ class Settings(BaseSettings):
     @property
     def authorized_users_list(self) -> list[str]:
         return [u.strip() for u in self.authorized_users.split(",") if u.strip()]
+
+    @property
+    def mcp_oauth_base_url(self) -> str:
+        """Public origin of the MCP process, with no trailing path."""
+        if self.mcp_public_base_url.strip():
+            return self.mcp_public_base_url.strip().rstrip("/")
+        return "https://budgethq.andrewallkin.com"
 
 
 @lru_cache

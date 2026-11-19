@@ -88,6 +88,48 @@ class TestAuthConfigEndpoint:
 
 
 class TestRegisterAuthorizedUsers:
+    def test_login_sets_budgethq_auth_cookie(self, monkeypatch):
+        _set_authorized_users(monkeypatch, "")
+        db = MagicMock()
+        user = MagicMock()
+        user.id = 1
+        user.username = "user@example.com"
+        user.hashed_password = auth.get_password_hash("secret12")
+        db.query.return_value.filter.return_value.first.return_value = user
+
+        client = _make_client(db)
+        response = client.post(
+            "/api/auth/login",
+            data={"username": "user@example.com", "password": "secret12"},
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        assert response.status_code == 200
+        assert auth.AUTH_COOKIE_NAME in response.cookies
+
+    def test_register_sets_budgethq_auth_cookie(self, monkeypatch):
+        _set_authorized_users(monkeypatch, "")
+        db = MagicMock()
+        db.query.return_value.filter.return_value.first.return_value = None
+
+        new_user = MagicMock()
+        new_user.id = 2
+        new_user.username = "new@example.com"
+
+        def refresh_side_effect(user):
+            user.id = new_user.id
+
+        db.add = MagicMock()
+        db.commit = MagicMock()
+        db.refresh = MagicMock(side_effect=refresh_side_effect)
+
+        client = _make_client(db)
+        response = client.post(
+            "/api/auth/register",
+            json={"username": "new@example.com", "password": "secret12"},
+        )
+        assert response.status_code == 200
+        assert auth.AUTH_COOKIE_NAME in response.cookies
+
     def test_register_allowed_when_in_list(self, monkeypatch):
         _set_authorized_users(monkeypatch, "allowed@example.com")
 

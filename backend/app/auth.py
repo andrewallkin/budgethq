@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from typing import Literal, Optional
 from jose import JWTError, jwt
 import bcrypt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer, OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from . import models, database
@@ -40,6 +40,32 @@ def ensure_username_authorized(
         )
 
 ALGORITHM = "HS256"
+AUTH_COOKIE_NAME = "budgethq_auth"
+AUTH_COOKIE_SAMESITE = "lax"
+
+
+def set_auth_cookie(response: Response, token: str) -> None:
+    settings = get_settings()
+    response.set_cookie(
+        key=AUTH_COOKIE_NAME,
+        value=token,
+        httponly=True,
+        secure=settings.cookie_secure,
+        samesite=AUTH_COOKIE_SAMESITE,
+        max_age=settings.jwt_access_token_expire_minutes * 60,
+        path="/",
+    )
+
+
+def clear_auth_cookie(response: Response) -> None:
+    settings = get_settings()
+    response.delete_cookie(
+        key=AUTH_COOKIE_NAME,
+        httponly=True,
+        secure=settings.cookie_secure,
+        samesite=AUTH_COOKIE_SAMESITE,
+        path="/",
+    )
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login")
 external_api_bearer = HTTPBearer(auto_error=True)
