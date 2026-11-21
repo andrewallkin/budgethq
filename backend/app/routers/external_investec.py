@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 import requests
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
@@ -34,7 +34,7 @@ def _investec_for_user(user: models.User) -> InvestecService:
     )
 
 
-def _query_params(request: Request) -> dict[str, str]:
+def _query_from_request(request: Request) -> dict[str, str]:
     return dict(request.query_params)
 
 
@@ -66,69 +66,69 @@ def _resolve_profile_id(service: InvestecService) -> tuple[Optional[int], Any]:
 
 @router.get("/accounts")
 async def list_accounts(
-    request: Request,
     current_user: models.User = Depends(auth.get_user_from_external_api_key),
+    query: dict[str, str] = Depends(_query_from_request),
 ):
     service = _investec_for_user(current_user)
-    return _proxy_json(service, "/za/pb/v1/accounts", _query_params(request))
+    return _proxy_json(service, "/za/pb/v1/accounts", query)
 
 
 @router.get("/accounts/{account_id}/balance")
 async def get_account_balance(
     account_id: str,
-    request: Request,
     current_user: models.User = Depends(auth.get_user_from_external_api_key),
+    query: dict[str, str] = Depends(_query_from_request),
 ):
     service = _investec_for_user(current_user)
     return _proxy_json(
-        service, f"/za/pb/v1/accounts/{account_id}/balance", _query_params(request)
+        service, f"/za/pb/v1/accounts/{account_id}/balance", query
     )
 
 
 @router.get("/accounts/{account_id}/transactions")
 async def list_account_transactions(
     account_id: str,
-    request: Request,
     current_user: models.User = Depends(auth.get_user_from_external_api_key),
+    query: dict[str, str] = Depends(_query_from_request),
 ):
     service = _investec_for_user(current_user)
     return _proxy_json(
-        service, f"/za/pb/v1/accounts/{account_id}/transactions", _query_params(request)
+        service, f"/za/pb/v1/accounts/{account_id}/transactions", query
     )
 
 
 @router.get("/accounts/{account_id}/pending-transactions")
 async def list_pending_transactions(
     account_id: str,
-    request: Request,
     current_user: models.User = Depends(auth.get_user_from_external_api_key),
+    query: dict[str, str] = Depends(_query_from_request),
 ):
     service = _investec_for_user(current_user)
     return _proxy_json(
         service,
         f"/za/pb/v1/accounts/{account_id}/pending-transactions",
-        _query_params(request),
+        query,
     )
 
 
 @router.get("/profiles")
 async def list_profiles(
-    request: Request,
     current_user: models.User = Depends(auth.get_user_from_external_api_key),
+    query: dict[str, str] = Depends(_query_from_request),
 ):
     service = _investec_for_user(current_user)
-    return _proxy_json(service, "/za/pb/v1/profiles", _query_params(request))
+    return _proxy_json(service, "/za/pb/v1/profiles", query)
 
 
 @router.get("/profiles/{profile_id}/accounts")
 async def list_profile_accounts(
     profile_id: str,
-    request: Request,
     current_user: models.User = Depends(auth.get_user_from_external_api_key),
+    query: dict[str, str] = Depends(_query_from_request),
 ):
     service = _investec_for_user(current_user)
     return _proxy_json(
-        service, f"/za/pb/v1/profiles/{profile_id}/accounts", _query_params(request)
+        service, f"/za/pb/v1/profiles/{profile_id}/accounts", query
     )
 
 
@@ -136,14 +136,14 @@ async def list_profile_accounts(
 async def get_authorisation_setup(
     profile_id: str,
     account_id: str,
-    request: Request,
     current_user: models.User = Depends(auth.get_user_from_external_api_key),
+    query: dict[str, str] = Depends(_query_from_request),
 ):
     service = _investec_for_user(current_user)
     return _proxy_json(
         service,
         f"/za/pb/v1/profiles/{profile_id}/accounts/{account_id}/authorisationsetupdetails",
-        _query_params(request),
+        query,
     )
 
 
@@ -151,34 +151,36 @@ async def get_authorisation_setup(
 async def list_profile_beneficiaries(
     profile_id: str,
     account_id: str,
-    request: Request,
     current_user: models.User = Depends(auth.get_user_from_external_api_key),
+    query: dict[str, str] = Depends(_query_from_request),
 ):
     service = _investec_for_user(current_user)
     return _proxy_json(
         service,
         f"/za/pb/v1/profiles/{profile_id}/accounts/{account_id}/beneficiaries",
-        _query_params(request),
+        query,
     )
 
 
 @router.get("/beneficiaries")
 async def list_beneficiaries(
-    request: Request,
     current_user: models.User = Depends(auth.get_user_from_external_api_key),
+    query: dict[str, str] = Depends(_query_from_request),
 ):
     service = _investec_for_user(current_user)
-    return _proxy_json(service, "/za/pb/v1/accounts/beneficiaries", _query_params(request))
+    return _proxy_json(service, "/za/pb/v1/accounts/beneficiaries", query)
 
 
 @router.get("/beneficiary-categories")
 async def list_beneficiary_categories(
-    request: Request,
     profile_id: Optional[str] = Query(default=None, alias="profileId"),
     current_user: models.User = Depends(auth.get_user_from_external_api_key),
+    query: dict[str, str] = Depends(_query_from_request),
 ):
     service = _investec_for_user(current_user)
-    params = _query_params(request)
+    params = dict(query)
+    if profile_id:
+        params["profileId"] = profile_id
     if not profile_id and "profileId" not in params:
         error_status, profile_or_body = _resolve_profile_id(service)
         if error_status is not None:
@@ -376,13 +378,12 @@ def _queue_movement(
 @router.post("/accounts/{account_id}/transfers")
 async def create_transfer(
     account_id: str,
-    request: Request,
     body: dict[str, Any] = Body(...),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
     db: Session = Depends(database.get_db),
     current_user: models.User = Depends(auth.get_user_from_external_api_key_write),
 ):
     _require_telegram(current_user)
-    idempotency_key = request.headers.get("Idempotency-Key")
     existing = _existing_idempotent(db, current_user.id, idempotency_key)
     if existing is not None:
         return JSONResponse(status_code=status.HTTP_200_OK, content=_movement_public(existing))
@@ -452,13 +453,12 @@ async def create_transfer(
 @router.post("/accounts/{account_id}/payments")
 async def create_payment(
     account_id: str,
-    request: Request,
     body: dict[str, Any] = Body(...),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
     db: Session = Depends(database.get_db),
     current_user: models.User = Depends(auth.get_user_from_external_api_key_write),
 ):
     _require_telegram(current_user)
-    idempotency_key = request.headers.get("Idempotency-Key")
     existing = _existing_idempotent(db, current_user.id, idempotency_key)
     if existing is not None:
         return JSONResponse(status_code=status.HTTP_200_OK, content=_movement_public(existing))
