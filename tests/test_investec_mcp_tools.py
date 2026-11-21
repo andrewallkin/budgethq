@@ -165,6 +165,102 @@ def test_list_investec_transactions_forwards_query(monkeypatch) -> None:
     assert called["query"] == {"fromDate": "2026-01-01", "toDate": "2026-01-31"}
 
 
+def test_broken_read_tools_forward_a_query_dict(monkeypatch) -> None:
+    """Accounts, balances, and beneficiary categories must not forward a Depends marker."""
+    from app.mcp.external_tools import (
+        get_investec_account_balance,
+        list_investec_accounts,
+        list_investec_beneficiary_categories,
+    )
+
+    user = MagicMock()
+    user.investec_client_id = "client"
+    user.investec_client_secret = "secret"
+    user.investec_api_key = "key"
+    monkeypatch.setattr("app.mcp.external_tools.require_mcp_user", lambda: user)
+    monkeypatch.setattr("app.mcp.external_tools.SessionLocal", MagicMock())
+    monkeypatch.setattr("app.routers.external_investec.decrypt_api_key", lambda value: value)
+
+    seen: list[tuple] = []
+
+    class FakeService:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def request_json(self, method, endpoint, params=None, **_kwargs):
+            seen.append((method, endpoint, params))
+            if endpoint == "/za/pb/v1/profiles":
+                return 200, {
+                    "data": {"profiles": [{"profileId": "p1", "defaultProfile": True}]}
+                }
+            if endpoint == "/za/pb/v1/accounts":
+                return 200, {"data": {"accounts": [{"accountId": "acc-1"}]}}
+            if endpoint.endswith("/balance"):
+                return 200, {"data": {"availableBalance": 10}}
+            return 200, {"data": {"categories": []}}
+
+    monkeypatch.setattr("app.routers.external_investec.InvestecService", FakeService)
+
+    accounts = list_investec_accounts()
+    balance = get_investec_account_balance("acc-1")
+    categories = list_investec_beneficiary_categories()
+
+    assert accounts["data"]["accounts"][0]["accountId"] == "acc-1"
+    assert balance["data"]["availableBalance"] == 10
+    assert categories["data"]["categories"] == []
+    assert ("GET", "/za/pb/v1/accounts", {}) in seen
+    assert ("GET", "/za/pb/v1/accounts/acc-1/balance", {}) in seen
+    assert (
+        "GET",
+        "/za/pb/v1/accounts/beneficiarycategories",
+        {"profileId": "p1"},
+    ) in seen
+    assert all(isinstance(params, dict) for _method, _endpoint, params in seen)
+
+
+def test_invoke_external_supplies_empty_query_when_omitted(monkeypatch) -> None:
+    from app.routers.external_investec import list_accounts, list_beneficiary_categories
+
+    user = MagicMock()
+    user.investec_client_id = "client"
+    user.investec_client_secret = "secret"
+    user.investec_api_key = "key"
+    monkeypatch.setattr("app.mcp.external_tools.require_mcp_user", lambda: user)
+    monkeypatch.setattr("app.mcp.external_tools.SessionLocal", MagicMock())
+    monkeypatch.setattr("app.routers.external_investec.decrypt_api_key", lambda value: value)
+
+    seen: dict = {}
+
+    class FakeService:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def request_json(self, method, endpoint, params=None, **_kwargs):
+            seen["params"] = params
+            return 200, {"data": {"accounts": []}}
+
+    monkeypatch.setattr("app.routers.external_investec.InvestecService", FakeService)
+
+    assert external_tools.invoke_external(list_accounts) == {"data": {"accounts": []}}
+    assert seen["params"] == {}
+
+    seen.clear()
+
+    def request_json(self, method, endpoint, params=None, **_kwargs):
+        seen.setdefault("calls", []).append((endpoint, params))
+        if endpoint == "/za/pb/v1/profiles":
+            return 200, {"data": {"profiles": [{"profileId": "p1", "defaultProfile": True}]}}
+        return 200, {"data": {"categories": ["once"]}}
+
+    FakeService.request_json = request_json
+    result = external_tools.invoke_external(list_beneficiary_categories)
+    assert result == {"data": {"categories": ["once"]}}
+    assert seen["calls"][-1] == (
+        "/za/pb/v1/accounts/beneficiarycategories",
+        {"profileId": "p1"},
+    )
+
+
 def test_invoke_external_unwraps_json_response(monkeypatch) -> None:
     monkeypatch.setattr("app.mcp.external_tools.require_mcp_user", lambda: MagicMock())
 
