@@ -202,6 +202,19 @@ def test_every_tool_maps_to_a_route_handler() -> None:
         "get_manual_account",
         "post_manual_account",
         "patch_manual_account",
+        "list_investec_accounts",
+        "get_investec_account_balance",
+        "list_investec_transactions",
+        "list_investec_pending_transactions",
+        "list_investec_profiles",
+        "list_investec_profile_accounts",
+        "get_investec_authorisation_setup",
+        "list_investec_profile_beneficiaries",
+        "list_investec_beneficiaries",
+        "list_investec_beneficiary_categories",
+        "get_investec_movement",
+        "create_investec_transfer",
+        "create_investec_payment",
     }
     assert set(TOOL_ROUTE_HANDLERS) == expected
     mcp = FastMCP("test")

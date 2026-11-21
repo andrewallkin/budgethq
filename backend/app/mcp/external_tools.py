@@ -5,13 +5,16 @@ import inspect
 from collections.abc import Callable
 from typing import Any
 
+import json
+
 from fastapi import HTTPException
 from fastapi import status as http_status
+from fastapi.responses import JSONResponse
 from fastmcp import FastMCP
 
 from app.database import SessionLocal
 from app.mcp.auth import McpAuthError, require_mcp_user
-from app.routers import external, external_budget, external_manual_accounts
+from app.routers import external, external_budget, external_investec, external_manual_accounts
 from app.routers.external_budget import ExternalLinkCreate
 
 READ_ONLY = {
@@ -80,6 +83,11 @@ def invoke_external(operation: Callable[..., Any], **kwargs: Any) -> dict:
         return {"error": {"code": code, "message": detail}}
     if result is None:
         return {}
+    if isinstance(result, JSONResponse):
+        body = result.body
+        if not body:
+            return {}
+        return json.loads(body)
     return result
 
 
@@ -239,6 +247,157 @@ def patch_manual_account(account_id: int, balance: float) -> dict:
     return invoke_external(external_manual_accounts.update_external_manual_account, account_id=account_id, data=data)
 
 
+def list_investec_accounts() -> dict:
+    """Same payload as GET /api/external/investec/accounts."""
+    return invoke_external(external_investec.list_accounts)
+
+
+def get_investec_account_balance(account_id: str) -> dict:
+    """Same payload as GET /api/external/investec/accounts/{account_id}/balance."""
+    return invoke_external(external_investec.get_account_balance, account_id=account_id)
+
+
+def list_investec_transactions(
+    account_id: str,
+    from_date: str | None = None,
+    to_date: str | None = None,
+    query: dict[str, str] | None = None,
+) -> dict:
+    """Same payload as GET /api/external/investec/accounts/{account_id}/transactions."""
+    params = dict(query or {})
+    if from_date is not None:
+        params["fromDate"] = from_date
+    if to_date is not None:
+        params["toDate"] = to_date
+    return invoke_external(external_investec.list_account_transactions, account_id=account_id, query=params)
+
+
+def list_investec_pending_transactions(
+    account_id: str,
+    query: dict[str, str] | None = None,
+) -> dict:
+    """Same payload as GET /api/external/investec/accounts/{account_id}/pending-transactions."""
+    return invoke_external(
+        external_investec.list_pending_transactions,
+        account_id=account_id,
+        query=dict(query or {}),
+    )
+
+
+def list_investec_profiles(query: dict[str, str] | None = None) -> dict:
+    """Same payload as GET /api/external/investec/profiles."""
+    return invoke_external(external_investec.list_profiles, query=dict(query or {}))
+
+
+def list_investec_profile_accounts(profile_id: str, query: dict[str, str] | None = None) -> dict:
+    """Same payload as GET /api/external/investec/profiles/{profile_id}/accounts."""
+    return invoke_external(
+        external_investec.list_profile_accounts,
+        profile_id=profile_id,
+        query=dict(query or {}),
+    )
+
+
+def get_investec_authorisation_setup(
+    profile_id: str,
+    account_id: str,
+    query: dict[str, str] | None = None,
+) -> dict:
+    """Same payload as GET .../profiles/{profile_id}/accounts/{account_id}/authorisation-setup."""
+    return invoke_external(
+        external_investec.get_authorisation_setup,
+        profile_id=profile_id,
+        account_id=account_id,
+        query=dict(query or {}),
+    )
+
+
+def list_investec_profile_beneficiaries(
+    profile_id: str,
+    account_id: str,
+    query: dict[str, str] | None = None,
+) -> dict:
+    """Same payload as GET .../profiles/{profile_id}/accounts/{account_id}/beneficiaries."""
+    return invoke_external(
+        external_investec.list_profile_beneficiaries,
+        profile_id=profile_id,
+        account_id=account_id,
+        query=dict(query or {}),
+    )
+
+
+def list_investec_beneficiaries(query: dict[str, str] | None = None) -> dict:
+    """Same payload as GET /api/external/investec/beneficiaries."""
+    return invoke_external(external_investec.list_beneficiaries, query=dict(query or {}))
+
+
+def list_investec_beneficiary_categories(profile_id: str | None = None) -> dict:
+    """Same payload as GET /api/external/investec/beneficiary-categories."""
+    return invoke_external(
+        external_investec.list_beneficiary_categories,
+        profile_id=profile_id,
+    )
+
+
+def get_investec_movement(movement_id: int) -> dict:
+    """Same payload as GET /api/external/investec/movements/{movement_id}."""
+    return invoke_external(external_investec.get_movement, movement_id=movement_id)
+
+
+def create_investec_transfer(
+    account_id: str,
+    beneficiary_account_id: str,
+    amount: str,
+    my_reference: str,
+    their_reference: str,
+    idempotency_key: str | None = None,
+) -> dict:
+    """Same payload as POST /api/external/investec/accounts/{account_id}/transfers."""
+    body = {
+        "transferList": [
+            {
+                "beneficiaryAccountId": beneficiary_account_id,
+                "amount": amount,
+                "myReference": my_reference,
+                "theirReference": their_reference,
+            }
+        ]
+    }
+    return invoke_external(
+        external_investec.create_transfer,
+        account_id=account_id,
+        body=body,
+        idempotency_key=idempotency_key,
+    )
+
+
+def create_investec_payment(
+    account_id: str,
+    beneficiary_id: str,
+    amount: str,
+    my_reference: str,
+    their_reference: str,
+    idempotency_key: str | None = None,
+) -> dict:
+    """Same payload as POST /api/external/investec/accounts/{account_id}/payments."""
+    body = {
+        "paymentList": [
+            {
+                "beneficiaryId": beneficiary_id,
+                "amount": amount,
+                "myReference": my_reference,
+                "theirReference": their_reference,
+            }
+        ]
+    }
+    return invoke_external(
+        external_investec.create_payment,
+        account_id=account_id,
+        body=body,
+        idempotency_key=idempotency_key,
+    )
+
+
 TOOL_ROUTE_HANDLERS: dict[str, Callable[..., Any]] = {
     "investments_summary": external.get_external_investments_summary,
     "investments_composition": external.get_external_investments_composition,
@@ -258,6 +417,19 @@ TOOL_ROUTE_HANDLERS: dict[str, Callable[..., Any]] = {
     "get_manual_account": external_manual_accounts.get_external_manual_account,
     "post_manual_account": external_manual_accounts.create_external_manual_account,
     "patch_manual_account": external_manual_accounts.update_external_manual_account,
+    "list_investec_accounts": external_investec.list_accounts,
+    "get_investec_account_balance": external_investec.get_account_balance,
+    "list_investec_transactions": external_investec.list_account_transactions,
+    "list_investec_pending_transactions": external_investec.list_pending_transactions,
+    "list_investec_profiles": external_investec.list_profiles,
+    "list_investec_profile_accounts": external_investec.list_profile_accounts,
+    "get_investec_authorisation_setup": external_investec.get_authorisation_setup,
+    "list_investec_profile_beneficiaries": external_investec.list_profile_beneficiaries,
+    "list_investec_beneficiaries": external_investec.list_beneficiaries,
+    "list_investec_beneficiary_categories": external_investec.list_beneficiary_categories,
+    "get_investec_movement": external_investec.get_movement,
+    "create_investec_transfer": external_investec.create_transfer,
+    "create_investec_payment": external_investec.create_payment,
 }
 
 
@@ -273,6 +445,17 @@ def register_external_tools(mcp: FastMCP) -> None:
         get_transaction,
         list_manual_accounts,
         get_manual_account,
+        list_investec_accounts,
+        get_investec_account_balance,
+        list_investec_transactions,
+        list_investec_pending_transactions,
+        list_investec_profiles,
+        list_investec_profile_accounts,
+        get_investec_authorisation_setup,
+        list_investec_profile_beneficiaries,
+        list_investec_beneficiaries,
+        list_investec_beneficiary_categories,
+        get_investec_movement,
     ]
     for tool in read_tools:
         mcp.tool(annotations=READ_ONLY)(tool)
@@ -284,4 +467,6 @@ def register_external_tools(mcp: FastMCP) -> None:
     mcp.tool(annotations=WRITE)(post_apply_rules)
     mcp.tool(annotations=WRITE)(post_transaction_link)
     mcp.tool(annotations=WRITE)(post_manual_account)
+    mcp.tool(annotations=WRITE)(create_investec_transfer)
+    mcp.tool(annotations=WRITE)(create_investec_payment)
     mcp.tool(annotations=DELETE)(delete_transaction_link)

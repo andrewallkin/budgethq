@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Index, Integer, String, Float, ForeignKey, Date, DateTime, UniqueConstraint, Boolean, Text, JSON
+from sqlalchemy import Column, Index, Integer, BigInteger, String, Float, ForeignKey, Date, DateTime, UniqueConstraint, Boolean, Text, JSON
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -29,6 +29,11 @@ class User(Base):
     external_api_key_ro_prefix = Column(String(12), nullable=True, index=True)
     external_api_key_ro_hash = Column(String, nullable=True)
     external_api_key_ro_created_at = Column(DateTime, nullable=True)
+
+    # Telegram bot connection (token stored encrypted; webhook path secret for routing)
+    telegram_bot_token = Column(String, nullable=True)
+    telegram_allowed_user_id = Column(BigInteger, nullable=True)
+    telegram_webhook_secret = Column(String(64), unique=True, index=True, nullable=True)
 
     # Emergency fund designation
     emergency_fund_account_id = Column(Integer, ForeignKey("investec_accounts.id"), nullable=True)
@@ -61,6 +66,9 @@ class User(Base):
     emergency_fund_account = relationship("InvestecAccount", foreign_keys=[emergency_fund_account_id], post_update=True)
     sygnia_logins = relationship("SygniaLogin", back_populates="owner", cascade="all, delete-orphan")
     sygnia_accounts = relationship("SygniaAccount", back_populates="owner", cascade="all, delete-orphan")
+    investec_movements = relationship(
+        "InvestecMovement", back_populates="owner", cascade="all, delete-orphan"
+    )
 
 
 class InvestmentPortfolio(Base):
@@ -511,6 +519,36 @@ class InvestecAccount(Base):
     # Relationships
     owner = relationship("User", back_populates="investec_accounts", foreign_keys=[user_id])
     transactions = relationship("BankTransaction", back_populates="account", cascade="all, delete-orphan")
+
+
+class InvestecMovement(Base):
+    """Pending Investec transfer or payment awaiting Telegram approval."""
+    __tablename__ = "investec_movements"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "idempotency_key",
+            name="uq_investec_movements_user_idempotency",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
+    kind = Column(String, nullable=False)
+    source_account_id = Column(String, nullable=False)
+    investec_body = Column(JSON().with_variant(JSONB(), "postgresql"), nullable=False)
+    display_snapshot = Column(JSON().with_variant(JSONB(), "postgresql"), nullable=False)
+    status = Column(String, nullable=False, default="pending", server_default="pending", index=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    telegram_chat_id = Column(BigInteger, nullable=True)
+    telegram_message_id = Column(BigInteger, nullable=True)
+    idempotency_key = Column(String, nullable=True)
+    investec_response = Column(JSON().with_variant(JSONB(), "postgresql"), nullable=True)
+    failure_reason = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=get_sast_now)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=get_sast_now, onupdate=get_sast_now)
+
+    owner = relationship("User", back_populates="investec_movements")
 
 
 class BankTransaction(Base):

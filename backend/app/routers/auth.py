@@ -1,9 +1,12 @@
 import logging
+
+import requests
 from fastapi import APIRouter, HTTPException, Response, status, Depends
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from .. import models, database, auth
+from .. import models, database, auth, telegram_connection
+from ..config import get_settings
 from ..utils import encrypt_api_key, decrypt_api_key, get_sast_now
 from ..logging_utils import redact_email
 
@@ -48,6 +51,40 @@ class UserPreferences(BaseModel):
 
 class AuthConfig(BaseModel):
     restrict_authorized_users: bool
+
+class TelegramConnectionStatus(BaseModel):
+    connected: bool
+    allowed_user_id: int | None = None
+
+class TelegramConnectRequest(BaseModel):
+    bot_token: str
+    allowed_user_id: int
+
+TELEGRAM_HTTP_TIMEOUT_SECONDS = 30
+
+
+def _telegram_set_webhook(bot_token: str, url: str) -> None:
+    response = requests.post(
+        f"https://api.telegram.org/bot{bot_token}/setWebhook",
+        json={"url": url},
+        timeout=TELEGRAM_HTTP_TIMEOUT_SECONDS,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    if not payload.get("ok"):
+        raise ValueError(payload.get("description") or "Telegram setWebhook failed")
+
+
+def _telegram_delete_webhook(bot_token: str) -> None:
+    response = requests.post(
+        f"https://api.telegram.org/bot{bot_token}/deleteWebhook",
+        timeout=TELEGRAM_HTTP_TIMEOUT_SECONDS,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    if not payload.get("ok"):
+        raise ValueError(payload.get("description") or "Telegram deleteWebhook failed")
+
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -311,6 +348,58 @@ async def update_user_preferences(
         "has_investec_account": current_user.has_investec_account,
         "show_ra_under_investments": bool(current_user.show_ra_under_investments),
     }
+
+
+@router.get("/telegram", response_model=TelegramConnectionStatus)
+async def get_telegram_connection(
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Return Telegram bot connection status without exposing the bot token."""
+    connected = bool(current_user.telegram_bot_token)
+    allowed_user_id = current_user.telegram_allowed_user_id if connected else None
+    return {"connected": connected, "allowed_user_id": allowed_user_id}
+
+
+@router.post("/telegram")
+async def save_telegram_connection(
+    request: TelegramConnectRequest,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db),
+):
+    """Connect the user's Telegram approval bot and register its webhook."""
+    settings = get_settings()
+    try:
+        telegram_connection.connect_telegram(
+            current_user,
+            request.bot_token.strip(),
+            request.allowed_user_id,
+            settings.public_base_url,
+            _telegram_set_webhook,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except requests.RequestException as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    db.commit()
+    logger.info("Telegram bot connected", extra={"user_id": current_user.id})
+    return {"status": "success", "message": "Telegram bot connected successfully"}
+
+
+@router.delete("/telegram")
+async def delete_telegram_connection(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db),
+):
+    """Disconnect the user's Telegram approval bot and remove its webhook."""
+    try:
+        telegram_connection.disconnect_telegram(current_user, _telegram_delete_webhook)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except requests.RequestException as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    db.commit()
+    logger.info("Telegram bot disconnected", extra={"user_id": current_user.id})
+    return {"status": "success", "message": "Telegram bot disconnected successfully"}
 
 
 @router.put("/user/username")
