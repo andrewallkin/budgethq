@@ -1126,6 +1126,7 @@ export default function Settings() {
                         </div>
                     </PaperCard>
 
+                    {investecConnected ? (
                     <PaperCard className="p-5 sm:p-6">
                         <p className={paperEyebrow}>Telegram approvals</p>
                         <p className="mt-2 text-sm leading-relaxed text-[var(--paper-muted)]">
@@ -1200,14 +1201,11 @@ export default function Settings() {
                                             {telegramSaving ? 'Connecting…' : 'Connect Telegram'}
                                         </button>
                                     </form>
-                                    <p className="text-sm leading-relaxed text-[var(--paper-muted)]">
-                                        Create a bot with BotFather. The numeric Telegram user id is the only account that can tap Approve
-                                        or Reject.
-                                    </p>
                                 </>
                             )}
                         </div>
                     </PaperCard>
+                    ) : null}
 
                     <PaperCard className="p-5 sm:p-6">
                         <p className={paperEyebrow}>Payslip extraction</p>

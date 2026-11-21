@@ -127,6 +127,14 @@ def _setup_db(user, movement):
             chain.filter.return_value.first.return_value = user
         elif model is models.InvestecMovement:
             chain.filter.return_value.first.return_value = movement
+
+        def do_update(values, synchronize_session=False):
+            if movement.status != STATUS_PENDING:
+                return 0
+            movement.status = next(iter(values.values()))
+            return 1
+
+        chain.filter.return_value.update.side_effect = do_update
         return chain
 
     db.query.side_effect = query_model
@@ -196,7 +204,6 @@ class TestApproveOnce:
 
             path = f"/api/telegram/investec/webhook/{WEBHOOK_SECRET}"
             r1 = client.post(path, json=_callback_update(action="a"))
-            movement.status = STATUS_APPROVED
             r2 = client.post(path, json=_callback_update(action="a"))
 
         assert r1.status_code == 200
@@ -209,6 +216,60 @@ class TestApproveOnce:
         assert len(post_calls) == 1
         assert post_calls[0][0][1].endswith("/transfermultiple")
         assert tg_post.call_count >= 2
+
+    def test_overlapping_approves_one_update_wins(self):
+        """Two callbacks that both still see pending in memory: only one Investec POST."""
+        user = _user()
+        rows = [_movement(), _movement()]
+        seen = {"i": 0}
+        wins = {"n": 0}
+        db = MagicMock()
+
+        def query_model(model):
+            chain = MagicMock()
+            if model is models.User:
+                chain.filter.return_value.first.return_value = user
+            elif model is models.InvestecMovement:
+                def first_row():
+                    row = rows[min(seen["i"], len(rows) - 1)]
+                    seen["i"] += 1
+                    return row
+
+                chain.filter.return_value.first.side_effect = first_row
+
+                def do_update(values, synchronize_session=False):
+                    wins["n"] += 1
+                    return 1 if wins["n"] == 1 else 0
+
+                chain.filter.return_value.update.side_effect = do_update
+            return chain
+
+        db.query.side_effect = query_model
+        client = _make_client(db)
+        fixed_now = datetime(2026, 11, 21, 13, 0, tzinfo=UTC)
+        with patch.object(telegram_investec, "decrypt_api_key", side_effect=lambda x: x), patch(
+            "app.routers.telegram_investec.InvestecService"
+        ) as MockSvc, patch(
+            "app.routers.telegram_investec.requests.post", return_value=_tg_ok()
+        ), patch("app.routers.telegram_investec.datetime") as mock_dt:
+            mock_dt.now.return_value = fixed_now
+            mock_dt.side_effect = lambda *a, **k: datetime(*a, **k)
+            mock_svc = MockSvc.return_value
+            mock_svc.request_json.side_effect = [
+                (200, {"data": {"AuthorisationRequired": False, "reference": "INV-REF-99"}}),
+                *_balance_payload(10000, 9000),
+                *_balance_payload(5000, 4500),
+            ]
+            path = f"/api/telegram/investec/webhook/{WEBHOOK_SECRET}"
+            r1 = client.post(path, json=_callback_update(action="a"))
+            r2 = client.post(path, json=_callback_update(action="a"))
+
+        assert r1.status_code == 200
+        assert r2.status_code == 200
+        assert rows[0].status == "sent"
+        assert rows[1].status == STATUS_PENDING
+        post_calls = [c for c in mock_svc.request_json.call_args_list if c[0][0] == "POST"]
+        assert len(post_calls) == 1
 
 
 class TestReject:

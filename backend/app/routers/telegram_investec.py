@@ -14,9 +14,8 @@ from sqlalchemy.orm import Session
 from .. import database, models
 from ..investec_movement import (
     STATUS_APPROVED,
-    STATUS_PENDING,
     STATUS_REJECTED,
-    claim,
+    claim_if_still,
     settle,
 )
 from ..investec_movement_text import render_bubble
@@ -265,11 +264,10 @@ async def telegram_investec_webhook(
     now = datetime.now(timezone.utc)
 
     action = "approve" if action_code == "a" else "reject"
-    prev_status = movement.status
-    new_status = claim(movement, action, now)
+    claimed = claim_if_still(db, movement, action, now)
 
-    transitioned_approve = prev_status == STATUS_PENDING and new_status == STATUS_APPROVED
-    transitioned_reject = prev_status == STATUS_PENDING and new_status == STATUS_REJECTED
+    transitioned_approve = claimed and movement.status == STATUS_APPROVED
+    transitioned_reject = claimed and movement.status == STATUS_REJECTED
 
     if transitioned_approve or transitioned_reject:
         db.commit()

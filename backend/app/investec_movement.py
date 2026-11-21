@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Protocol
 
+from . import models
+
 
 STATUS_PENDING = "pending"
 STATUS_APPROVED = "approved"
@@ -30,6 +32,52 @@ _SETTLE_TARGETS = {
 class MovementLike(Protocol):
     status: str
     expires_at: datetime
+
+
+def claim_if_still(db, movement, action: str, now: datetime) -> bool:
+    """Claim a pending row with one conditional UPDATE.
+
+    Overlapping approve taps can both read status ``pending``. Only the UPDATE
+    that still matches ``status = pending`` (and the expiry predicate) returns
+    a row count of 1. That caller is the only one allowed to continue.
+    """
+    if now.tzinfo is None or now.utcoffset() is None:
+        raise ValueError("now must be timezone-aware")
+    if movement.status != STATUS_PENDING:
+        return False
+
+    target = _CLAIM_TARGETS.get(action)
+    if target is None:
+        return False
+
+    if action in ("approve", "reject"):
+        if movement.expires_at <= now:
+            return False
+        expiry_clause = models.InvestecMovement.expires_at > now
+    elif action == "expire":
+        if movement.expires_at > now:
+            return False
+        expiry_clause = models.InvestecMovement.expires_at <= now
+    else:
+        return False
+
+    updated = (
+        db.query(models.InvestecMovement)
+        .filter(
+            models.InvestecMovement.id == movement.id,
+            models.InvestecMovement.user_id == movement.user_id,
+            models.InvestecMovement.status == STATUS_PENDING,
+            expiry_clause,
+        )
+        .update(
+            {models.InvestecMovement.status: target},
+            synchronize_session=False,
+        )
+    )
+    if updated != 1:
+        return False
+    movement.status = target
+    return True
 
 
 def claim(movement: MovementLike, action: str, now: datetime) -> str:

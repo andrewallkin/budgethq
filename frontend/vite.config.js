@@ -1,13 +1,19 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { staticPayslipPreview } from './dev/staticPayslipPreview.js'
+import { settingsConnectionsPreview } from './dev/settingsPreview.js'
 
 const hmrClientPort = Number(process.env.HMR_CLIENT_PORT || '')
 const staticPreview = process.env.STATIC_PAYSLIP_PREVIEW === '1'
+const settingsPreview = process.env.SETTINGS_PREVIEW === '1'
 
 // https://vitejs.dev/config/
 export default defineConfig({
-    plugins: [react(), staticPreview ? staticPayslipPreview() : null].filter(Boolean),
+    plugins: [
+        react(),
+        settingsPreview ? settingsConnectionsPreview() : null,
+        staticPreview ? staticPayslipPreview() : null,
+    ].filter(Boolean),
     server: {
         host: '0.0.0.0',
         port: 5173,
@@ -18,7 +24,7 @@ export default defineConfig({
         watch: {
             usePolling: process.env.CHOKIDAR_USEPOLLING === 'true',
         },
-        ...(staticPreview
+        ...(staticPreview || settingsPreview
             ? {}
             : {
                 proxy: {
