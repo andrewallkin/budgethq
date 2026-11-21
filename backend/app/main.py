@@ -38,6 +38,7 @@ from .routers.external import router as external_router
 from .routers.external_budget import router as external_budget_router
 from .routers.external_manual_accounts import router as external_manual_accounts_router
 from .routers.external_investec import router as external_investec_router
+from .routers.telegram_investec import router as telegram_investec_router
 
 from . import database  # noqa: E402
 from .scheduler import start_scheduler, stop_scheduler, sync_all_prices  # noqa: E402
@@ -133,4 +134,5 @@ app.include_router(external_router, prefix="/api")
 app.include_router(external_budget_router, prefix="/api")
 app.include_router(external_manual_accounts_router, prefix="/api")
 app.include_router(external_investec_router, prefix="/api")
+app.include_router(telegram_investec_router, prefix="/api")
 
