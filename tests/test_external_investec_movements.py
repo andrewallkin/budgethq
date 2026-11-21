@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import requests
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
@@ -227,6 +228,71 @@ class TestCreateTransfer:
         MockService.assert_not_called()
         db.add.assert_not_called()
 
+    def test_non_numeric_amount_400_no_row_no_telegram(self):
+        db = MagicMock()
+        client = _make_client(db, user=_user_with_telegram())
+        with patch.object(external_investec, "decrypt_api_key", side_effect=lambda x: x), patch(
+            "app.routers.external_investec.InvestecService"
+        ) as MockService, patch(
+            "app.routers.external_investec.requests.post"
+        ) as tg_post:
+            response = client.post(
+                "/api/external/investec/accounts/acc-src/transfers",
+                json=_transfer_body(amount="not-a-number"),
+            )
+        assert response.status_code == 400
+        MockService.assert_not_called()
+        db.add.assert_not_called()
+        tg_post.assert_not_called()
+
+    def test_beneficiary_not_own_account_400_no_telegram(self):
+        db = MagicMock()
+        client = _make_client(db, user=_user_with_telegram())
+        with patch.object(external_investec, "decrypt_api_key", side_effect=lambda x: x), patch(
+            "app.routers.external_investec.InvestecService"
+        ) as MockService, patch(
+            "app.routers.external_investec.requests.post"
+        ) as tg_post:
+            mock_svc = MockService.return_value
+            mock_svc.request_json.return_value = (200, ACCOUNTS_PAYLOAD)
+            response = client.post(
+                "/api/external/investec/accounts/acc-src/transfers",
+                json=_transfer_body(beneficiaryAccountId="acc-outside"),
+            )
+        assert response.status_code == 400
+        tg_post.assert_not_called()
+        db.add.assert_not_called()
+
+    def test_telegram_send_failure_marks_failed_502(self):
+        db = MagicMock()
+        db.query.return_value.filter.return_value.first.return_value = None
+        captured = []
+
+        def capture_add(movement):
+            captured.append(movement)
+            _assign_movement_id(movement)
+
+        db.add.side_effect = capture_add
+        client = _make_client(db, user=_user_with_telegram())
+
+        with patch.object(external_investec, "decrypt_api_key", side_effect=lambda x: x), patch(
+            "app.routers.external_investec.InvestecService"
+        ) as MockService, patch(
+            "app.routers.external_investec.requests.post",
+            side_effect=requests.RequestException("Telegram down"),
+        ):
+            mock_svc = MockService.return_value
+            mock_svc.request_json.return_value = (200, ACCOUNTS_PAYLOAD)
+            response = client.post(
+                "/api/external/investec/accounts/acc-src/transfers",
+                json=_transfer_body(),
+            )
+
+        assert response.status_code == 502
+        assert len(captured) == 1
+        assert captured[0].status == "failed"
+        assert captured[0].failure_reason
+
     def test_idempotency_key_reuse_returns_200_no_second_telegram(self):
         existing = MagicMock()
         existing.id = 99
@@ -255,6 +321,27 @@ class TestCreateTransfer:
 
 
 class TestCreatePayment:
+    def test_rejects_two_payment_items(self):
+        db = MagicMock()
+        client = _make_client(db, user=_user_with_telegram())
+        body = {
+            "paymentList": [
+                _payment_body()["paymentList"][0],
+                _payment_body()["paymentList"][0],
+            ]
+        }
+        with patch("app.routers.external_investec.InvestecService") as MockService, patch(
+            "app.routers.external_investec.requests.post"
+        ) as tg_post:
+            response = client.post(
+                "/api/external/investec/accounts/acc-src/payments",
+                json=body,
+            )
+        assert response.status_code == 400
+        MockService.assert_not_called()
+        db.add.assert_not_called()
+        tg_post.assert_not_called()
+
     def test_success_returns_202(self):
         db = MagicMock()
         db.query.return_value.filter.return_value.first.return_value = None
