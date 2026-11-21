@@ -6,7 +6,7 @@ API Documentation: https://developer.investec.com/za/api-products
 """
 
 import requests
-from typing import List, Dict, Optional
+from typing import Any, List, Dict, Optional, Tuple
 from datetime import datetime, timedelta
 import logging
 import time
@@ -146,6 +146,56 @@ class InvestecService:
                 e,
             )
             raise Exception(f"Investec API error: {str(e)}")
+
+    def request_json(
+        self,
+        method: str,
+        endpoint: str,
+        params: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
+    ) -> Tuple[int, Any]:
+        """
+        Make an authenticated Investec request and return (status_code, JSON body).
+
+        Unlike _make_request, HTTP error statuses are returned as-is rather than raised.
+        """
+        token = self.get_access_token()
+        url = f"{self.base_url}{endpoint}"
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "x-api-key": self.api_key,
+            "Accept": "application/json",
+        }
+
+        max_attempts = 3
+        for attempt in range(max_attempts):
+            try:
+                response = requests.request(
+                    method, url, headers=headers, timeout=60, params=params, **kwargs
+                )
+                break
+            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+                if attempt < max_attempts - 1:
+                    backoff = 2 ** attempt
+                    logger.warning(
+                        "Investec API request failed (attempt %d/%d): %s %s: %s: %s, retrying in %ds",
+                        attempt + 1,
+                        max_attempts,
+                        method,
+                        endpoint,
+                        type(e).__name__,
+                        e,
+                        backoff,
+                    )
+                    time.sleep(backoff)
+                else:
+                    raise
+
+        try:
+            body: Any = response.json()
+        except ValueError:
+            body = response.text or None
+        return response.status_code, body
 
     def list_accounts(self) -> List[Dict]:
         """
