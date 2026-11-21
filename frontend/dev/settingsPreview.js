@@ -20,6 +20,8 @@ function drain(req) {
     })
 }
 
+let investecConnected = true
+
 export function settingsConnectionsPreview() {
     return {
         name: 'settings-connections-preview',
@@ -65,9 +67,28 @@ export function settingsConnectionsPreview() {
                 }
                 if (req.method === 'GET' && path === '/api/investec/credentials/status') {
                     send(res, 200, {
-                        is_connected: true,
-                        last_synced: '2026-11-20T08:15:00',
+                        is_connected: investecConnected,
+                        last_synced: investecConnected ? '2026-11-20T08:15:00' : null,
                     })
+                    return
+                }
+                if (req.method === 'PATCH' && path === '/api/investec/credentials') {
+                    send(res, 200, { message: 'Credentials updated' })
+                    return
+                }
+                if (req.method === 'DELETE' && path === '/api/investec/credentials') {
+                    investecConnected = false
+                    res.statusCode = 204
+                    res.end()
+                    return
+                }
+                if (req.method === 'POST' && path === '/api/investec/credentials') {
+                    investecConnected = true
+                    send(res, 201, { message: 'Credentials stored successfully' })
+                    return
+                }
+                if (req.method === 'POST' && path === '/api/investec/accounts/sync') {
+                    send(res, 200, { message: 'Account sync completed successfully' })
                     return
                 }
                 if (req.method === 'GET' && path === '/api/auth/telegram') {

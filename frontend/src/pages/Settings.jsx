@@ -27,6 +27,12 @@ const SECTIONS = [
 
 const HISTORICAL_MONTHS = [1, 3, 6]
 
+const INVESTEC_CREDENTIAL_FIELDS = [
+    { key: 'client_id', label: 'Client ID' },
+    { key: 'client_secret', label: 'Client secret' },
+    { key: 'api_key', label: 'API key' },
+]
+
 function sectionFromHash() {
     const id = window.location.hash.replace('#', '')
     return SECTIONS.some((section) => section.id === id) ? id : 'account'
@@ -271,6 +277,9 @@ export default function Settings() {
     const [telegramSuccess, setTelegramSuccess] = useAutoClearingMessage(8000)
     const [showTelegramDisconnectConfirm, setShowTelegramDisconnectConfirm] = useState(false)
     const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false)
+    const [replacingInvestecField, setReplacingInvestecField] = useState(null)
+    const [replacementValue, setReplacementValue] = useState('')
+    const [revealReplacement, setRevealReplacement] = useState(false)
     const [showDeleteApiKeyConfirm, setShowDeleteApiKeyConfirm] = useState(false)
     const [showChangePasswordConfirm, setShowChangePasswordConfirm] = useState(false)
     const [syncingHistorical, setSyncingHistorical] = useState(null)
@@ -439,10 +448,53 @@ export default function Settings() {
 
         try {
             await axios.delete('/api/investec/credentials')
-            setInvestecSuccess('Disconnected from Investec')
+            setInvestecSuccess('Investec data deleted')
+            setReplacingInvestecField(null)
+            setReplacementValue('')
+            setRevealReplacement(false)
             await fetchConnectionStatus()
         } catch (err) {
-            setInvestecError(err.response?.data?.detail || 'Failed to disconnect')
+            setInvestecError(err.response?.data?.detail || 'Failed to delete Investec data')
+        } finally {
+            setInvestecSaving(false)
+        }
+    }
+
+    const startInvestecReplace = (field) => {
+        setReplacingInvestecField(field)
+        setReplacementValue('')
+        setRevealReplacement(false)
+        setInvestecError('')
+        setInvestecSuccess('')
+    }
+
+    const cancelInvestecReplace = () => {
+        setReplacingInvestecField(null)
+        setReplacementValue('')
+        setRevealReplacement(false)
+        setInvestecError('')
+    }
+
+    const handleInvestecCredentialReplace = async (event) => {
+        event.preventDefault()
+        const value = replacementValue.trim()
+        const field = INVESTEC_CREDENTIAL_FIELDS.find((item) => item.key === replacingInvestecField)
+        if (!field || !value) {
+            setInvestecError('Enter the new value.')
+            return
+        }
+
+        setInvestecError('')
+        setInvestecSuccess('')
+        setInvestecSaving(true)
+        try {
+            await axios.patch('/api/investec/credentials', { [field.key]: value })
+            setInvestecSuccess(`${field.label} saved. Accounts and transactions were kept.`)
+            setReplacingInvestecField(null)
+            setReplacementValue('')
+            setRevealReplacement(false)
+        } catch (err) {
+            setInvestecError(err.response?.data?.detail || `Could not save the new ${field.label}.`)
         } finally {
             setInvestecSaving(false)
         }
@@ -978,7 +1030,7 @@ export default function Settings() {
                         </p>
 
                         <div className="mt-5 space-y-4">
-                            <AlertBanner>{investecError}</AlertBanner>
+                            <AlertBanner>{investecError ? <span id="investec-credential-error">{investecError}</span> : null}</AlertBanner>
                             <AlertBanner tone="success">{investecSuccess}</AlertBanner>
 
                             {connectionStatus === null ? (
@@ -998,29 +1050,83 @@ export default function Settings() {
                                                 : 'Credentials are stored. Sync to pull the latest transactions.'
                                         }
                                         actions={
-                                            <>
-                                                <button
-                                                    type="button"
-                                                    onClick={handleSyncNow}
-                                                    disabled={syncing}
-                                                    className={paperBtnGhost}
-                                                >
-                                                    <RefreshCw
-                                                        className={`h-3.5 w-3.5 ${syncing ? 'animate-spin motion-reduce:animate-none' : ''}`}
-                                                        aria-hidden="true"
-                                                    />
-                                                    {syncing ? 'Syncing' : 'Sync now'}
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setShowDisconnectConfirm(true)}
-                                                    className={paperBtnDanger}
-                                                >
-                                                    Disconnect
-                                                </button>
-                                            </>
+                                            <button
+                                                type="button"
+                                                onClick={handleSyncNow}
+                                                disabled={syncing}
+                                                className={paperBtnGhost}
+                                            >
+                                                <RefreshCw
+                                                    className={`h-3.5 w-3.5 ${syncing ? 'animate-spin motion-reduce:animate-none' : ''}`}
+                                                    aria-hidden="true"
+                                                />
+                                                {syncing ? 'Syncing' : 'Sync now'}
+                                            </button>
                                         }
                                     />
+
+                                    <p className="text-sm leading-relaxed text-[var(--paper-muted)]">
+                                        Replace a saved value when you rotate a credential. Accounts, transactions, and rules stay in place.
+                                    </p>
+
+                                    <div className="divide-y divide-[var(--paper-line)] border-y border-[var(--paper-line)]">
+                                        {INVESTEC_CREDENTIAL_FIELDS.map((field) => {
+                                            const replacing = replacingInvestecField === field.key
+                                            const inputId = `investec-replace-${field.key.replaceAll('_', '-')}`
+                                            const errorId = 'investec-credential-error'
+                                            return (
+                                                <div key={field.key} className="py-4 first:pt-4 last:pb-4">
+                                                    <div className="flex items-start justify-between gap-4">
+                                                        <div className="min-w-0">
+                                                            <p className="text-sm font-medium text-[var(--paper-ink)]">{field.label}</p>
+                                                            <p className="mt-1 text-sm text-[var(--paper-muted)]">Saved</p>
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => (replacing ? cancelInvestecReplace() : startInvestecReplace(field.key))}
+                                                            className={paperBtnGhost}
+                                                        >
+                                                            {replacing ? 'Cancel' : 'Replace'}
+                                                        </button>
+                                                    </div>
+                                                    {replacing ? (
+                                                        <form onSubmit={handleInvestecCredentialReplace} className="mt-3 space-y-3">
+                                                            <div>
+                                                                <label htmlFor={inputId} className="mb-1.5 block text-sm font-medium text-[var(--paper-ink)]">
+                                                                    New {field.label}
+                                                                </label>
+                                                                <div className="flex gap-2">
+                                                                    <input
+                                                                        id={inputId}
+                                                                        type={revealReplacement ? 'text' : 'password'}
+                                                                        autoComplete="off"
+                                                                        autoFocus
+                                                                        required
+                                                                        value={replacementValue}
+                                                                        onChange={(e) => setReplacementValue(e.target.value)}
+                                                                        aria-invalid={investecError ? 'true' : undefined}
+                                                                        aria-describedby={investecError ? errorId : undefined}
+                                                                        className={`${paperField} min-w-0 flex-1`}
+                                                                    />
+                                                                    <button
+                                                                        type="button"
+                                                                        aria-pressed={revealReplacement}
+                                                                        onClick={() => setRevealReplacement((open) => !open)}
+                                                                        className={paperBtnGhost}
+                                                                    >
+                                                                        {revealReplacement ? 'Hide' : 'Show'}
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                            <button type="submit" disabled={investecSaving} className={paperBtnPrimary}>
+                                                                {investecSaving ? 'Saving…' : 'Save'}
+                                                            </button>
+                                                        </form>
+                                                    ) : null}
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
 
                                     <div>
                                         <p className="text-sm font-medium text-[var(--paper-ink)]">Import past transactions</p>
@@ -1048,6 +1154,21 @@ export default function Settings() {
                                                 {syncSuccess}
                                             </p>
                                         ) : null}
+                                    </div>
+
+                                    <div className="border-t border-[var(--paper-line)] pt-4">
+                                        <p className="text-sm font-medium text-[var(--paper-ink)]">Delete Investec data</p>
+                                        <p className="mt-1 mb-3 text-sm leading-relaxed text-[var(--paper-muted)]">
+                                            Removes stored credentials, accounts, transactions, and categorization rules.
+                                        </p>
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowDisconnectConfirm(true)}
+                                            disabled={investecSaving}
+                                            className={paperBtnDanger}
+                                        >
+                                            Delete Investec data
+                                        </button>
                                     </div>
                                 </>
                             ) : (
@@ -1503,15 +1624,16 @@ export default function Settings() {
                 isOpen={showDisconnectConfirm}
                 onClose={() => setShowDisconnectConfirm(false)}
                 onConfirm={handleInvestecDisconnect}
-                title="Disconnect Investec?"
-                message="This will permanently delete ALL Investec data. This action cannot be undone."
+                title="Delete Investec data?"
+                message="This permanently deletes your Investec accounts, transactions, and categorization rules."
                 details={[
                     'API credentials (Client ID, Secret, API Key)',
                     'All bank accounts',
                     'All transactions',
                     'All categorization rules',
+                    'Emergency fund account selection',
                 ]}
-                confirmText="Disconnect"
+                confirmText="Delete data"
                 cancelText="Cancel"
                 variant="danger"
             />
