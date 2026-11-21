@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Index, Integer, String, Float, ForeignKey, Date, DateTime, UniqueConstraint, Boolean, Text, JSON
+from sqlalchemy import Column, Index, Integer, BigInteger, String, Float, ForeignKey, Date, DateTime, UniqueConstraint, Boolean, Text, JSON
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -29,6 +29,11 @@ class User(Base):
     external_api_key_ro_prefix = Column(String(12), nullable=True, index=True)
     external_api_key_ro_hash = Column(String, nullable=True)
     external_api_key_ro_created_at = Column(DateTime, nullable=True)
+
+    # Telegram bot connection (token stored encrypted; webhook path secret for routing)
+    telegram_bot_token = Column(String, nullable=True)
+    telegram_allowed_user_id = Column(BigInteger, nullable=True)
+    telegram_webhook_secret = Column(String(64), unique=True, index=True, nullable=True)
 
     # Emergency fund designation
     emergency_fund_account_id = Column(Integer, ForeignKey("investec_accounts.id"), nullable=True)
