@@ -40,8 +40,10 @@ from .routers.external_manual_accounts import router as external_manual_accounts
 from .routers.external_investec import router as external_investec_router
 from .routers.telegram_investec import router as telegram_investec_router
 
-from . import database  # noqa: E402
+from . import database, models  # noqa: E402
 from .scheduler import start_scheduler, stop_scheduler, sync_all_prices  # noqa: E402
+from .telegram_registration import ensure_telegram_webhooks  # noqa: E402
+from .routers.auth import _telegram_set_webhook  # noqa: E402
 
 # Initialize DB
 # Note: Database tables are now managed by Alembic migrations
@@ -49,21 +51,41 @@ from .scheduler import start_scheduler, stop_scheduler, sync_all_prices  # noqa:
 # models.Base.metadata.create_all(bind=database.engine)
 
 
+def _load_users_for_telegram_webhooks():
+    db = database.SessionLocal()
+    try:
+        return db.query(models.User).all()
+    finally:
+        db.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage application lifecycle - start/stop background tasks."""
     database.check_postgres_connection()
+    settings = get_settings()
     # Startup: Start the price sync scheduler
     start_scheduler()
     # Run initial sync in the background so /api/health answers immediately;
     # slow Google API calls must not gate startup or the panel's health poll.
     initial_sync = asyncio.create_task(sync_all_prices())
+    telegram_webhooks = asyncio.create_task(
+        ensure_telegram_webhooks(
+            _load_users_for_telegram_webhooks,
+            settings.public_base_url,
+            _telegram_set_webhook,
+            asyncio.sleep,
+        )
+    )
     yield
     # Shutdown: Stop the scheduler
     stop_scheduler()
     initial_sync.cancel()
+    telegram_webhooks.cancel()
     with suppress(asyncio.CancelledError, Exception):
         await initial_sync
+    with suppress(asyncio.CancelledError, Exception):
+        await telegram_webhooks
 
 
 app = FastAPI(lifespan=lifespan)

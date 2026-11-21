@@ -7,7 +7,7 @@ Background scheduler for periodic ETF price updates and historical tracking.
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.triggers.cron import CronTrigger
@@ -20,6 +20,7 @@ from . import models
 from . import history
 from .investec_sync import sync_investec_accounts, sync_investec_transactions
 from .services.sygnia import run_scheduled_sygnia_sync
+from .telegram_registration import expire_due_movements, movement_edit_bubble
 
 
 # Initialize logger
@@ -281,6 +282,42 @@ async def create_monthly_summary():
         db.close()
 
 
+async def expire_investec_approvals():
+    """Mark expired pending movements and stale approved rows; update Telegram bubbles."""
+    import time
+    from datetime import timezone
+
+    job_name = "expire_investec_approvals"
+    start = time.monotonic()
+    logger.info("Job started: %s", job_name, extra={"job": job_name})
+
+    db: Session = SessionLocal()
+    now = datetime.now(timezone.utc)
+
+    try:
+        def edit_bubble(movement, state):
+            movement_edit_bubble(db, movement, state)
+
+        expire_due_movements(db, now, edit_bubble)
+        duration_ms = int((time.monotonic() - start) * 1000)
+        logger.info(
+            "Job completed: %s",
+            job_name,
+            extra={"job": job_name, "duration_ms": duration_ms},
+        )
+    except Exception as e:
+        logger.exception(
+            "Job failed: %s: %s: %s",
+            job_name,
+            type(e).__name__,
+            e,
+            extra={"job": job_name},
+        )
+        db.rollback()
+    finally:
+        db.close()
+
+
 async def cleanup_old_data():
     """
     Clean up old hourly data (older than 90 days).
@@ -402,6 +439,15 @@ def start_scheduler():
         replace_existing=True
     )
 
+    # Job 9: Expire Investec Telegram approvals every minute
+    scheduler.add_job(
+        expire_investec_approvals,
+        trigger=IntervalTrigger(minutes=1),
+        id='expire_investec_approvals',
+        name='Expire Investec movement approvals',
+        replace_existing=True,
+    )
+
     scheduler.start()
 
     logger.info("Background scheduler started with the following jobs:")
@@ -413,6 +459,7 @@ def start_scheduler():
     logger.info("  - Investec account sync: every hour")
     logger.info("  - Investec transaction sync: every 15 minutes")
     logger.info("  - Sygnia account sync: daily at 05:00 SAST (03:00 UTC)")
+    logger.info("  - Investec approval expiry: every minute")
 
 
 def stop_scheduler():
