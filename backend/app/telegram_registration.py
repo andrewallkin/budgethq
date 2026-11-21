@@ -41,6 +41,7 @@ def expire_due_movements(db: Session, now: datetime, edit_bubble: EditBubbleFn) 
         prev = movement.status
         new_status = claim(movement, "expire", now)
         if prev == STATUS_PENDING and new_status == STATUS_EXPIRED:
+            logger.info("Expired movement %s", movement.id)
             edit_bubble(movement, "expired")
 
     stale_cutoff = now - timedelta(minutes=2)
@@ -56,6 +57,10 @@ def expire_due_movements(db: Session, now: datetime, edit_bubble: EditBubbleFn) 
     for movement in stuck_rows:
         movement.failure_reason = "unclear"
         movement.status = STATUS_FAILED
+        logger.warning(
+            "Movement %s stayed approved without an Investec response; marked failed",
+            movement.id,
+        )
         edit_bubble(movement, "failed_unconfirmed")
 
     if pending_rows or stuck_rows:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
@@ -13,10 +14,13 @@ from sqlalchemy.orm import Session
 from .. import auth, database, models
 from ..investec_movement_text import normalize_amount, render_bubble
 from ..investec_service import InvestecService
+from ..telegram_connection import telegram_failure_text
 from ..utils import decrypt_api_key
 
 MOVEMENT_TTL_MINUTES = 15
 TELEGRAM_HTTP_TIMEOUT_SECONDS = 30
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/external/investec", tags=["external-investec"])
 
@@ -43,11 +47,25 @@ def _proxy_json(service: InvestecService, investec_path: str, params: dict[str, 
     return JSONResponse(status_code=status_code, content=body)
 
 
+def _named_records(body: Any, key: str) -> list[dict[str, Any]]:
+    """Read Investec `data` whether it is a list or an object keyed by `key`."""
+    if not isinstance(body, dict):
+        return []
+    data = body.get("data")
+    if isinstance(data, list):
+        return [item for item in data if isinstance(item, dict)]
+    if isinstance(data, dict):
+        items = data.get(key, [])
+        if isinstance(items, list):
+            return [item for item in items if isinstance(item, dict)]
+    return []
+
+
 def _resolve_profile_id(service: InvestecService) -> tuple[Optional[int], Any]:
     status_code, body = service.request_json("GET", "/za/pb/v1/profiles", params={})
     if status_code != 200:
         return status_code, body
-    profiles = body.get("data", {}).get("profiles", []) if isinstance(body, dict) else []
+    profiles = _named_records(body, "profiles")
     if not profiles:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -232,10 +250,7 @@ def _accounts_list(service: InvestecService) -> list[dict[str, Any]]:
     status_code, body = service.request_json("GET", "/za/pb/v1/accounts", params={})
     if status_code != 200:
         raise HTTPException(status_code=status_code, detail=body)
-    accounts = body.get("data", {}).get("accounts", []) if isinstance(body, dict) else []
-    if not isinstance(accounts, list):
-        return []
-    return [a for a in accounts if isinstance(a, dict)]
+    return _named_records(body, "accounts")
 
 
 def _account_by_id(accounts: list[dict[str, Any]], account_id: str) -> Optional[dict[str, Any]]:
@@ -249,10 +264,7 @@ def _beneficiaries_list(service: InvestecService) -> list[dict[str, Any]]:
     status_code, body = service.request_json("GET", "/za/pb/v1/accounts/beneficiaries", params={})
     if status_code != 200:
         raise HTTPException(status_code=status_code, detail=body)
-    beneficiaries = body.get("data", {}).get("beneficiaries", []) if isinstance(body, dict) else []
-    if not isinstance(beneficiaries, list):
-        return []
-    return [b for b in beneficiaries if isinstance(b, dict)]
+    return _named_records(body, "beneficiaries")
 
 
 def _movement_public(movement: models.InvestecMovement) -> dict[str, Any]:
@@ -346,6 +358,7 @@ def _queue_movement(
     db.add(movement)
     db.commit()
     db.refresh(movement)
+    logger.info("Queued %s movement %s", kind, movement.id)
 
     bot_token = decrypt_api_key(user.telegram_bot_token)
     bubble = render_bubble(kind, "pending", display_snapshot)
@@ -357,17 +370,28 @@ def _queue_movement(
             movement.id,
         )
     except (requests.RequestException, ValueError) as exc:
+        reason = telegram_failure_text(exc)
+        logger.warning(
+            "Telegram approval message failed for movement %s: %s",
+            movement.id,
+            reason,
+        )
         movement.status = "failed"
-        movement.failure_reason = str(exc)
+        movement.failure_reason = reason
         db.commit()
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to send Telegram approval message",
+            detail=f"Failed to send Telegram approval message: {reason}",
         ) from exc
 
     movement.telegram_chat_id = chat_id
     movement.telegram_message_id = message_id
     db.commit()
+    logger.info(
+        "Sent Telegram approval for movement %s message %s",
+        movement.id,
+        message_id,
+    )
     db.refresh(movement)
     return JSONResponse(
         status_code=status.HTTP_202_ACCEPTED,

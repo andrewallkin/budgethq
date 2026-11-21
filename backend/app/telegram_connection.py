@@ -1,7 +1,28 @@
 """Per-user Telegram bot webhook connect, disconnect, and startup registration."""
+import re
 import secrets
 
+import requests
+
 from .utils import decrypt_api_key, encrypt_api_key
+
+_BOT_TOKEN_IN_URL = re.compile(r"/bot[^/\s]+")
+
+
+def telegram_failure_text(exc: BaseException) -> str:
+    """Telegram's reason, without the bot token that requests puts in the URL."""
+    if isinstance(exc, requests.HTTPError) and exc.response is not None:
+        description = ""
+        try:
+            payload = exc.response.json()
+        except ValueError:
+            payload = None
+        if isinstance(payload, dict):
+            description = str(payload.get("description") or "")
+        if description:
+            return f"Telegram HTTP {exc.response.status_code}: {description}"
+        return f"Telegram HTTP {exc.response.status_code}"
+    return _BOT_TOKEN_IN_URL.sub("/bot[redacted]", str(exc))
 
 
 def webhook_url(public_base_url: str, secret: str) -> str:
