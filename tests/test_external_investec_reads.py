@@ -147,7 +147,7 @@ class TestInvestecReadProxy:
         client = _make_client(MagicMock(), user=user)
 
         with patch("app.routers.external_investec.InvestecService") as MockService:
-            response = client.post("/api/external/investec/accounts/acc-1/transfers", json={})
+            response = client.post("/api/external/investec/not-a-real-path", json={})
 
         assert response.status_code == 404
         MockService.assert_not_called()
