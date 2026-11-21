@@ -20,6 +20,7 @@ from ..investec_movement import (
 )
 from ..investec_movement_text import render_bubble
 from ..investec_service import InvestecService
+from ..telegram_connection import telegram_failure_text
 from ..utils import decrypt_api_key
 
 logger = logging.getLogger(__name__)
@@ -47,7 +48,7 @@ def _telegram_api(bot_token: str, method: str, payload: dict[str, Any]) -> None:
         if not body.get("ok"):
             logger.warning("Telegram %s failed: %s", method, body.get("description"))
     except requests.RequestException as exc:
-        logger.warning("Telegram %s request error: %s", method, exc)
+        logger.warning("Telegram %s request error: %s", method, telegram_failure_text(exc))
 
 
 def _edit_bubble(
@@ -166,12 +167,18 @@ def _execute_investec(
     balances: Optional[dict[str, float]] = None
     investec_reference: Optional[str] = None
 
+    logger.info("Sending movement %s to Investec", movement.id)
     try:
         status_code, response_body = service.request_json(
             "POST", endpoint, json=movement.investec_body
         )
     except Exception as exc:
-        movement.failure_reason = str(exc)
+        logger.warning(
+            "Investec call failed for movement %s: %s",
+            movement.id,
+            telegram_failure_text(exc) if isinstance(exc, requests.RequestException) else type(exc).__name__,
+        )
+        movement.failure_reason = type(exc).__name__
         settle(movement, "failed")
         db.commit()
         if movement.telegram_chat_id and movement.telegram_message_id:
@@ -196,13 +203,24 @@ def _execute_investec(
             investec_reference = _investec_reference(response_body)
             try:
                 balances = _fetch_balances(service, movement)
-            except Exception:
+            except Exception as exc:
+                logger.warning(
+                    "Balance fetch failed for movement %s: %s",
+                    movement.id,
+                    type(exc).__name__,
+                )
                 balances = None
     else:
         movement.failure_reason = f"Investec HTTP {status_code}"
         settle(movement, "failed")
         render_state = "failed"
 
+    logger.info(
+        "Movement %s Investec HTTP %s outcome %s",
+        movement.id,
+        status_code,
+        render_state,
+    )
     db.commit()
     if movement.telegram_chat_id and movement.telegram_message_id:
         text = render_bubble(
@@ -268,6 +286,15 @@ async def telegram_investec_webhook(
 
     transitioned_approve = claimed and movement.status == STATUS_APPROVED
     transitioned_reject = claimed and movement.status == STATUS_REJECTED
+    if claimed:
+        logger.info("Claimed movement %s as %s", movement.id, movement.status)
+    else:
+        logger.info(
+            "Ignored %s for movement %s; status stayed %s",
+            action,
+            movement.id,
+            movement.status,
+        )
 
     if transitioned_approve or transitioned_reject:
         db.commit()

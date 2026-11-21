@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
@@ -15,11 +14,11 @@ from sqlalchemy.orm import Session
 from .. import auth, database, models
 from ..investec_movement_text import normalize_amount, render_bubble
 from ..investec_service import InvestecService
+from ..telegram_connection import telegram_failure_text
 from ..utils import decrypt_api_key
 
 MOVEMENT_TTL_MINUTES = 15
 TELEGRAM_HTTP_TIMEOUT_SECONDS = 30
-_BOT_TOKEN_IN_URL = re.compile(r"/bot[^/\s]+")
 
 logger = logging.getLogger(__name__)
 
@@ -297,22 +296,6 @@ def _existing_idempotent(
     )
 
 
-def _telegram_failure_text(exc: Exception) -> str:
-    """Telegram's reason, without the bot token that requests puts in the URL."""
-    if isinstance(exc, requests.HTTPError) and exc.response is not None:
-        description = ""
-        try:
-            payload = exc.response.json()
-        except ValueError:
-            payload = None
-        if isinstance(payload, dict):
-            description = str(payload.get("description") or "")
-        if description:
-            return f"Telegram HTTP {exc.response.status_code}: {description}"
-        return f"Telegram HTTP {exc.response.status_code}"
-    return _BOT_TOKEN_IN_URL.sub("/bot[redacted]", str(exc))
-
-
 def _telegram_send_pending(
     bot_token: str,
     chat_id: int,
@@ -375,6 +358,7 @@ def _queue_movement(
     db.add(movement)
     db.commit()
     db.refresh(movement)
+    logger.info("Queued %s movement %s", kind, movement.id)
 
     bot_token = decrypt_api_key(user.telegram_bot_token)
     bubble = render_bubble(kind, "pending", display_snapshot)
@@ -386,11 +370,11 @@ def _queue_movement(
             movement.id,
         )
     except (requests.RequestException, ValueError) as exc:
-        reason = _telegram_failure_text(exc)
+        reason = telegram_failure_text(exc)
         logger.warning(
-            "Telegram approval message failed: %s",
+            "Telegram approval message failed for movement %s: %s",
+            movement.id,
             reason,
-            extra={"movement_id": movement.id},
         )
         movement.status = "failed"
         movement.failure_reason = reason
@@ -403,6 +387,11 @@ def _queue_movement(
     movement.telegram_chat_id = chat_id
     movement.telegram_message_id = message_id
     db.commit()
+    logger.info(
+        "Sent Telegram approval for movement %s message %s",
+        movement.id,
+        message_id,
+    )
     db.refresh(movement)
     return JSONResponse(
         status_code=status.HTTP_202_ACCEPTED,
