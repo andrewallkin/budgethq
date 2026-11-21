@@ -72,7 +72,8 @@ class TestRenderBubble:
         assert text.startswith("💸 Pending transfer")
         assert "1234567890123" not in text
         assert "*From*" in text
-        assert "R1 500.00" in text
+        assert "R1 500\\.00" in text
+        assert "R1 500.00" not in text
 
     def test_pending_payment_includes_full_account_number(self):
         text = render_bubble("payment", "pending", PAYMENT_SNAPSHOT)
@@ -84,7 +85,7 @@ class TestRenderBubble:
     def test_rejected_last_line(self):
         text = render_bubble("transfer", "rejected", TRANSFER_SNAPSHOT)
         assert text.startswith("❌ Transfer rejected")
-        assert text.rstrip().endswith("Nothing was sent.")
+        assert text.rstrip().endswith("Nothing was sent\\.")
 
     def test_sent_transfer_balances(self):
         balances = {
@@ -101,10 +102,10 @@ class TestRenderBubble:
             investec_reference="INV-99",
         )
         assert text.startswith("✅ Transfer sent")
-        assert "R1 130.00" in text
-        assert "R1 000.00" in text
-        assert "R50 000.00" in text
-        assert "R48 000.00" in text
+        assert "R1 130\\.00" in text
+        assert "R1 000\\.00" in text
+        assert "R50 000\\.00" in text
+        assert "R48 000\\.00" in text
         assert "INV\\-99" in text
 
     def test_sent_payment_balances_source_only(self):
@@ -122,8 +123,8 @@ class TestRenderBubble:
             investec_reference="PAY-1",
         )
         assert text.startswith("✅ Payment sent")
-        assert "R1 130.00" in text
-        assert "R1 000.00" in text
+        assert "R1 130\\.00" in text
+        assert "R1 000\\.00" in text
         assert "R999.00" not in text
         assert "R888.00" not in text
 
@@ -135,7 +136,7 @@ class TestRenderBubble:
             balances=None,
             investec_reference="INV-REF",
         )
-        assert "Balance unavailable." in text
+        assert "Balance unavailable\\." in text
         assert "INV\\-REF" in text
 
     @pytest.mark.parametrize(
@@ -162,16 +163,16 @@ class TestRenderBubble:
     def test_needs_authorisation_extra_sentence(self):
         text = render_bubble("transfer", "needs_authorisation", TRANSFER_SNAPSHOT)
         assert (
-            "Investec accepted the request and still requires its own authorisation."
+            "Investec accepted the request and still requires its own authorisation\\."
             in text
         )
 
     def test_failed_last_line(self):
         text = render_bubble("transfer", "failed", TRANSFER_SNAPSHOT)
-        assert "Investec did not accept this. Nothing was sent." in text
+        assert "Investec did not accept this\\. Nothing was sent\\." in text
 
     def test_failed_unconfirmed_last_line(self):
         text = render_bubble("transfer", "failed_unconfirmed", TRANSFER_SNAPSHOT)
         assert (
-            "Investec did not confirm this. Nothing further will be sent." in text
+            "Investec did not confirm this\\. Nothing further will be sent\\." in text
         )

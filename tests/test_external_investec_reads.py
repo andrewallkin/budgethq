@@ -258,3 +258,29 @@ class TestInvestecReadProxy:
             "/za/pb/v1/accounts/beneficiarycategories",
             params={"profileId": "p-first"},
         )
+
+    def test_beneficiary_categories_accepts_profile_list(self):
+        user = _user_with_credentials()
+        client = _make_client(MagicMock(), user=user)
+        profiles = {
+            "data": [
+                {"profileId": "p-list", "defaultProfile": True},
+            ]
+        }
+
+        with patch.object(external_investec, "decrypt_api_key", side_effect=lambda x: x), patch(
+            "app.routers.external_investec.InvestecService"
+        ) as MockService:
+            mock_svc = MockService.return_value
+            mock_svc.request_json.side_effect = [
+                (200, profiles),
+                (200, {"data": []}),
+            ]
+            response = client.get("/api/external/investec/beneficiary-categories")
+
+        assert response.status_code == 200
+        mock_svc.request_json.assert_any_call(
+            "GET",
+            "/za/pb/v1/accounts/beneficiarycategories",
+            params={"profileId": "p-list"},
+        )

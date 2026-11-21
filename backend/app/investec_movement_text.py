@@ -104,9 +104,9 @@ def _snapshot_lines(
     lines.append(_escape_md_v2(str(snapshot.get("from_product", ""))))
     if balances is not None:
         lines.append(_bold("Actual"))
-        lines.append(format_balance(float(balances["from_current"])))
+        lines.append(_escape_md_v2(format_balance(float(balances["from_current"]))))
         lines.append(_bold("Available"))
-        lines.append(format_balance(float(balances["from_available"])))
+        lines.append(_escape_md_v2(format_balance(float(balances["from_available"]))))
     lines.append("")
 
     lines.append(_bold("To"))
@@ -124,9 +124,9 @@ def _snapshot_lines(
         lines.append(_escape_md_v2(str(snapshot.get("to_product", ""))))
         if balances is not None and kind == "transfer":
             lines.append(_bold("Actual"))
-            lines.append(format_balance(float(balances["to_current"])))
+            lines.append(_escape_md_v2(format_balance(float(balances["to_current"]))))
             lines.append(_bold("Available"))
-            lines.append(format_balance(float(balances["to_available"])))
+            lines.append(_escape_md_v2(format_balance(float(balances["to_available"]))))
     lines.append("")
 
     amount = snapshot.get("amount", "0")
@@ -135,7 +135,7 @@ def _snapshot_lines(
     except ValueError:
         display_amount = format_rand(str(amount))
     lines.append(f"💰 {_bold('Amount')}")
-    lines.append(display_amount)
+    lines.append(_escape_md_v2(display_amount))
     lines.append("")
 
     lines.append(f"📝 {_bold('Your reference')}")
@@ -163,7 +163,7 @@ def render_bubble(
     if state == "sent":
         parts.append("")
         if balances is None:
-            parts.append("Balance unavailable.")
+            parts.append(_escape_md_v2("Balance unavailable."))
         if investec_reference:
             parts.append("")
             parts.append(f"🔖 {_bold('Investec reference')}")
@@ -172,6 +172,6 @@ def render_bubble(
     footer = _footer(state)
     if footer:
         parts.append("")
-        parts.append(footer)
+        parts.append(_escape_md_v2(footer))
 
     return "\n".join(parts)
