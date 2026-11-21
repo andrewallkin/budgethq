@@ -57,8 +57,34 @@ def _run_route(operation: Callable[..., Any], **kwargs: Any) -> Any:
     return operation(**kwargs)
 
 
+_OPTIONAL_PARAM_MARKERS = {"Query", "Header", "Cookie"}
+_MISSING = object()
+
+
+def _is_unresolved_query_depends(default: Any) -> bool:
+    """True when a route default is still the FastAPI marker for the query-string dependency."""
+    dependency = getattr(default, "dependency", None)
+    return getattr(dependency, "__name__", "") == "_query_from_request"
+
+
+def _optional_param_default(default: Any) -> Any:
+    """Concrete value for an optional Query/Header/Cookie marker, or _MISSING when required."""
+    if type(default).__name__ not in _OPTIONAL_PARAM_MARKERS:
+        return _MISSING
+    inner = getattr(default, "default", _MISSING)
+    if inner is _MISSING or inner is Ellipsis:
+        return _MISSING
+    if type(inner).__name__ in {"PydanticUndefinedType", "UndefinedType", "RequiredParam"}:
+        return _MISSING
+    return inner
+
+
 def _route_kwargs(operation: Callable[..., Any], *, user: Any, db: Any, extra: dict[str, Any]) -> dict[str, Any]:
-    """Pass db and current_user only when the route function declares them."""
+    """Pass db and current_user only when the route function declares them.
+
+    Route functions are called directly, so an omitted query argument would
+    otherwise stay as the FastAPI ``Depends`` marker and be forwarded to Investec.
+    """
     params = inspect.signature(operation).parameters
     accepts_any = any(param.kind == inspect.Parameter.VAR_KEYWORD for param in params.values())
     kwargs = dict(extra)
@@ -66,6 +92,15 @@ def _route_kwargs(operation: Callable[..., Any], *, user: Any, db: Any, extra: d
         kwargs["db"] = db
     if accepts_any or "current_user" in params:
         kwargs["current_user"] = user
+    for name, param in params.items():
+        if name in kwargs:
+            continue
+        if _is_unresolved_query_depends(param.default):
+            kwargs[name] = {}
+            continue
+        resolved = _optional_param_default(param.default)
+        if resolved is not _MISSING:
+            kwargs[name] = resolved
     return kwargs
 
 
@@ -247,14 +282,18 @@ def patch_manual_account(account_id: int, balance: float) -> dict:
     return invoke_external(external_manual_accounts.update_external_manual_account, account_id=account_id, data=data)
 
 
-def list_investec_accounts() -> dict:
+def list_investec_accounts(query: dict[str, str] | None = None) -> dict:
     """Same payload as GET /api/external/investec/accounts."""
-    return invoke_external(external_investec.list_accounts)
+    return invoke_external(external_investec.list_accounts, query=dict(query or {}))
 
 
-def get_investec_account_balance(account_id: str) -> dict:
+def get_investec_account_balance(account_id: str, query: dict[str, str] | None = None) -> dict:
     """Same payload as GET /api/external/investec/accounts/{account_id}/balance."""
-    return invoke_external(external_investec.get_account_balance, account_id=account_id)
+    return invoke_external(
+        external_investec.get_account_balance,
+        account_id=account_id,
+        query=dict(query or {}),
+    )
 
 
 def list_investec_transactions(
@@ -331,11 +370,18 @@ def list_investec_beneficiaries(query: dict[str, str] | None = None) -> dict:
     return invoke_external(external_investec.list_beneficiaries, query=dict(query or {}))
 
 
-def list_investec_beneficiary_categories(profile_id: str | None = None) -> dict:
+def list_investec_beneficiary_categories(
+    profile_id: str | None = None,
+    query: dict[str, str] | None = None,
+) -> dict:
     """Same payload as GET /api/external/investec/beneficiary-categories."""
+    params = dict(query or {})
+    if profile_id is not None:
+        params["profileId"] = profile_id
     return invoke_external(
         external_investec.list_beneficiary_categories,
         profile_id=profile_id,
+        query=params,
     )
 
 
