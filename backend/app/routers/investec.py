@@ -58,6 +58,14 @@ class InvestecCredentials(BaseModel):
     api_key: str
 
 
+class InvestecCredentialUpdate(BaseModel):
+    """Replace one or more stored Investec credentials without touching synced data."""
+
+    client_id: Optional[str] = None
+    client_secret: Optional[str] = None
+    api_key: Optional[str] = None
+
+
 class CredentialsStatus(BaseModel):
     is_connected: bool
     last_synced: Optional[datetime] = None
@@ -254,6 +262,85 @@ async def store_credentials(
         logger.exception("Transaction sync after credential storage failed: %s: %s", type(e).__name__, e)
 
     return {"message": "Credentials stored successfully"}
+
+
+def _clean_credential(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    cleaned = value.strip()
+    return cleaned or None
+
+
+@router.patch("/credentials")
+async def update_credentials(
+    payload: InvestecCredentialUpdate,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Replace stored Investec credentials after a successful connection test.
+
+    Accounts, transactions, categorization rules, and the emergency-fund
+    selection are left in place.
+    """
+    stored = {
+        "client_id": current_user.investec_client_id,
+        "client_secret": current_user.investec_client_secret,
+        "api_key": current_user.investec_api_key,
+    }
+    if not all(stored.values()):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Investec credentials not configured",
+        )
+
+    changes = {
+        field: cleaned
+        for field, cleaned in (
+            ("client_id", _clean_credential(payload.client_id)),
+            ("client_secret", _clean_credential(payload.client_secret)),
+            ("api_key", _clean_credential(payload.api_key)),
+        )
+        if cleaned is not None
+    }
+    if not changes:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Enter a new credential value",
+        )
+
+    try:
+        merged = {
+            field: changes.get(field) or decrypt_api_key(stored[field])
+            for field in stored
+        }
+    except Exception as e:
+        logger.exception("Stored Investec credentials could not be read: %s: %s", type(e).__name__, e)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Stored Investec credentials could not be read",
+        )
+
+    investec = InvestecService(merged["client_id"], merged["client_secret"], merged["api_key"])
+    if not investec.test_connection():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid Investec credentials - connection test failed",
+        )
+
+    column_for_field = {
+        "client_id": "investec_client_id",
+        "client_secret": "investec_client_secret",
+        "api_key": "investec_api_key",
+    }
+    for field, value in changes.items():
+        setattr(current_user, column_for_field[field], encrypt_api_key(value))
+
+    db.commit()
+    logger.info(
+        "Investec credentials updated",
+        extra={"user_id": current_user.id, "fields": sorted(changes)},
+    )
+    return {"message": "Credentials updated"}
 
 
 @router.get("/credentials/status", response_model=CredentialsStatus)
