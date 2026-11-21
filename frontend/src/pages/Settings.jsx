@@ -261,6 +261,15 @@ export default function Settings() {
     const [syncing, setSyncing] = useState(false)
     const [investecError, setInvestecError] = useState('')
     const [investecSuccess, setInvestecSuccess] = useAutoClearingMessage(8000)
+    const [telegramStatus, setTelegramStatus] = useState(null)
+    const [telegramCredentials, setTelegramCredentials] = useState({
+        bot_token: '',
+        allowed_user_id: '',
+    })
+    const [telegramSaving, setTelegramSaving] = useState(false)
+    const [telegramError, setTelegramError] = useState('')
+    const [telegramSuccess, setTelegramSuccess] = useAutoClearingMessage(8000)
+    const [showTelegramDisconnectConfirm, setShowTelegramDisconnectConfirm] = useState(false)
     const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false)
     const [showDeleteApiKeyConfirm, setShowDeleteApiKeyConfirm] = useState(false)
     const [showChangePasswordConfirm, setShowChangePasswordConfirm] = useState(false)
@@ -343,8 +352,18 @@ export default function Settings() {
         }
     }
 
+    const fetchTelegramConnectionStatus = async () => {
+        try {
+            const response = await axios.get('/api/auth/telegram')
+            setTelegramStatus(response.data)
+        } catch {
+            setTelegramStatus({ connected: false })
+        }
+    }
+
     useEffect(() => {
         fetchConnectionStatus()
+        fetchTelegramConnectionStatus()
     }, [])
 
     useEffect(() => {
@@ -426,6 +445,43 @@ export default function Settings() {
             setInvestecError(err.response?.data?.detail || 'Failed to disconnect')
         } finally {
             setInvestecSaving(false)
+        }
+    }
+
+    const handleTelegramConnect = async (e) => {
+        e.preventDefault()
+        setTelegramError('')
+        setTelegramSuccess('')
+        setTelegramSaving(true)
+
+        try {
+            await axios.post('/api/auth/telegram', {
+                bot_token: telegramCredentials.bot_token,
+                allowed_user_id: Number(telegramCredentials.allowed_user_id),
+            })
+            setTelegramSuccess('Telegram connected successfully')
+            setTelegramCredentials({ bot_token: '', allowed_user_id: '' })
+            await fetchTelegramConnectionStatus()
+        } catch (err) {
+            setTelegramError(err.response?.data?.detail || 'Could not connect. Check the bot token and user id, then try again.')
+        } finally {
+            setTelegramSaving(false)
+        }
+    }
+
+    const handleTelegramDisconnect = async () => {
+        setTelegramError('')
+        setTelegramSuccess('')
+        setTelegramSaving(true)
+
+        try {
+            await axios.delete('/api/auth/telegram')
+            setTelegramSuccess('Telegram disconnected')
+            await fetchTelegramConnectionStatus()
+        } catch (err) {
+            setTelegramError(err.response?.data?.detail || 'Failed to disconnect')
+        } finally {
+            setTelegramSaving(false)
         }
     }
 
@@ -682,6 +738,7 @@ export default function Settings() {
     }
 
     const investecConnected = Boolean(connectionStatus?.is_connected)
+    const telegramConnected = Boolean(telegramStatus?.connected)
     const lastSyncedLabel = connectionStatus?.last_synced
         ? formatDateSafe(connectionStatus.last_synced, {
               day: 'numeric',
@@ -1070,6 +1127,89 @@ export default function Settings() {
                     </PaperCard>
 
                     <PaperCard className="p-5 sm:p-6">
+                        <p className={paperEyebrow}>Telegram approvals</p>
+                        <p className="mt-2 text-sm leading-relaxed text-[var(--paper-muted)]">
+                            Payment and transfer approvals are sent to this bot.
+                        </p>
+
+                        <div className="mt-5 space-y-4">
+                            <AlertBanner>{telegramError}</AlertBanner>
+                            <AlertBanner tone="success">{telegramSuccess}</AlertBanner>
+
+                            {telegramStatus === null ? (
+                                <ConnectionStatusPanel
+                                    loading
+                                    title="Checking connection…"
+                                    detail="Looking up your Telegram connection."
+                                />
+                            ) : telegramConnected ? (
+                                <ConnectionStatusPanel
+                                    ok
+                                    title="Telegram is connected"
+                                    detail={`Approvals go to Telegram user ${telegramStatus.allowed_user_id}.`}
+                                    actions={
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowTelegramDisconnectConfirm(true)}
+                                            disabled={telegramSaving}
+                                            className={paperBtnDanger}
+                                        >
+                                            Disconnect
+                                        </button>
+                                    }
+                                />
+                            ) : (
+                                <>
+                                    <ConnectionStatusPanel
+                                        title="Telegram is not connected"
+                                        detail="Payment and transfer approvals are sent to this bot."
+                                    />
+                                    <form onSubmit={handleTelegramConnect} className="space-y-3">
+                                        <div>
+                                            <label htmlFor="telegram-bot-token" className="mb-1.5 block text-sm font-medium text-[var(--paper-ink)]">
+                                                Bot token
+                                            </label>
+                                            <input
+                                                id="telegram-bot-token"
+                                                type="password"
+                                                autoComplete="off"
+                                                value={telegramCredentials.bot_token}
+                                                onChange={(e) =>
+                                                    setTelegramCredentials({ ...telegramCredentials, bot_token: e.target.value })
+                                                }
+                                                required
+                                                className={paperField}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label htmlFor="telegram-user-id" className="mb-1.5 block text-sm font-medium text-[var(--paper-ink)]">
+                                                Telegram user id
+                                            </label>
+                                            <input
+                                                id="telegram-user-id"
+                                                inputMode="numeric"
+                                                value={telegramCredentials.allowed_user_id}
+                                                onChange={(e) =>
+                                                    setTelegramCredentials({ ...telegramCredentials, allowed_user_id: e.target.value })
+                                                }
+                                                required
+                                                className={paperField}
+                                            />
+                                        </div>
+                                        <button type="submit" disabled={telegramSaving} className={`${paperBtnPrimary} w-full`}>
+                                            {telegramSaving ? 'Connecting…' : 'Connect Telegram'}
+                                        </button>
+                                    </form>
+                                    <p className="text-sm leading-relaxed text-[var(--paper-muted)]">
+                                        Create a bot with BotFather. The numeric Telegram user id is the only account that can tap Approve
+                                        or Reject.
+                                    </p>
+                                </>
+                            )}
+                        </div>
+                    </PaperCard>
+
+                    <PaperCard className="p-5 sm:p-6">
                         <p className={paperEyebrow}>Payslip extraction</p>
                         <p id={apiKeyHintId} className="mt-2 text-sm leading-relaxed text-[var(--paper-muted)]">
                             Encrypted OpenRouter key used to read payslips and categorise transactions.{' '}
@@ -1373,6 +1513,17 @@ export default function Settings() {
                     'All transactions',
                     'All categorization rules',
                 ]}
+                confirmText="Disconnect"
+                cancelText="Cancel"
+                variant="danger"
+            />
+
+            <ConfirmModal
+                isOpen={showTelegramDisconnectConfirm}
+                onClose={() => setShowTelegramDisconnectConfirm(false)}
+                onConfirm={handleTelegramDisconnect}
+                title="Disconnect Telegram?"
+                message="Confirm clears the connection."
                 confirmText="Disconnect"
                 cancelText="Cancel"
                 variant="danger"
