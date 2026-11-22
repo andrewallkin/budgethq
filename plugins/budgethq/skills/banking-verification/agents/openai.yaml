@@ -1,0 +1,8 @@
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "budgethq"
+      description: "BudgetHQ tools for the connected owner, including Investec accounts, transfers, payments, and movement status."
+      transport: "streamable_http"
+      url: "https://budgethq.andrewallkin.com/mcp"
+
