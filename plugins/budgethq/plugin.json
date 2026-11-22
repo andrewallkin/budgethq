@@ -1,11 +1,14 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "budgethq",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Investec banking workflow skills for the BudgetHQ owner: transfers, payments, verification, recurring costs, and monthly setup. Live account data and money movements stay on the separately installed BudgetHQ MCP server.",
   "extensions": {
     "com.openai": {
-      "requires_local_executor": false
+      "requires_local_executor": false,
+      "interface": {
+        "displayName": "BudgetHQ Skills"
+      }
     }
   }
 }

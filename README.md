@@ -57,7 +57,7 @@ flowchart LR
 
 - **Frontend** (`frontend/`) — React, Vite, Tailwind, Recharts. Production image serves the SPA and proxies `/api` to the backend.
 - **Backend** (`backend/app/`) — FastAPI routers, SQLAlchemy models, Alembic migrations, APScheduler for price sync jobs.
-- **MCP** (`backend/app/mcp/`) — ChatGPT connector proxy for the external API (compose service `mcp`, loopback port `MCP_PORT`). Install this server in ChatGPT with Add custom MCP server, named `budgethq`, at `https://budgethq.andrewallkin.com/mcp`. The banking skills are a separate zip, `plugins/budgethq/`. See [plugins/budgethq/README.md](plugins/budgethq/README.md).
+- **MCP** (`backend/app/mcp/`) — ChatGPT connector proxy for the external API (compose service `mcp`, loopback port `MCP_PORT`). Install this server in ChatGPT with Add custom MCP server, named `budgethq`, at `https://budgethq.andrewallkin.com/mcp`. The banking skills are a separate zip shown as BudgetHQ Skills, `plugins/budgethq/`. See [plugins/budgethq/README.md](plugins/budgethq/README.md).
 - **Postgres** — Application data store. Bundled in `docker-compose.dev.yml` and `docker-compose.standalone.yml`; shared instance on the VPS via external `postgres-net` in `docker-compose.yml`.
 - **Auth** — JWT issued by `/api/auth/login`; optional `AUTHORIZED_USERS` allowlist.
 - **External services** — Google Sheets/GCS, OpenRouter (payslip extraction), Investec API, Sygnia portal scraping when configured.

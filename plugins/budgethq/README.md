@@ -1,10 +1,10 @@
-# BudgetHQ ChatGPT plugin
+# BudgetHQ Skills
 
-This folder is the ChatGPT skills plugin. It holds the banking workflow instructions. It does not install the MCP server. The server runs on the VPS from `backend/app/mcp/` and is added in ChatGPT as its own plugin. ChatGPT does not read this Git repository. Installing or updating the skills means zipping this folder and uploading that archive.
+This folder is the ChatGPT plugin shown as BudgetHQ Skills. It holds the banking workflow instructions. It does not install the MCP server. The server runs on the VPS from `backend/app/mcp/` and is added in ChatGPT as its own plugin. ChatGPT does not read this Git repository. Installing or updating the skills means zipping this folder and uploading that archive.
 
 ## What is in the package
 
-- `plugin.json` names the plugin and sets `requires_local_executor` to false so ChatGPT does not mark these skills Desktop only.
+- `plugin.json` shows the plugin as BudgetHQ Skills and sets `requires_local_executor` to false so ChatGPT does not mark these skills Desktop only. The package id stays `budgethq`.
 - `skills/` holds the workflow instructions ChatGPT follows. Each skill's `agents/openai.yaml` points at the separately installed MCP server named `budgethq`.
 
 Skills:
@@ -41,7 +41,7 @@ Upload a new archive whenever a skill or `plugin.json` changes. Deploying the VP
 
 A skill tells ChatGPT which tool to call, such as `create_investec_transfer`. ChatGPT sends that call to the installed server. The server queues the movement and requires Telegram approval. Chat approval does not move the money.
 
-This package is version `1.0.1`. Remove an older BudgetHQ plugin that still bundles the MCP server before adding this zip.
+This package is version `1.0.2`. Remove an older BudgetHQ plugin that still bundles the MCP server before adding this zip.
 
 ## Safety
 
