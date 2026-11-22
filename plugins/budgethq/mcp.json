@@ -3,14 +3,7 @@
   "mcpServers": {
     "budgethq": {
       "type": "streamable-http",
-      "url": "https://budgethq.andrewallkin.com/mcp",
-      "extensions": {
-        "com.openai": {
-          "auth": {
-            "type": "oauth"
-          }
-        }
-      }
+      "url": "https://budgethq.andrewallkin.com/mcp"
     }
   }
 }

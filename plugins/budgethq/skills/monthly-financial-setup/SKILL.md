@@ -7,12 +7,12 @@ description: Set up a new monthly BudgetHQ financial period, reconcile allocatio
 
 ## Required references
 Read:
-- `../shared/references/core-rules.md`
-- `../shared/references/accounts-and-identifiers.md`
-- `../shared/references/error-handling.md`
-- `../shared/references/workflow-registry.md`
-- `../shared/references/month-end-funding.md`
-- `../shared/references/monthly-setup-checklist.md`
+- `references/core-rules.md`
+- `references/accounts-and-identifiers.md`
+- `references/error-handling.md`
+- `references/workflow-registry.md`
+- `references/month-end-funding.md`
+- `references/monthly-setup-checklist.md`
 
 Use transfer, payment, recurring-cost and verification skills as appropriate.
 

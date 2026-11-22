@@ -7,9 +7,9 @@ description: Safely prepare, submit, and verify payments to existing beneficiari
 
 ## Required references
 Read:
-- `../shared/references/core-rules.md`
-- `../shared/references/accounts-and-identifiers.md`
-- `../shared/references/error-handling.md`
+- `references/core-rules.md`
+- `references/accounts-and-identifiers.md`
+- `references/error-handling.md`
 
 Use the banking-verification skill for final verification.
 

@@ -7,10 +7,10 @@ description: Calculate and prepare the month-end transfer from Normal Savings to
 
 ## Required references
 Read:
-- `../shared/references/core-rules.md`
-- `../shared/references/accounts-and-identifiers.md`
-- `../shared/references/error-handling.md`
-- `../shared/references/month-end-funding.md`
+- `references/core-rules.md`
+- `references/accounts-and-identifiers.md`
+- `references/error-handling.md`
+- `references/month-end-funding.md`
 
 Use transfer and verification skills.
 

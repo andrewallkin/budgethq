@@ -10,10 +10,10 @@ The user requests a transfer between accounts they own, including funding, savin
 
 ## Required references
 Read:
-- `../shared/references/core-rules.md`
-- `../shared/references/accounts-and-identifiers.md`
-- `../shared/references/error-handling.md`
-- `../shared/references/workflow-registry.md`
+- `references/core-rules.md`
+- `references/accounts-and-identifiers.md`
+- `references/error-handling.md`
+- `references/workflow-registry.md`
 
 Use the verification skill for the final status.
 

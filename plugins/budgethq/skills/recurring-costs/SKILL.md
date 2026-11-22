@@ -7,9 +7,9 @@ description: Pay a manual recurring cost the user just requested, for cleaning, 
 
 ## Required references
 Read:
-- `../shared/references/core-rules.md`
-- `../shared/references/accounts-and-identifiers.md`
-- `../shared/references/error-handling.md`
+- `references/core-rules.md`
+- `references/accounts-and-identifiers.md`
+- `references/error-handling.md`
 
 Use `banking-transfers` for the funding leg, `banking-payments` or `banking-transfers` for the second leg, and `banking-verification` after each movement.
 

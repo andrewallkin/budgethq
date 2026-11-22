@@ -7,8 +7,8 @@ description: Reconcile and verify the status of banking transfers and payments. 
 
 ## Required references
 Read:
-- `../shared/references/core-rules.md`
-- `../shared/references/error-handling.md`
+- `references/core-rules.md`
+- `references/error-handling.md`
 
 ## Status interpretation
 Use the tool's actual status, mapping carefully into:

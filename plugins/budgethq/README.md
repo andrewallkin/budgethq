@@ -15,10 +15,10 @@ Combined MCP execution server and procedural skills for safe personal banking wo
 - `month-end-funding-transfer/SKILL.md`
 - `banking-verification/SKILL.md`
 
-Shared reference material is in `skills/shared/references/`.
+Each skill keeps its rules in its own `references/` directory. Skill files are loaded from that skill directory.
 
 ## Install
-Install the BudgetHQ plugin once in ChatGPT. That install includes the skills and the connection to the remote MCP server at `https://budgethq.andrewallkin.com/mcp`. Nothing is uploaded at install time. Docker keeps serving the tools. ChatGPT keeps the skill text with the plugin. Connecting to the MCP URL on its own does not load these skills, because the server exposes tools, not the plugin package.
+Install the BudgetHQ plugin once in ChatGPT. That install includes the skills and the connection to the remote MCP server at `https://budgethq.andrewallkin.com/mcp`. Docker keeps serving the tools. ChatGPT keeps the skill text with the plugin. OAuth is discovered from the server. The portable MCP schema has no auth fields, and an extra `extensions` block can cause the server entry to be rejected.
 
 ## Safety
 No banking movement should be executed without user alignment on the exact movement and the separate required Telegram approval.
