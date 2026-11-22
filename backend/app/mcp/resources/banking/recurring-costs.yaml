@@ -1,144 +1,179 @@
 resource: budgethq://banking/recurring-costs
-version: "1.0"
-updated: "2026-11-22"
-workflow_id: recurring_cost_execution
+version: "1.1"
+description: >
+  On-demand workflow for user-initiated manual recurring costs.
+  The user supplies the exact amount. The workflow funds Daily
+  from Normal Savings, verifies the transfer, then initiates the
+  second movement to the intended recipient or account.
 
-purpose: >
-  Orchestrate funding an account (internal transfer) and paying an existing
-  beneficiary when the expense is not a single-step payment from the funding source.
-  Example pattern: move cash into a "daily" account, then pay cleaning from that account.
+supported_costs:
+  - cleaning
+  - watchprop
+  - rates
+  - vehicle_finance_extra
 
-dependencies:
-  - budgethq://banking/core-rules
-  - budgethq://banking/transfers
-  - budgethq://banking/payments
-  - budgethq://banking/verification
-  - budgethq://banking/error-handling
+initiation:
+  user_initiated_only: true
+  automatic_execution: false
+  trigger: >
+    The user explicitly requests payment of a supported recurring
+    cost and supplies the exact amount.
+  required:
+    - recurring_cost_type
+    - amount
+  rules:
+    - Never infer the payment amount from historical budgets.
+    - Never initiate a payment without a current user request.
+    - Do not combine separate requests unless explicitly instructed.
 
-conceptual_stages:
-  - establish_expense
-  - calculate_funding
-  - transfer_fund_account
-  - verify_transfer
-  - pay_beneficiary
-  - verify_payment
-  - report
+routing:
+  cleaning:
+    destination: Gallia
+    movement_type: payment
+  watchprop:
+    destination: Gallia
+    movement_type: payment
+  rates:
+    destination: Gallia
+    movement_type: payment
+  vehicle_finance_extra:
+    destination: Investec Vehicle Finance
+    movement_type: transfer
 
-required_inputs:
-  - expense_amount
-  - beneficiary_id
-  - payment_source_account  # account that pays beneficiary after funding
-  - funding_source_account  # account that funds payment_source when needed
-  - my_reference_transfer
-  - their_reference_transfer
-  - my_reference_payment
-  - their_reference_payment
-
-preconditions:
-  - Expense amount and beneficiary are explicit (do not assume last month without user confirm).
-  - Accounts identified via list_investec_accounts.
-  - Two separate Telegram approvals will occur (transfer, then payment) unless user already
-    has sufficient balance on payment_source_account and only payment is needed.
-  - If only payment is required, skip transfer stages and use payment workflow alone.
+accounts:
+  funding_source: Investec Normal Savings Account
+  funding_destination: Investec Daily Account
+  second_movement_source: Investec Daily Account
 
 workflow:
-  "1_establish_expense":
-    mandatory: true
-    action: >
-      Confirm amount, beneficiary, which account pays the beneficiary, and which account
-      supplies funding if needed. Use budget/category context from user when available;
-      do not invent amounts.
+  - step: validate_request
+    instructions:
+      - Confirm the cost type and amount.
+      - Resolve the correct beneficiary or destination account.
+      - Verify beneficiary identity using existing beneficiary records.
+      - Review historical references for the requested cost.
+      - Check for duplicate or conflicting movements where appropriate.
+      - Stop if any material detail is ambiguous.
 
-  "2_calculate_funding":
-    mandatory: true
-    tools:
-      - get_investec_account_balance
-    action: >
-      Determine transfer amount = expense minus funds already on payment_source_account
-      (and minus completed payments this period if known). Do not over-fund without user ok.
-      If transfer amount is zero or negative, skip to payment stage.
+  - step: initiate_funding_transfer
+    instructions:
+      - Transfer the requested amount from Normal Savings to Daily.
+      - Use the established reference convention for the recurring cost.
+      - Both transfer references must be uppercase.
+      - Both transfer references must end in TRANSFER.
+      - Present the exact movement for approval.
+      - Telegram approval is required.
 
-  "3_prepare_transfer":
-    mandatory: conditional
-    composes: budgethq://banking/transfers
-    action: Prepare transfer from funding_source_account to payment_source_account.
+  - step: verify_funding_transfer
+    instructions:
+      - Verify using Investec movement and banking evidence.
+      - Check movement status and relevant account evidence.
+      - Do not proceed while pending, ambiguous, failed,
+        rejected, expired or requiring unresolved authorisation.
+      - Do not blindly retry.
+      - Proceed only once the funding transfer is confirmed.
 
-  "4_present_transfer":
-    mandatory: conditional
-    action: >
-      User must confirm transfer details in chat before create_investec_transfer.
-      Clarify this approval is only for the transfer.
+  - step: initiate_second_movement
+    instructions:
+      - Initiate the second movement only after funding verification.
+      - Use the correct existing beneficiary or destination account.
+      - Use the exact requested amount.
+      - Use the established reference convention.
+      - Payment references must be uppercase.
+      - Transfer references must be uppercase and end in TRANSFER.
+      - Present the exact movement for approval.
+      - Telegram approval is required separately.
 
-  "5_execute_transfer":
-    mandatory: conditional
-    tool: create_investec_transfer
-    action: Queue transfer; record transfer_movement_id.
+  - step: verify_second_movement
+    instructions:
+      - Verify the second movement independently.
+      - Use Investec movement status and banking evidence.
+      - Treat pending movements as pending.
+      - Do not claim completion without confirmation.
+      - Do not blindly retry ambiguous movements.
 
-  "6_verify_transfer":
-    mandatory: conditional
-    tool: get_investec_movement
-    action: >
-      Do not start payment until transfer reaches sent (or user accepts paying from
-      existing balance if transfer failed/expired). If transfer is pending, wait for Telegram.
-      If transfer needs_authorisation, report and pause payment stage.
+  - step: report
+    instructions:
+      - Report the funding transfer result.
+      - Report the second movement result.
+      - Report references, amounts and destinations.
+      - Distinguish completed, pending and failed movements.
+      - Report any unresolved issue.
 
-  "7_prepare_payment":
-    mandatory: true
-    composes: budgethq://banking/payments
-    action: Prepare payment from payment_source_account to beneficiary_id for expense_amount.
+cost_specific_rules:
+  cleaning:
+    recipient: Gallia
+    historical_payment_reference_pattern: "LUNGI CLEANING <MONTH>"
+    historical_funding_reference_examples:
+      - "LUNGI CLEANING TRANSFER"
+      - "CLEANING TRANSFER"
+    notes:
+      - Amount is provided by the user.
+      - Do not assume the monthly maximum.
 
-  "8_present_payment":
-    mandatory: true
-    action: >
-      Separate chat confirmation for payment. Transfer approval does not imply payment approval.
+  watchprop:
+    recipient: Gallia
+    historical_payment_reference_pattern: "WATCHPROP LEVIES <MONTH>"
+    historical_funding_reference_example: "WATCHPROP TRANSFER"
+    notes:
+      - Amount is provided by the user.
+      - Historical amounts are not fixed.
 
-  "9_execute_payment":
-    mandatory: true
-    tool: create_investec_payment
-    action: Queue payment; record payment_movement_id.
+  rates:
+    recipient: Gallia
+    historical_payment_reference_pattern: "COCT RATES <MONTH>"
+    historical_funding_reference_examples:
+      - "COCT RATES TRANSFER"
+      - "RATES TRANSFER"
+      - "TRANSFERS FOR RATES"
+    notes:
+      - Amount is provided by the user.
+      - Historical amounts are not fixed.
 
-  "10_verify_payment":
-    mandatory: true
-    tool: get_investec_movement
-    action: Follow verification resource until payment terminal or auth-wait reported.
+  vehicle_finance_extra:
+    destination: Investec Vehicle Finance
+    historical_payment_reference_pattern: "VF <MONTH> REPAYMENT EXTRA"
+    historical_funding_reference_example: "VF <MONTH> REPAYMENT EXTRA TRANSFER"
+    notes:
+      - The destination is the Vehicle Finance account.
+      - This is a transfer, not a beneficiary payment.
+      - Do not route the movement through a third-party beneficiary.
 
-  "11_report":
-    mandatory: true
-    action: >
-      Report transfer_movement_id and payment_movement_id with independent statuses.
-      Note reconciliation via list_transactions can happen later after posting.
+approval_rules:
+  - Conversational alignment is not Telegram approval.
+  - Funding and second movements require separate approval.
+  - Approval applies only to the exact movement presented.
+  - Telegram approval expires after 15 minutes.
+  - If approval expires, initiate a fresh movement request.
+  - Never execute a movement merely because it was previously discussed.
 
-approval_boundaries:
-  - Transfer Telegram approval authorises only the transfer movement.
-  - Payment Telegram approval authorises only the payment movement.
-  - Multi-action user intent in chat still requires two queue operations and two Telegram approvals.
+verification:
+  primary:
+    - get_investec_movement
+    - list_investec_transactions
+    - list_investec_pending_transactions
+    - get_investec_account_balance
+  rules:
+    - Investec evidence is authoritative for live movement verification.
+    - BudgetHQ general transactions are not primary live verification.
+    - Never assume a movement succeeded because a request was submitted.
 
-state_tracking:
-  conversational:
-    description: >
-      Track stage, transfer_movement_id, payment_movement_id, and statuses in the
-      conversation until complete. No persisted workflow state in API v1.
-  illustrative_schema:
-    workflow_id: recurring_cost_execution
-    state: awaiting_transfer_verification
-    transfer:
-      movement_id: null
-      status: not_started
-    payment:
-      movement_id: null
-      status: not_started
+error_handling:
+  - Stop if beneficiary resolution is ambiguous.
+  - Stop if a funding transfer cannot be confirmed.
+  - Stop if a second movement has ambiguous status.
+  - Never initiate a duplicate movement blindly.
+  - Report failures and request direction where necessary.
+  - If the first movement succeeded but the second failed,
+    report the state explicitly and do not automatically reverse
+    or retry the funding transfer.
 
-stop_conditions:
-  - Transfer not sent and user will not pay from existing balance
-  - Transfer rejected, expired, or failed without recovery plan
-  - Payment blocked until transfer verified
-  - Duplicate funding or duplicate payment detected
-
-example_narrative:
-  description: Cleaning payment R900 (illustrative)
-  steps:
-    - Establish R900 to existing cleaning beneficiary from Daily account.
-    - If Normal Savings must fund Daily, transfer shortfall with references agreed with user.
-    - User approves transfer in Telegram; poll until sent.
-    - Queue R900 payment; user approves second Telegram message; poll until sent.
-    - Report both movement ids. Bookkeeping categorisation later via list_transactions.
+scope:
+  excluded:
+    - Automatic recurring execution.
+    - Amount estimation.
+    - Beneficiary creation.
+    - Beneficiary modification.
+    - Automatic retries.
+    - Automatic reversal of successful funding transfers.
+    - Notion updates unless explicitly requested.

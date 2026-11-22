@@ -1,5 +1,5 @@
 resource: budgethq://workflow-registry
-version: "1.0"
+version: "1.1"
 updated: "2026-11-22"
 applies_to: investec_banking_mcp
 
@@ -14,6 +14,8 @@ when_to_consult:
   - Before interpreting whether a transfer or payment completed
   - Before chaining transfer then payment (recurring costs, month-end funding, etc.)
   - When the user asks to pay, transfer, fund an account, or verify a banking action
+  - When the user asks to set up a new monthly financial period
+  - When executing the month-end funding transfer
   - After any ambiguous, timed-out, or duplicate-looking banking tool result
 
 global_resources:
@@ -46,7 +48,7 @@ workflows:
 
   recurring_cost_execution:
     description: >
-      Fund a designated account (transfer) then pay an existing beneficiary (payment),
+      Fund a designated account (transfer) then pay an existing beneficiary,
       with separate Telegram approvals and verification after each movement.
     resource: budgethq://banking/recurring-costs
     required_resources:
@@ -64,6 +66,35 @@ workflows:
     required_resources:
       - budgethq://banking/core-rules
       - budgethq://banking/accounts-and-identifiers
+      - budgethq://banking/error-handling
+
+  monthly_period_setup:
+    description: >
+      Establish a new Monthly Money period, allocate salary, consolidate funds,
+      execute planned transfers, track recurring costs, and arrange month-end
+      funding for the following month's scheduled payments.
+    resource: budgethq://banking/monthly-period-setup
+    required_resources:
+      - budgethq://banking/core-rules
+      - budgethq://banking/accounts-and-identifiers
+      - budgethq://banking/transfers
+      - budgethq://banking/payments
+      - budgethq://banking/recurring-costs
+      - budgethq://banking/verification
+      - budgethq://banking/error-handling
+      - budgethq://banking/month-end-funding-transfer
+
+  month_end_funding_transfer:
+    description: >
+      Reconcile the following month's debit orders and scheduled payments
+      against the Monthly Money page and transfer the exact reconciled amount
+      from Normal Savings to Daily on the last day of the month.
+    resource: budgethq://banking/month-end-funding-transfer
+    required_resources:
+      - budgethq://banking/core-rules
+      - budgethq://banking/accounts-and-identifiers
+      - budgethq://banking/transfers
+      - budgethq://banking/verification
       - budgethq://banking/error-handling
 
 mcp_tools_index:

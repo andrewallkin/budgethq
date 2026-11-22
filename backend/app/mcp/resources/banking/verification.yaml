@@ -1,106 +1,241 @@
 resource: budgethq://banking/verification
-version: "1.0"
+version: "1.1"
 updated: "2026-11-22"
 
 purpose: >
-  How to verify Investec transfer and payment outcomes. Defines authoritative
-  versus supporting evidence and how to interpret BudgetHQ movement statuses.
+  Verify the status and outcome of Investec transfers and payments initiated
+  through BudgetHQ MCP. Establish the movement status, investigate ambiguous
+  outcomes, and provide accurate reporting. This resource is mandatory before
+  retrying an uncertain movement.
 
-source_of_truth:
-  primary:
-    tool: get_investec_movement
-    description: >
-      BudgetHQ movement row for the id returned from create_investec_transfer
-      or create_investec_payment. This tracks Telegram approval and Investec execution.
-  supplementary:
-    - tool: list_investec_transactions
-      role: Account transaction history from Investec (delayed evidence)
-    - tool: list_investec_pending_transactions
-      role: Pending items on the account at Investec
-    - tool: get_investec_account_balance
-      role: Balance context only; never sole proof of a specific movement completing
-  not_primary_for_live_moves:
-    - tool: list_transactions
-      reason: BudgetHQ bookkeeping feed, not the movement queue pipeline
-    - tool: get_transaction
+dependencies:
+  - budgethq://banking/core-rules
+  - budgethq://banking/accounts-and-identifiers
+  - budgethq://banking/error-handling
 
-movement_status_semantics:
+primary_verification:
+  tool: get_investec_movement
+  description: >
+    Use the Investec movement endpoint to inspect the movement's approval
+    pipeline and status. The movement_id returned from the original
+    create operation is the primary identifier for verification.
+
+supplementary_evidence:
+  tools:
+    - list_investec_transactions
+    - list_investec_pending_transactions
+    - get_investec_account_balance
+  purpose: >
+    Supplement movement-status evidence with relevant transaction, pending
+    transaction, or account balance information where necessary.
+    Supplementary evidence does not replace movement verification.
+
+evidence_hierarchy:
+  - >
+    get_investec_movement is the primary evidence for the status of the
+    submitted movement and its approval pipeline.
+  - >
+    Investec account transactions, pending transactions, and balances are
+    supplementary banking evidence where relevant.
+  - >
+    BudgetHQ general transaction feeds are bookkeeping and reconciliation
+    sources. They are not primary evidence of the status of a newly submitted
+    movement.
+
+status_interpretation:
   pending:
     meaning: >
-      Movement queued; Telegram approval message sent (or awaiting user action).
-      Not yet executed against Investec unless later transitions occur.
-    agent_behaviour: >
-      Tell the user to approve or reject in Telegram. Poll get_investec_movement.
-      Do not create a duplicate transfer/payment without duplicate checks.
-    terminal: false
+      The movement is queued and awaiting the required Telegram approval.
+    completed: false
+    action:
+      - Inform the user that Telegram approval is required.
+      - Monitor where the execution environment supports continued monitoring.
 
   approved:
-    meaning: User approved in Telegram; Investec POST may be in progress or completed shortly.
-    agent_behaviour: Poll get_investec_movement until sent, needs_authorisation, or failed.
-    terminal: false
+    meaning: >
+      The approval has been received and the movement is progressing through
+      processing.
+    completed: false
+    action:
+      - Continue verification.
+      - Do not treat approval as proof that the movement has been sent.
+
+  sent:
+    meaning: >
+      The movement has reached the Investec sent status. This is the usual
+      success-path terminal state for the movement.
+    completed: true
+    action:
+      - Report the observed sent status accurately.
+      - Do not claim settlement, clearance, or recipient receipt unless
+        separate evidence supports that claim.
+
+  needs_authorisation:
+    meaning: >
+      Investec accepted the movement but requires additional bank-side
+      authorisation.
+    completed: false
+    action:
+      - Report that additional bank-side authorisation is required.
+      - Do not describe the movement as completed.
+      - Do not initiate a duplicate movement to bypass authorisation.
 
   rejected:
-    meaning: User rejected in Telegram.
-    agent_behaviour: Report rejected. Do not claim money moved. New action needs new create_*.
-    terminal: true
+    meaning: >
+      The movement was rejected.
+    completed: false
+    action:
+      - Report rejection.
+      - Do not automatically resubmit.
+      - Follow error-handling and obtain user direction where appropriate.
 
   expired:
-    meaning: Approval window elapsed (movement TTL) while still pending.
-    agent_behaviour: Report expired. Treat as not executed. New action needs new create_*.
-    terminal: true
+    meaning: >
+      The Telegram approval request expired without approval within its
+      approval window.
+    completed: false
+    action:
+      - Report expiry.
+      - Do not automatically resubmit.
+      - A new movement requires the user's request to proceed and a new
+        Telegram approval request.
 
   failed:
     meaning: >
-      Telegram delivery failure, Investec call failure, settlement failure, or
-      other recorded failure_reason where applicable.
-    agent_behaviour: Report failure; inspect investec_response if present; do not blind retry.
-    terminal: true
+      The movement failed.
+    completed: false
+    action:
+      - Report the failure and available evidence.
+      - Follow error-handling before any retry.
+      - Do not blindly retry.
 
-  sent:
-    meaning: Investec accepted the transfer/payment (success path without extra auth flag).
-    agent_behaviour: Report completed to the extent status sent indicates. Include movement id.
-    terminal: true
+  unknown_or_ambiguous:
+    meaning: >
+      The movement status cannot be conclusively determined from the available
+      evidence or the verification call fails.
+    completed: false
+    action:
+      - Investigate using the relevant Investec read tools.
+      - Follow error-handling.
+      - Do not initiate another movement while the existing outcome is
+        unresolved.
 
-  needs_authorisation:
-    meaning: Investec accepted the request but requires further Investec-side authorisation.
-    agent_behaviour: >
-      Report honestly as waiting on Investec authorisation, not fully settled.
-      Continue monitoring via get_investec_movement and Investec reads if appropriate.
-    terminal: false
+verification_workflow:
+  "1_identify_movement":
+    mandatory: true
+    action: >
+      Obtain the movement_id from the original create response or another
+      trusted record. Do not guess movement identifiers.
 
-http_hints:
-  create_investec_transfer:
-    "202": New movement queued (typically status pending)
-    "200": Idempotent replay of existing movement for same idempotency_key
-  create_investec_payment:
-    "202": New movement queued (typically status pending)
-    "200": Idempotent replay of existing movement for same idempotency_key
+  "2_read_movement":
+    mandatory: true
+    tool: get_investec_movement
+    action: >
+      Retrieve the movement details and status using the movement_id.
 
-evidence_hierarchy:
-  steps:
-    - Retrieve get_investec_movement(movement_id).
-    - Interpret status using movement_status_semantics above.
-    - If investec_response is present on the movement payload, use it for detail and references.
-    - If unresolved, inspect list_investec_pending_transactions and list_investec_transactions
-      on relevant account_id for corroboration.
-    - Balance changes alone are insufficient to prove this specific movement_id completed.
+  "3_interpret_status":
+    mandatory: true
+    action: >
+      Interpret the observed status using status_interpretation.
+      Distinguish Telegram approval, processing, bank-side authorisation,
+      sent, failure, rejection, and expiry.
 
-  prohibited:
-    - Declaring success from create_* response alone when status is still pending.
-    - Treating list_transactions appearance as immediate proof of MCP-initiated movement completion.
-    - Retrying create_* to discover whether a prior call succeeded.
+  "4_supplementary_checks":
+    mandatory: false
+    tools:
+      - list_investec_transactions
+      - list_investec_pending_transactions
+      - get_investec_account_balance
+    action: >
+      Use supplementary Investec evidence where it materially helps establish
+      or investigate the movement outcome. Do not infer movement success
+      solely from a balance change or transaction appearance.
 
-polling_guidance:
-  after_create:
-    - Poll get_investec_movement on an interval sensible for user experience while pending or approved.
-    - Stop escalating when status is terminal or needs_authorisation is reported clearly.
-  telegram:
-    - Remind user approval happens in Telegram, not in the chat UI.
+  "5_monitor":
+    mandatory: conditional
+    action: >
+      If the movement is still awaiting Telegram approval or processing,
+      recheck periodically when the execution environment supports continued
+      monitoring. Use a reasonable polling interval and avoid excessive reads.
 
-response_fields:
-  movement_public_shape:
-    id: integer movement id for get_investec_movement
-    status: string enum described above
-    kind: transfer | payment
-    expires_at: ISO timestamp for approval deadline while pending
-    investec_response: optional dict after Investec interaction
+    monitoring_rules:
+      - >
+        Continue monitoring while the approval window remains active when
+        continued execution is available.
+      - >
+        Stop monitoring when the movement reaches a terminal state, the
+        approval window expires, or further monitoring is unavailable.
+      - >
+        Disclose when continuous monitoring cannot be performed.
+      - >
+        Monitoring does not authorise creating, retrying, cancelling,
+        reversing, or modifying another movement.
+
+  "6_report":
+    mandatory: true
+    action: >
+      Report the observed status and evidence accurately. Distinguish
+      movement pipeline status from supplementary account or transaction
+      evidence.
+
+reporting_requirements:
+  include:
+    - movement_id
+    - movement_type
+    - amount
+    - source_account
+    - destination_account_or_beneficiary
+    - my_reference
+    - their_reference
+    - observed_status
+    - verification_evidence
+    - user_action_required
+    - verification_limitations
+
+  rules:
+    - >
+      Never claim a movement completed unless the Investec movement status
+      supports that claim.
+    - >
+      Never claim funds have settled, cleared, or been received by the
+      beneficiary unless the available evidence specifically supports it.
+    - >
+      Report pending as pending.
+    - >
+      Report needs_authorisation as requiring additional bank-side authorisation.
+    - >
+      Report sent as sent, not as guaranteed recipient receipt.
+    - >
+      Report rejected, expired, and failed as unsuccessful outcomes.
+    - >
+      Explicitly report verification failures and unresolved ambiguity.
+    - >
+      Do not use BudgetHQ general transactions as primary movement evidence.
+    - >
+      Do not blindly retry a movement whose outcome is ambiguous.
+
+reconciliation:
+  budgethq_transaction_feed:
+    tools:
+      - list_transactions
+      - get_transaction
+    purpose: >
+      Use BudgetHQ general transactions for budgeting, categorisation,
+      post-execution reconciliation, and bookkeeping after synchronisation.
+    rules:
+      - >
+        BudgetHQ transactions may lag Investec by approximately 5 to 10 minutes.
+      - >
+        A missing BudgetHQ transaction does not prove a movement failed.
+      - >
+        A BudgetHQ transaction appearing does not independently establish
+        the movement's approval pipeline status.
+      - >
+        Do not use BudgetHQ bookkeeping data as the primary movement
+        verification source.
+      - >
+        Reconciliation discrepancies or synchronisation delays must not
+        independently trigger duplicate transfers or payments.
+
+failure_handling:
+  resource: budgethq://banking/error-handling

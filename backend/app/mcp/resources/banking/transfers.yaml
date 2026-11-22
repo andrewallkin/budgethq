@@ -1,5 +1,5 @@
 resource: budgethq://banking/transfers
-version: "1.0"
+version: "1.1"
 updated: "2026-11-22"
 workflow_id: transfer_between_accounts
 
@@ -14,16 +14,24 @@ required_inputs:
   - my_reference
   - their_reference
 
+reference_rules:
+  - All transfer references must be in FULL CAPITALS.
+  - All transfer references must end with TRANSFER.
+  - Both my_reference and their_reference must conform.
+  - References must be meaningful for the movement.
+  - Validate references before presenting the movement for alignment.
+  - Do not silently alter references after alignment.
+
 preconditions:
   mandatory:
     - Source and destination identifiers are unambiguous Investec accountIds.
     - Destination is a different own account validated via list_investec_accounts.
     - Amount is explicitly agreed with the user.
-    - Both references are established.
+    - Both references are established and comply with reference_rules.
     - User understands Telegram will be asked to approve.
     - Telegram is connected for the owner.
   conditional:
-    - Duplicate check when amount/date/references match a recent pending or sent movement.
+    - Duplicate check when a potentially matching pending or recent movement exists.
     - Balance check via get_investec_account_balance on source when funding is non-obvious.
     - Skip account re-listing when ids were just read from list_investec_accounts in-session.
 
@@ -41,32 +49,55 @@ execution_sequence:
     tool: list_investec_accounts
     action: >
       Resolve source_account and destination_account to accountId, names, and products.
-      Confirm destination is in the user's account list.
+      Confirm destination is in the user's account list and is different from source.
 
-  "2_check_source_balance":
+  "2_validate_references":
+    mandatory: true
+    action: >
+      Validate my_reference and their_reference. Both must be uppercase and end
+      with TRANSFER. Correct nonconforming references before presenting the
+      movement for alignment.
+
+  "3_check_source_balance":
     mandatory: false
     tool: get_investec_account_balance
     action: >
-      Check current/available balance on source. Warn if likely insufficient; do not
-      silently change the amount.
+      Check current/available balance on source when relevant. Warn if likely
+      insufficient; do not silently change the amount.
 
-  "3_check_duplicates":
+  "4_check_duplicates":
     mandatory: false
     tools:
       - list_investec_transactions
       - list_investec_pending_transactions
     action: >
-      Look for likely duplicate transfers on source (and pending list). Stop if a
-      matching in-flight movement exists unless user confirms.
+      Search for potentially matching transfers using amount, source, destination,
+      references, timing, movement type, and status where available.
 
-  "4_present_for_approval":
+    decision_rules:
+      - >
+        A matching in-flight movement for the same logical transfer is a reason
+        to pause and reconcile before creating another.
+      - >
+        Similarity alone is not proof of duplication.
+      - >
+        Do not automatically cancel, reverse, or suppress a legitimate transfer
+        solely because another similar movement exists.
+      - >
+        If duplicate status is ambiguous, investigate using Investec movement
+        evidence and error-handling rules before proceeding.
+      - >
+        Do not blindly retry an ambiguous create result.
+
+  "5_present_for_alignment":
     mandatory: true
     action: >
-      Present full transfer details to the user in chat: from, to, amount, references.
-      Explain that execution requires Telegram approval after the tool queues the movement.
-      Chat confirmation alone is not sufficient.
+      Present full transfer details to the user in chat: from, to, amount,
+      my_reference and their_reference. Explain that execution requires Telegram
+      approval after the tool queues the movement. Chat confirmation alone
+      is not sufficient.
 
-  "5_execute":
+  "6_execute":
     mandatory: true
     tool: create_investec_transfer
     parameters:
@@ -75,24 +106,29 @@ execution_sequence:
       amount: amount string
       my_reference: my_reference
       their_reference: their_reference
-      idempotency_key: use when retrying same logical transfer after ambiguity
+      idempotency_key: use when retrying the same logical transfer after ambiguity
     action: >
       Queue the transfer. Capture returned id as movement_id.
     after:
       - If status pending, direct user to Telegram Approve/Reject.
+      - Initiate verification using get_investec_movement.
+      - Follow the verification resource.
 
-  "6_verify":
+  "7_verify":
     mandatory: true
     tool: get_investec_movement
     action: >
-      Poll until terminal status or clear needs_authorisation. Follow
-      budgethq://banking/verification.
+      Verify the movement status and follow the verification resource.
+      Monitor where the execution environment supports continued monitoring.
+      Stop at a terminal state, expiry, or monitoring limitation.
 
-  "7_report":
+  "8_report":
     mandatory: true
     action: >
-      Report movement_id, final status, and references. If pending/rejected/expired,
-      state money was not sent.
+      Report movement_id, observed status, amount, source, destination,
+      and references. State money was not sent when the evidence supports
+      pending, rejected, expired, or failed. Distinguish needs_authorisation
+      from sent.
 
 failure_handling:
   resource: budgethq://banking/error-handling

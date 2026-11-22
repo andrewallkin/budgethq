@@ -1,5 +1,5 @@
 resource: budgethq://banking/payments
-version: "1.0"
+version: "1.1"
 updated: "2026-11-22"
 workflow_id: payment_to_beneficiary
 
@@ -14,16 +14,26 @@ required_inputs:
   - my_reference
   - their_reference
 
+reference_rules:
+  - All payment references must be written in FULL CAPITALS.
+  - Both my_reference and their_reference must be uppercase.
+  - Payment references do not need to end with TRANSFER.
+  - References must be meaningful for the payment.
+  - Validate references before presenting the payment for alignment.
+  - Do not silently alter references after alignment.
+
 preconditions:
   mandatory:
     - Source account identified.
-    - beneficiary_id matches a record from list_investec_beneficiaries (or scoped profile list).
+    - beneficiary_id matches a record from list_investec_beneficiaries
+      or an appropriately scoped profile list.
     - Amount and both references explicit and user-aligned.
+    - Both references comply with reference_rules.
     - User warned that Telegram approval is required after queueing.
     - Telegram connected.
   conditional:
     - Balance check on source when non-obvious.
-    - Duplicate payment scan via transactions/pending lists.
+    - Duplicate payment scan via transactions and pending movement lists.
     - Profile-scoped beneficiary lookup when global list is ambiguous.
 
 tools:
@@ -41,7 +51,8 @@ execution_sequence:
   "1_identify_source":
     mandatory: true
     tool: list_investec_accounts
-    action: Confirm source_account exists and capture display names.
+    action: >
+      Confirm source_account exists and capture display names.
 
   "2_identify_beneficiary":
     mandatory: true
@@ -49,28 +60,57 @@ execution_sequence:
       - list_investec_beneficiaries
       - list_investec_profile_beneficiaries
     action: >
-      Match beneficiary_id to name, bank, account number. If multiple candidates,
-      stop and ask the user. Do not pay without a unique match.
+      Match beneficiary_id to name, bank, account number, and available
+      identifying details. If multiple candidates remain, stop and ask the
+      user. Do not pay without a unique match.
 
-  "3_check_balance":
+  "3_validate_references":
+    mandatory: true
+    action: >
+      Validate my_reference and their_reference. Both must be uppercase.
+      Correct nonconforming references before presenting the payment for alignment.
+
+  "4_check_balance":
     mandatory: false
     tool: get_investec_account_balance
-    action: Assess whether source likely has funds for amount.
+    action: >
+      Assess whether the source account likely has sufficient funds for the amount.
 
-  "4_check_duplicates":
+  "5_check_duplicates":
     mandatory: false
     tools:
       - list_investec_transactions
       - list_investec_pending_transactions
-    action: Stop on likely duplicate pending/sent payment unless user confirms.
+    action: >
+      Search for potentially matching payments using beneficiary, source account,
+      amount, references, timing, movement type, and status where available.
 
-  "5_present_for_approval":
+    decision_rules:
+      - >
+        A matching in-flight payment for the same logical payment is a reason
+        to pause and reconcile before creating another.
+      - >
+        Similarity alone is not proof of duplication.
+      - >
+        Do not automatically cancel, reverse, or suppress a legitimate payment
+        solely because another similar movement exists.
+      - >
+        If duplicate status is ambiguous, investigate using Investec movement
+        evidence and error-handling rules before proceeding.
+      - >
+        Do not blindly retry an ambiguous create result.
+      - >
+        If a potential duplicate cannot be resolved, stop and report the evidence
+        and uncertainty before creating another payment.
+
+  "6_present_for_alignment":
     mandatory: true
     action: >
-      Show beneficiary, bank details as returned by Investec, amount, references,
-      source account. Explain Telegram approval step.
+      Show beneficiary, identifying bank details as returned by Investec,
+      amount, references, and source account. Explain the Telegram approval step.
+      Chat confirmation alone is not sufficient.
 
-  "6_execute":
+  "7_execute":
     mandatory: true
     tool: create_investec_payment
     parameters:
@@ -79,21 +119,32 @@ execution_sequence:
       amount: amount string
       my_reference: my_reference
       their_reference: their_reference
-      idempotency_key: when retrying same logical payment
-    action: Queue payment; save movement id from response.
+      idempotency_key: when retrying the same logical payment
+    action: >
+      Queue payment; save movement id from response.
+    after:
+      - Initiate verification using get_investec_movement.
+      - Follow the verification resource.
 
-  "7_verify":
+  "8_verify":
     mandatory: true
     tool: get_investec_movement
-    action: Follow budgethq://banking/verification until terminal or reported auth wait.
+    action: >
+      Follow budgethq://banking/verification until terminal or reported
+      bank-side authorisation wait. Monitor where supported.
 
-  "8_report":
+  "9_report":
     mandatory: true
-    action: Report movement_id, status, beneficiary label, amount. Never claim sent if pending.
+    action: >
+      Report movement_id, observed status, beneficiary label, amount,
+      source account, and references. Never claim sent if the evidence
+      does not support that status.
 
 scope_limits:
   - Beneficiary creation and edits are out of scope for this workflow.
   - External payments only through existing beneficiaryId records.
+  - Do not substitute an internal transfer for an external beneficiary payment
+    or vice versa.
 
 failure_handling:
   resource: budgethq://banking/error-handling

@@ -1,5 +1,5 @@
 resource: budgethq://banking/core-rules
-version: "1.0"
+version: "1.1"
 updated: "2026-11-22"
 scope: All Investec banking workflows via BudgetHQ MCP
 
@@ -11,8 +11,8 @@ rules:
       create_investec_payment is not approval and is not completion.
     - >
       The owner must tap Approve or Reject on the Telegram message sent to their
-      configured allowed user. Chat consent in the MCP client does not execute
-      the movement.
+      configured allowed user. Chat consent in the MCP client does not execute the
+      movement.
     - >
       Approval applies only to the exact movement shown in that Telegram message
       (amount, accounts, beneficiary, references). One approval does not authorise
@@ -21,51 +21,196 @@ rules:
       Transfer approval does not authorise a subsequent beneficiary payment, and
       vice versa, even when both are part of one user request.
     - >
-      Do not infer approval from past behaviour, standing instructions, or automation.
+      Do not infer approval from past behaviour, standing instructions, or
+      automation.
+    - >
+      Never bypass, circumvent, or substitute the Telegram approval process,
+      even if the user explicitly requests direct execution or has previously
+      approved similar movements.
+
+  reference_conventions:
+    transfers:
+      - >
+        All transfer references must be written in FULL CAPITALS.
+      - >
+        Every transfer reference must end with the word TRANSFER.
+      - >
+        Validate both my_reference and their_reference against these conventions
+        before submitting a transfer.
+      - >
+        If a proposed transfer reference does not conform, correct it before
+        presenting the movement for alignment.
+    payments:
+      - >
+        All payment references must be written in FULL CAPITALS.
+      - >
+        Validate both my_reference and their_reference before submitting a payment.
+      - >
+        Payment references do not need to end with TRANSFER.
+    general:
+      - >
+        References must be meaningful and appropriate to the movement.
+      - >
+        Do not silently alter references after the user has aligned with the
+        exact movement. If a change is necessary, present the revised details
+        for alignment before queueing.
 
   prerequisites:
-    - Investec credentials must be configured for the connected owner.
-    - Telegram must be connected (bot token and allowed user id). Writes fail with
-      "Telegram is not connected" otherwise.
-    - Do not execute movements on guessed account ids, beneficiary ids, amounts,
+    - >
+      Investec credentials must be configured for the connected owner.
+    - >
+      Telegram must be connected (bot token and allowed user id). Write operations
+      requiring Telegram approval cannot proceed if Telegram is not connected.
+    - >
+      Do not execute movements on guessed account ids, beneficiary ids, amounts,
       or references.
 
   execution:
-    - Validate source and destination identifiers using Investec list/read tools
+    - >
+      Validate source and destination identifiers using Investec list/read tools
       when they are not already known from a trusted tool response in this session.
-    - Check source balance with get_investec_account_balance when funding sufficiency
-      is relevant; a displayed balance does not guarantee Investec will accept the move.
-    - Check for duplicate or in-flight movements before creating another with the same
-      amount, accounts, beneficiary, and references when practical.
-    - Use Idempotency-Key (idempotency_key argument) on create_investec_transfer and
-      create_investec_payment when retrying after uncertainty; reuse the same key only
-      when intentionally retrying the same logical action.
-    - Never blindly retry a failed, timed-out, or ambiguous create call without reading
-      get_investec_movement or verifying idempotency behaviour first.
+    - >
+      Check source balance with get_investec_account_balance when funding
+      sufficiency is relevant; a displayed balance does not guarantee Investec
+      will accept the move.
+    - >
+      Check for duplicate or in-flight movements before creating another when
+      practical. Consider amount, source account, destination account or
+      beneficiary, references, movement type, creation time, status, and
+      idempotency key where available.
+    - >
+      Duplicate detection is a precaution before creating a new movement. Do not
+      automatically cancel, reverse, or suppress an otherwise legitimate
+      movement solely because a similar movement exists.
+    - >
+      Use Idempotency-Key (idempotency_key argument) on create_investec_transfer
+      and create_investec_payment when retrying after uncertainty. Reuse the same
+      key only when intentionally retrying the same logical action.
+    - >
+      Never blindly retry a failed, timed-out, or ambiguous create call without
+      reading get_investec_movement or verifying idempotency behaviour first.
+    - >
+      If the outcome of a create call is ambiguous, reconcile the existing
+      movement before attempting another create call. Do not create a new
+      movement with a different idempotency key merely to overcome uncertainty.
+    - >
+      Each queued movement has a 15-minute Telegram approval window. The owner
+      must approve the Telegram approval message within this window.
+    - >
+      If the Telegram approval window expires without approval, the movement
+      cannot be approved through that expired request. If the user still wants
+      to proceed, initiate a new movement through the MCP write tool to generate
+      a new approval request.
+    - >
+      Never automatically resubmit an expired movement. A new movement requires
+      the user's request to proceed and a new Telegram approval.
+
+  post_creation_workflow:
+    - >
+      After successfully creating a transfer or payment, proactively initiate
+      movement verification without waiting for the user to request confirmation.
+    - >
+      Immediately call get_investec_movement using the movement id returned
+      by the create tool to confirm the movement's initial state.
+    - >
+      If the movement is pending Telegram approval, proactively monitor the
+      movement status for approval, rejection, or expiry. Do not require the
+      user to send a follow-up message to initiate verification.
+    - >
+      While the 15-minute Telegram approval window remains active, periodically
+      recheck the movement using get_investec_movement when the execution
+      environment supports continued execution or scheduled follow-up.
+    - >
+      Use a reasonable polling interval to avoid excessive tool calls. Do not
+      continuously poll or make unnecessary repeated reads.
+    - >
+      If the movement status changes, immediately perform the appropriate
+      verification using Investec tools and report the observed result.
+    - >
+      Stop monitoring once the movement reaches a terminal state, the approval
+      window expires, or further monitoring is no longer possible.
+    - >
+      If the execution environment cannot continue monitoring after the initial
+      response, clearly disclose that limitation and do not claim that
+      monitoring or verification will happen automatically.
+    - >
+      Monitoring an existing movement does not authorise creating, retrying,
+      cancelling, reversing, or modifying another movement.
 
   verification:
-    - Use get_investec_movement with the BudgetHQ movement id returned from create_*.
-    - Support Investec account reads (transactions, pending, balance) as supplementary
-      evidence only unless this resource set says otherwise.
-    - A successful HTTP response from create_* with status pending means queued for
-      Telegram approval, not sent to Investec yet.
-    - pending is not completed. sent is the usual success terminal state after Investec
-      accepts the payment/transfer. needs_authorisation means Investec accepted but
-      requires further bank-side authorisation. failed, rejected, and expired are not
-      completed.
-    - Do not claim completion without a movement status that supports it.
+    - >
+      Investec tools are the sole authoritative source for verifying the status
+      and outcome of transfers and payments.
+    - >
+      Verify movements using get_investec_movement with the BudgetHQ movement
+      id returned by create_investec_transfer or create_investec_payment.
+    - >
+      Use Investec account transaction reads, pending-transaction reads, and
+      balance reads as supplementary verification evidence where relevant.
+    - >
+      Verification of a transfer or payment must be performed using Investec
+      tools. Do not use BudgetHQ transaction feeds, transaction records, UI
+      results, or bookkeeping data as evidence that a movement was completed,
+      failed, or otherwise processed.
+    - >
+      BudgetHQ transaction data may lag behind Investec by approximately 5 to
+      10 minutes due to synchronisation intervals. A missing or delayed
+      transaction in BudgetHQ must not be interpreted as evidence of movement
+      failure, and must not trigger a retry.
+    - >
+      A successful HTTP response from create_* with status pending means the
+      movement has been queued for Telegram approval, not sent to Investec yet.
+    - >
+      Distinguish between a movement awaiting Telegram approval, a movement
+      awaiting bank-side authorisation, and a movement confirmed as sent.
+    - >
+      pending is not completed. sent is the usual success terminal state after
+      Investec accepts the movement. needs_authorisation means Investec accepted
+      the movement but requires further bank-side authorisation. failed,
+      rejected, and expired are not completed.
+    - >
+      Do not claim completion without an Investec movement status that supports
+      the claim.
+    - >
+      Do not claim funds have cleared, settled, or been received by the
+      beneficiary unless the Investec evidence specifically supports that claim.
 
   reconciliation:
-    - list_transactions and get_transaction reflect BudgetHQ bookkeeping data.
-    - They are not the authoritative source for immediate verification of a movement
-      just queued or just approved in Telegram.
-    - Use them after posting for categorisation and budget reconciliation.
+    - >
+      list_transactions and get_transaction reflect BudgetHQ bookkeeping data
+      and are intended for budgeting, categorisation, and ledger reconciliation.
+    - >
+      BudgetHQ bookkeeping and transaction-sync data are not authoritative for
+      immediate movement verification.
+    - >
+      BudgetHQ transaction synchronisation may take approximately 5 to 10
+      minutes. Missing transaction records during this period do not indicate
+      movement failure.
+    - >
+      Use BudgetHQ transaction data for post-execution budgeting,
+      categorisation, and reconciliation only, independently of movement
+      verification.
+    - >
+      Reconciliation discrepancies or synchronisation delays must not
+      independently trigger a duplicate transfer or payment.
 
   reporting:
-    - Report amount, source account, destination or beneficiary, both references,
-      movement id, kind (transfer|payment), and observed status when available.
-    - If verification is incomplete, say so explicitly and name which check failed.
-    - Never state that money moved unless status is sent (or needs_authorisation
-      when that is the honest outcome to report).
+    - >
+      Report amount, source account, destination account or beneficiary,
+      both references, movement id, kind (transfer or payment), and observed
+      Investec movement status when available.
+    - >
+      Clearly distinguish between requested, queued for Telegram approval,
+      awaiting bank-side authorisation, sent, failed, rejected, and expired
+      states where applicable.
+    - >
+      If verification is incomplete, say so explicitly and name which Investec
+      verification check failed or could not be completed.
+    - >
+      Never state that money moved unless the Investec movement status supports
+      the claim.
+    - >
+      Never use BudgetHQ transaction synchronisation or UI visibility as
+      confirmation that a movement succeeded or failed.
 
 movement_ttl_minutes: 15
