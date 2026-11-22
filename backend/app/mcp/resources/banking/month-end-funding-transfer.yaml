@@ -1,0 +1,225 @@
+
+resource:
+  uri: "budgethq://banking/month-end-funding-transfer"
+  name: "Month-End Funding Transfer"
+  version: "1.0"
+  description: >
+    Workflow for transferring the exact reconciled amount required
+    for the following month's debit orders and scheduled payments
+    from Investec Normal Savings to Investec Daily on the last
+    day of the current month.
+
+instructions:
+
+  purpose:
+    - Fund Investec Daily for the debit orders and scheduled
+      payments expected to clear on the 1st of the following month.
+    - Determine the transfer amount from the relevant Monthly Money
+      page in Notion.
+    - Reconcile individual scheduled-payment amounts against
+      the stated total before initiating a transfer.
+    - Execute and verify the transfer according to the banking
+      core rules and verification resource.
+
+  prerequisites:
+    resources:
+      - "budgethq://banking/core-rules"
+      - "budgethq://banking/accounts-and-identifiers"
+      - "budgethq://banking/transfers"
+      - "budgethq://banking/verification"
+      - "budgethq://banking/error-handling"
+
+    rules:
+      - Follow all banking core rules.
+      - Use Investec banking tools for live banking verification.
+      - Do not use BudgetHQ general bookkeeping transactions
+        as the primary source of movement verification.
+      - All transfer references must be in FULL CAPITALS
+        and end with TRANSFER.
+      - Conversational alignment and Telegram approval
+        remain separate requirements.
+      - Transfer approval applies only to the exact movement
+        that was submitted for approval.
+
+  trigger:
+    schedule:
+      day: "Last day of each month"
+      purpose: >
+        Fund Investec Daily for debit orders and scheduled payments
+        expected to clear on the 1st of the following month.
+
+    execution:
+      - The ChatGPT scheduled task should initiate the workflow
+        on the last day of the month.
+      - Use the relevant upcoming month's Monthly Money page
+        to calculate the transfer.
+      - Do not assume the transfer amount from a prior month.
+
+  workflow:
+
+    step_1_identify_monthly_money_page:
+      description: >
+        Identify the Monthly Money Notion page for the month
+        whose debit orders and scheduled payments need funding.
+
+      actions:
+        - Identify the upcoming month.
+        - Retrieve the relevant Monthly Money page in Notion.
+        - Confirm that the page corresponds to the month
+          immediately following the current month-end.
+        - Locate the table containing debit orders
+          and scheduled payments.
+        - Locate the stated total for those payments.
+
+      rules:
+        - Use the relevant monthly page as the source of truth
+          for the scheduled payments intended to clear on the 1st.
+        - Do not use a previous month's page as a substitute.
+        - Do not use historical bank transactions to reconstruct
+          the upcoming month's payment list unless needed
+          to investigate a discrepancy.
+        - Do not include manual recurring costs in this transfer.
+        - Do not include expenses that are not intended to clear
+          on the 1st unless explicitly included in the funding plan.
+
+    step_2_extract_and_calculate:
+      description: >
+        Extract the individual scheduled-payment and debit-order
+        amounts from the Monthly Money page and calculate
+        the expected total.
+
+      actions:
+        - Extract every relevant scheduled payment
+          and debit order intended to clear on the 1st.
+        - Record the individual amounts.
+        - Calculate the sum of the individual amounts.
+        - Retrieve the total stated on the Notion page.
+        - Compare the calculated sum with the stated total.
+
+      reconciliation:
+        calculation: >
+          Calculated total =
+          Sum of individual debit orders and scheduled payments
+          intended to clear on the 1st.
+
+        comparison: >
+          Calculated total must equal the total stated
+          on the Monthly Money page.
+
+      rules:
+        - Reconcile all individual amounts against the stated total.
+        - Do not silently change or correct the Notion total.
+        - Do not assume missing amounts.
+        - Do not ignore discrepancies.
+        - If the individual amounts do not reconcile
+          with the stated total, stop and report the discrepancy.
+        - Do not initiate the transfer until the discrepancy
+          has been resolved.
+        - If the payment list or total is missing or incomplete,
+          stop and request clarification.
+
+    step_3_confirm_funding_amount:
+      description: >
+        Establish the verified transfer amount from the
+        reconciled Notion payment list.
+
+      actions:
+        - Use the reconciled total as the transfer amount.
+        - Present the amount and the reconciliation
+          results when necessary.
+        - If there is an unresolved discrepancy, do not proceed.
+
+      amount:
+        source: "Reconciled total from the relevant Monthly Money page"
+        currency: "ZAR"
+
+    step_4_transfer:
+      description: >
+        Transfer the reconciled amount from Normal Savings
+        to Daily on the last day of the month.
+
+      movement:
+        type: "Investec account transfer"
+        source: "Investec Normal Savings"
+        destination: "Investec Daily"
+        amount: "Reconciled scheduled-payment total"
+        reference: "<MONTH> DEBIT ORDERS TRANSFER"
+
+      reference_rules:
+        - Use the uppercase name of the upcoming month.
+        - The reference must be "<MONTH> DEBIT ORDERS TRANSFER".
+        - All transfer references must be in FULL CAPITALS.
+        - All transfer references must end with TRANSFER.
+
+      execution:
+        - Align with the user on the exact movement.
+        - Initiate the transfer using the transfers resource.
+        - Obtain the required Telegram approval.
+        - Do not treat conversational alignment as Telegram approval.
+        - Monitor the movement status when monitoring is available.
+        - Verify the transfer using the verification resource.
+
+    step_5_verification:
+      description: >
+        Verify the transfer's status and report the outcome.
+
+      actions:
+        - Use get_investec_movement to inspect the
+          movement status and approval pipeline.
+        - Use relevant Investec transaction or account
+          evidence where necessary to confirm banking execution.
+        - Distinguish movement pipeline status from
+          bank-account transaction evidence.
+        - Report the outcome accurately.
+
+      rules:
+        - Do not claim completion unless supported by verification.
+        - Do not use the general BudgetHQ transaction feed
+          as the primary confirmation of the live movement.
+        - If the movement remains pending, report the status.
+        - If Telegram approval expires, follow error-handling.
+        - If the transfer fails, follow error-handling.
+        - Do not retry blindly.
+        - If status is ambiguous, investigate before retrying.
+
+    step_6_reporting:
+      description: >
+        Report the funding transfer outcome and the
+        reconciliation details.
+
+      report:
+        include:
+          - Upcoming month being funded.
+          - Notion page used.
+          - Individual scheduled-payment and debit-order amounts.
+          - Calculated total.
+          - Notion stated total.
+          - Reconciliation result.
+          - Transfer amount.
+          - Source account.
+          - Destination account.
+          - Transfer reference.
+          - Telegram approval and movement status.
+          - Verification evidence.
+          - Any discrepancies, failures or unresolved issues.
+
+      rules:
+        - Report reconciliation explicitly.
+        - Distinguish initiated, pending, approved,
+          completed, failed and expired states accurately.
+        - Report any tool failure.
+        - Do not claim success without verification.
+
+  safety_and_execution:
+    - Follow core-rules for all banking movements.
+    - Follow transfers for transfer execution.
+    - Follow verification for verification.
+    - Follow error-handling for recovery.
+    - Do not bypass Telegram approval.
+    - Do not initiate a transfer if the Notion total
+      and calculated individual amounts disagree.
+    - Do not invent, estimate or substitute a transfer amount.
+    - Do not execute duplicate movements.
+    - Use idempotency keys only for the same logical operation.
+    - All transfer references must be in FULL CAPITALS
+      and end with TRANSFER.

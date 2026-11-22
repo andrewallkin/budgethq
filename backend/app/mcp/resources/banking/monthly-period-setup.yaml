@@ -1,0 +1,385 @@
+
+resource:
+  uri: "budgethq://banking/monthly-period-setup"
+  name: "Monthly Period Setup"
+  version: "1.1"
+  description: >
+    End-to-end workflow for establishing a new monthly financial period,
+    preparing the Monthly Money page in Notion, allocating salary,
+    consolidating monthly funds in Normal Savings, transferring surplus
+    to Emergency Savings, and arranging the following month's debit-order
+    funding transfer.
+
+instructions:
+
+  purpose:
+    - Establish the new month's financial plan around the 20th of the month.
+    - Use the user's actual salary receipt and live Investec account data.
+    - Prepare a new Monthly Money page in Notion using the established format.
+    - Calculate and execute movements only after alignment with the user
+      and the required Telegram approval.
+    - Keep month-specific decisions flexible rather than hardcoding them.
+
+  prerequisites:
+    resources:
+      - "budgethq://workflow-registry"
+      - "budgethq://banking/core-rules"
+      - "budgethq://banking/accounts-and-identifiers"
+      - "budgethq://banking/transfers"
+      - "budgethq://banking/payments"
+      - "budgethq://banking/verification"
+      - "budgethq://banking/recurring-costs"
+      - "budgethq://banking/month-end-funding-transfer"
+      - "budgethq://banking/error-handling"
+
+    rules:
+      - Follow all banking core rules and error-handling rules.
+      - Use Investec banking tools for live account balances,
+        transactions and movement verification.
+      - Do not use BudgetHQ general bookkeeping transactions to
+        verify live banking movements.
+      - All transfer references must be in FULL CAPITALS
+        and end with TRANSFER.
+      - All payment references must be in FULL CAPITALS.
+      - All movements require conversational alignment and
+        the applicable Telegram approval.
+      - A transfer approval does not approve a subsequent payment.
+      - Do not initiate movements based on assumptions or ambiguous data.
+
+  workflow:
+
+    step_1_create_monthly_money_page:
+      description: >
+        Establish the Monthly Money page for the upcoming month,
+        normally initiated around the 20th.
+
+      actions:
+        - Create a fresh Monthly Money page in Notion for the upcoming month.
+        - Use the established Monthly Money format and structure.
+        - Do not copy the previous month's values, transactions,
+          allocations or completion statuses.
+        - Populate fields only when supported by known information
+          or confirmed by the user.
+        - Leave unknown values blank.
+        - Include a Complete column for scheduled payments,
+          debit orders and manual recurring costs.
+        - Completion must not be assumed.
+        - Only mark Complete as Yes when completion has been confirmed.
+
+      constraints:
+        - Do not invent salary figures.
+        - Do not assume month-specific expenses will recur.
+        - Do not carry over previous-month completion statuses.
+        - Do not introduce one-off work travel expenses into
+          this workflow.
+
+    step_2_gotyme_salary_allocation:
+      description: >
+        Allocate the salary received into GoTyme and determine
+        the amount to transfer to Investec Daily.
+
+      inputs:
+        - Actual salary received into GoTyme, provided by the user.
+        - Current GoalSaves allocations and scheduled contributions.
+        - Additional amount the user elects to leave in GoTyme.
+
+      actions:
+        - Confirm the actual salary received with the user.
+        - Account for GoalSaves contributions scheduled for
+          approximately the 21st.
+        - Confirm the amount the user wants to retain in GoTyme.
+        - Calculate the transfer amount.
+
+      calculation:
+        formula: >
+          GoTyme to Investec Daily =
+          Actual salary received -
+          GoalSaves allocations -
+          Additional amount retained in GoTyme
+
+      rules:
+        - Do not assume the additional retained amount is zero.
+        - Use the user's confirmed salary, not an assumed salary.
+        - Ensure the remaining GoTyme balance can cover
+          scheduled GoalSaves contributions.
+        - Present the calculation and proposed movement
+          for alignment before initiating the transfer.
+
+      next_action:
+        - Follow the banking transfers resource to initiate
+          the GoTyme-to-Investec Daily movement.
+
+    step_3_daily_account_allocation:
+      description: >
+        Determine the consolidated amount to transfer from
+        Investec Daily to Normal Savings after salary arrives.
+
+      target:
+        account: "Investec Daily"
+        available_balance: 31000
+        currency: "ZAR"
+
+      balance_rule: >
+        The target is an available balance of exactly R31,000.
+        Use the available balance displayed by Investec.
+        Review relevant pending movements and account activity
+        to understand whether the available balance is reliable
+        for the intended calculation.
+
+      actions:
+        - Read the Investec Daily available balance.
+        - Review relevant transactions and pending movements.
+        - Confirm whether any movements already initiated are
+          reflected in the available balance.
+        - Calculate the amount required to leave the available
+          balance at R31,000.
+        - If the available balance exceeds R31,000, determine
+          the amount to transfer to Normal Savings.
+        - If the available balance is already R31,000,
+          no transfer is required.
+        - If the available balance is below R31,000, do not
+          assume a top-up source or initiate an unrequested
+          movement. Report the shortfall and seek direction.
+
+      calculation:
+        formula: >
+          Daily to Normal Savings =
+          Investec Daily available balance - R31,000
+
+      conditions:
+        - Only execute a transfer when the calculation indicates a positive amount.
+        - Use the available balance, not the ledger balance.
+        - Do not subtract pending movements a second time if they
+          are already reflected in the available balance.
+        - If balance interpretation remains ambiguous, stop and
+          resolve the discrepancy before initiating a movement.
+
+    step_4_calculate_consolidated_normal_savings_transfer:
+      description: >
+        Calculate the single consolidated transfer from Daily
+        to Normal Savings. This transfer represents the month's
+        consolidated allocation.
+
+      consolidated_allocations:
+        - Previous month's card debt owed on Daily.
+        - Upcoming debit orders and scheduled payments.
+        - Manual recurring costs.
+        - Surplus allocation.
+
+      allocation_rules:
+        - >
+          Each allocation must be calculated independently
+          and supported by the relevant Monthly Money page,
+          confirmed plans and banking evidence.
+        - >
+          Account for obligations already paid or movements
+          already initiated to avoid funding them twice.
+        - >
+          The surplus must represent the remaining amount
+          after accounting for the card debt, scheduled
+          payments, debit orders and manual recurring costs.
+        - >
+          The surplus must be calculated exactly once as
+          a distinct allocation in the consolidated transfer.
+        - >
+          The consolidated transfer moves the total allocation
+          from Daily to Normal Savings, including the surplus.
+        - >
+          The subsequent Emergency Savings transfer moves
+          only the previously calculated surplus amount.
+        - >
+          Do not add the surplus to the consolidated transfer
+          a second time or recalculate it as a separate
+          additional allocation during Step 6.
+        - >
+          Payments already completed must be accounted for.
+        - >
+          Reference the recurring-costs resource for manual
+          recurring-cost planning and execution.
+        - >
+          Do not assume a recurring cost has been paid
+          merely because it is listed on the Monthly Money page.
+
+      transfer:
+        source: "Investec Daily"
+        destination: "Investec Normal Savings"
+        reference: "<MONTH> MONTHLY COSTS TRANSFER"
+        reference_rule: >
+          The reference must use the uppercase name
+          of the relevant month followed by MONTHLY COSTS TRANSFER.
+          All transfer references must end with TRANSFER.
+
+      actions:
+        - Calculate the consolidated amount.
+        - Present the amount and its logical allocation breakdown.
+        - Obtain conversational alignment.
+        - Initiate the consolidated transfer using the transfers resource.
+        - Verify the movement using the verification resource.
+
+    step_5_recurring_costs:
+      description: >
+        Manual recurring costs are handled through the separate
+        recurring-costs workflow.
+
+      resource_reference: "budgethq://banking/recurring-costs"
+
+      rules:
+        - Do not duplicate the recurring-costs workflow here.
+        - Ensure the planned recurring costs are accounted
+          for in the consolidated monthly allocation.
+        - Recurring-cost payments must be tracked on
+          the Monthly Money page.
+        - Include a Complete column.
+        - Mark Complete as Yes only when payment completion
+          has been confirmed.
+
+    step_6_surplus_transfer_to_emergency_savings:
+      description: >
+        After the consolidated Daily-to-Normal-Savings
+        transfer, transfer the surplus allocation from
+        Normal Savings into Emergency Savings.
+
+      surplus:
+        definition: >
+          The surplus is the amount explicitly calculated
+          in Step 4 as the remaining allocation after
+          accounting for the card debt, debit orders,
+          scheduled payments and manual recurring costs.
+
+        calculation_source: >
+          Use the surplus allocation calculated during
+          Step 4. Do not independently recalculate,
+          add or double-count the surplus.
+
+        rules:
+          - >
+            The surplus was already included in the
+            consolidated Daily-to-Normal-Savings transfer.
+          - >
+            This step transfers that existing surplus
+            allocation from Normal Savings to Emergency Savings.
+          - >
+            Verify the available Normal Savings balance
+            and relevant movements before initiating.
+          - >
+            Stop if the balance or allocation does not
+            reconcile with the expected surplus.
+          - >
+            Do not transfer more than the previously
+            calculated surplus amount.
+
+      transfer:
+        source: "Investec Normal Savings"
+        destination: "Investec Emergency Savings"
+        reference: "<MONTH> SURPLUS TRANSFER"
+        reference_rule: >
+          The reference must use the uppercase name
+          of the relevant month followed by SURPLUS TRANSFER.
+          All transfer references must end with TRANSFER.
+
+      actions:
+        - Use the surplus amount calculated in Step 4.
+        - Confirm that the surplus is available in Normal Savings.
+        - Reconcile the available balance and relevant movements.
+        - Present the exact surplus transfer for alignment.
+        - Obtain the required Telegram approval.
+        - Initiate the transfer using the banking transfers resource.
+        - Verify the movement using the verification resource.
+        - Report any discrepancy or unresolved ambiguity.
+
+      flexibility:
+        - The user may subsequently decide to use surplus
+          funds for festival or travel expenses.
+        - The user may subsequently decide to make additional
+          vehicle finance repayments.
+        - The user may choose another allocation.
+        - These subsequent decisions must not be hardcoded
+          into the Monthly Period Setup workflow.
+
+    step_7_month_end_funding_transfer:
+      description: >
+        Arrange the month-end transfer from Normal Savings to
+        Investec Daily to fund the following month's debit orders
+        and scheduled payments.
+
+      resource_reference: "budgethq://banking/month-end-funding-transfer"
+
+      actions:
+        - Determine the exact amount required for the
+          following month's debit orders and scheduled payments.
+        - Set up the ChatGPT scheduled task to execute
+          the funding transfer on the last day of the month.
+        - Ensure the funds are available in Daily for
+          payments expected on the 1st of the following month.
+
+      constraints:
+        - The funding transfer is distinct from the
+          consolidated Daily-to-Normal-Savings transfer.
+        - The funding transfer direction is Normal Savings
+          to Daily.
+        - Do not schedule a transfer using an unverified amount.
+        - The scheduled task must not bypass Telegram approval.
+        - If approval expires or the movement fails,
+          follow the banking error-handling resource.
+
+    step_8_monthly_page_completion_and_reporting:
+      description: >
+        Maintain the Monthly Money page and report the
+        results of the monthly setup.
+
+      notion_tracking:
+        - Record confirmed salary and allocations.
+        - Record the consolidated transfer details.
+        - Record scheduled payments and debit orders.
+        - Record manual recurring costs.
+        - Include a Complete column for scheduled
+          payments and manual recurring costs.
+        - Record confirmed transfer details and relevant
+          completion statuses.
+        - Leave unknown values blank.
+        - Do not mark payments or movements complete
+          without verification.
+
+      final_report:
+        include:
+          - Salary received and calculation.
+          - GoTyme allocation and proposed or completed transfer.
+          - Daily available balance and calculation to R31,000.
+          - Consolidated Daily-to-Normal-Savings transfer.
+          - Breakdown of card debt, scheduled payments,
+            recurring costs and surplus.
+          - Surplus transfer to Emergency Savings.
+          - Month-end funding transfer scheduled details.
+          - Outstanding payments and items not yet completed.
+          - Any failures, expirations or unresolved ambiguities.
+
+        rules:
+          - Distinguish proposed movements from completed movements.
+          - Report verification evidence accurately.
+          - Never claim a movement is complete unless verified.
+          - Report tool failures explicitly.
+          - >
+            Ensure the reported consolidated allocation,
+            surplus allocation and subsequent surplus
+            transfer reconcile without double-counting.
+
+  safety_and_execution:
+    - Follow core-rules for conversational alignment
+      and Telegram approval.
+    - Follow transfers for all transfer execution.
+    - Follow verification for movement confirmation.
+    - Follow error-handling for retries, ambiguous states
+      and failures.
+    - Never retry a movement blindly.
+    - Do not use a payment or transfer as a substitute
+      for an unresolved prior movement.
+    - Use idempotency keys only for the same logical operation.
+    - If the movement status is ambiguous, investigate
+      before initiating another movement.
+    - All transfer references must be in FULL CAPITALS
+      and end with TRANSFER.
+    - All payment references must be in FULL CAPITALS.
+    - Do not make month-specific financial decisions
+      on behalf of the user.
+    - Do not write or alter Notion content outside the
+      scope of this workflow and the user's instruction.

@@ -11,6 +11,7 @@ from starlette.routing import Mount, Route
 from starlette.types import Receive, Scope, Send
 
 from app.config import get_settings
+from app.mcp.banking_resources import register_banking_resources
 from app.mcp.external_tools import register_external_tools
 from app.mcp.oauth_provider import SCOPE, OwnerOAuthProvider, metadata_url
 
@@ -20,8 +21,15 @@ INSTRUCTIONS = (
     "budget_comparison, transactions_link_candidates, list_transactions, get_transaction, "
     "patch_transactions_categories, patch_transaction_category, patch_transaction_hidden, "
     "post_apply_rules, post_transaction_link, delete_transaction_link, list_manual_accounts, "
-    "get_manual_account, post_manual_account, and patch_manual_account. from_date is the "
-    "external from query parameter. Do not invent transactions or balances."
+    "get_manual_account, post_manual_account, patch_manual_account, and Investec banking tools. "
+    "from_date is the external from query parameter. Do not invent transactions or balances. "
+    "Before any Investec transfer or payment (create_investec_transfer, create_investec_payment), "
+    "or multi-step banking work (including monthly period setup and month-end funding transfer), "
+    "read MCP resources starting with budgethq://workflow-registry and every required resource "
+    "it lists (especially budgethq://banking/core-rules and budgethq://banking/verification). "
+    "Money movements require Telegram approval after queueing; "
+    "pending is not completed—verify with get_investec_movement. Do not use list_transactions "
+    "as the primary source for live Investec movement verification."
 )
 
 
@@ -38,6 +46,7 @@ mcp = FastMCP(
     auth=build_auth(),
 )
 register_external_tools(mcp)
+register_banking_resources(mcp)
 
 
 class RewriteResourceMetadata:

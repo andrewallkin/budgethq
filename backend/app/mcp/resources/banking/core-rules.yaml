@@ -1,0 +1,78 @@
+resource: budgethq://banking/core-rules
+version: "1.2"
+updated: "2026-11-22"
+scope: All Investec banking workflows via BudgetHQ MCP
+
+rules:
+
+  approval:
+    - Every transfer or payment requires human approval in Telegram after the MCP write tool queues the movement.
+    - Queueing a movement is not approval and is not completion.
+    - The owner must tap Approve or Reject on the Telegram message sent to the configured allowed user.
+    - Chat consent is not a substitute for Telegram approval.
+    - Approval applies only to the exact movement shown: amount, accounts, beneficiary and references.
+    - One approval does not authorise a different or follow-up movement.
+    - A transfer approval does not authorise a subsequent payment.
+    - A payment approval does not authorise a subsequent transfer.
+    - Do not infer approval from past behaviour, standing instructions or automation.
+    - Never bypass or substitute the Telegram approval process.
+
+  prerequisites:
+    - Investec credentials must be configured.
+    - Telegram must be connected for write operations.
+    - Do not execute movements using guessed account IDs, beneficiary IDs, amounts or references.
+    - Resolve identifiers using trusted Investec read tools.
+
+  execution:
+    - Validate source and destination identifiers when not already validated in the current trusted context.
+    - Check source available balance when funding sufficiency is relevant.
+    - A displayed balance does not guarantee Investec will accept a movement.
+    - Check for potentially duplicate or in-flight movements when practical.
+    - Consider amount, source, destination or beneficiary, references, timing, movement type, status and idempotency key.
+    - Similarity alone is not proof of duplication.
+    - Do not automatically cancel, reverse or suppress a legitimate movement solely because a similar movement exists.
+    - Do not blindly retry a failed, timed-out or ambiguous movement.
+    - Reconcile an ambiguous outcome before initiating another movement.
+    - Reuse an idempotency key only for the same logical action.
+    - Do not generate a new idempotency key merely to overcome uncertainty about an earlier request.
+    - Each queued movement has a 15-minute Telegram approval window.
+    - Never automatically resubmit an expired movement.
+    - A new attempt requires fresh user intent and a new approval request.
+
+  reference_rules:
+    transfers:
+      - All transfer references must be in FULL CAPITALS.
+      - Both transfer references must end with TRANSFER.
+      - This applies to my_reference and their_reference.
+    payments:
+      - All payment references must be in FULL CAPITALS.
+      - Payment references do not require a TRANSFER suffix.
+    general:
+      - References must be meaningful and validated before execution.
+      - Do not silently alter references after user alignment.
+
+  post_creation_workflow:
+    - Capture the returned movement ID.
+    - Initiate verification without waiting for the user to request it.
+    - Follow the verification resource.
+    - Report the observed status and any required user action.
+    - Disclose any monitoring limitations.
+
+  evidence:
+    primary:
+      - get_investec_movement
+    supplementary:
+      - list_investec_transactions
+      - list_investec_pending_transactions
+      - get_investec_account_balance
+    rules:
+      - Use movement evidence to interpret the movement's status.
+      - Supplementary evidence may help reconcile but must not replace movement-status interpretation.
+      - Do not infer recipient receipt or settlement without evidence supporting that claim.
+      - BudgetHQ general transactions are not primary live-movement evidence.
+
+  reporting:
+    - Distinguish queued, pending, approved, sent, needs_authorisation, failed, rejected and expired states.
+    - Never claim completion without supporting evidence.
+    - Explicitly disclose tool failures, ambiguity and verification limitations.
+    - Do not claim funds were received by a beneficiary unless evidence supports it.

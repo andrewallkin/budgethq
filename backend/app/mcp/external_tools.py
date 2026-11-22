@@ -386,7 +386,13 @@ def list_investec_beneficiary_categories(
 
 
 def get_investec_movement(movement_id: int) -> dict:
-    """Same payload as GET /api/external/investec/movements/{movement_id}."""
+    """Same payload as GET /api/external/investec/movements/{movement_id}.
+
+    Primary verification for create_investec_transfer/create_investec_payment: use the
+    returned id (BudgetHQ movement row), not list_transactions. pending means awaiting
+    Telegram approval; sent/failed/rejected/expired/needs_authorisation are documented in
+    budgethq://banking/verification.
+    """
     return invoke_external(external_investec.get_movement, movement_id=movement_id)
 
 
@@ -398,7 +404,14 @@ def create_investec_transfer(
     their_reference: str,
     idempotency_key: str | None = None,
 ) -> dict:
-    """Same payload as POST /api/external/investec/accounts/{account_id}/transfers."""
+    """Same payload as POST /api/external/investec/accounts/{account_id}/transfers.
+
+    Queues an own-account transfer (beneficiary_account_id must be another of your Investec
+    accounts). Requires Telegram connected; queues approval in Telegram—chat consent does not
+    execute. Read budgethq://banking/transfers and budgethq://banking/core-rules first. After
+    calling, verify with get_investec_movement; do not blind retry—use idempotency_key when
+    retrying the same logical transfer after ambiguity.
+    """
     body = {
         "transferList": [
             {
@@ -425,7 +438,13 @@ def create_investec_payment(
     their_reference: str,
     idempotency_key: str | None = None,
 ) -> dict:
-    """Same payload as POST /api/external/investec/accounts/{account_id}/payments."""
+    """Same payload as POST /api/external/investec/accounts/{account_id}/payments.
+
+    Queues payment to an existing Investec beneficiary (does not create beneficiaries).
+    Requires Telegram connected; user must Approve/Reject in Telegram. Read
+    budgethq://banking/payments and budgethq://banking/core-rules first. Verify with
+    get_investec_movement; do not use list_transactions as primary live verification.
+    """
     body = {
         "paymentList": [
             {

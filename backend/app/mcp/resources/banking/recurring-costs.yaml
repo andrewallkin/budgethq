@@ -1,0 +1,179 @@
+resource: budgethq://banking/recurring-costs
+version: "1.1"
+description: >
+  On-demand workflow for user-initiated manual recurring costs.
+  The user supplies the exact amount. The workflow funds Daily
+  from Normal Savings, verifies the transfer, then initiates the
+  second movement to the intended recipient or account.
+
+supported_costs:
+  - cleaning
+  - watchprop
+  - rates
+  - vehicle_finance_extra
+
+initiation:
+  user_initiated_only: true
+  automatic_execution: false
+  trigger: >
+    The user explicitly requests payment of a supported recurring
+    cost and supplies the exact amount.
+  required:
+    - recurring_cost_type
+    - amount
+  rules:
+    - Never infer the payment amount from historical budgets.
+    - Never initiate a payment without a current user request.
+    - Do not combine separate requests unless explicitly instructed.
+
+routing:
+  cleaning:
+    destination: Gallia
+    movement_type: payment
+  watchprop:
+    destination: Gallia
+    movement_type: payment
+  rates:
+    destination: Gallia
+    movement_type: payment
+  vehicle_finance_extra:
+    destination: Investec Vehicle Finance
+    movement_type: transfer
+
+accounts:
+  funding_source: Investec Normal Savings Account
+  funding_destination: Investec Daily Account
+  second_movement_source: Investec Daily Account
+
+workflow:
+  - step: validate_request
+    instructions:
+      - Confirm the cost type and amount.
+      - Resolve the correct beneficiary or destination account.
+      - Verify beneficiary identity using existing beneficiary records.
+      - Review historical references for the requested cost.
+      - Check for duplicate or conflicting movements where appropriate.
+      - Stop if any material detail is ambiguous.
+
+  - step: initiate_funding_transfer
+    instructions:
+      - Transfer the requested amount from Normal Savings to Daily.
+      - Use the established reference convention for the recurring cost.
+      - Both transfer references must be uppercase.
+      - Both transfer references must end in TRANSFER.
+      - Present the exact movement for approval.
+      - Telegram approval is required.
+
+  - step: verify_funding_transfer
+    instructions:
+      - Verify using Investec movement and banking evidence.
+      - Check movement status and relevant account evidence.
+      - Do not proceed while pending, ambiguous, failed,
+        rejected, expired or requiring unresolved authorisation.
+      - Do not blindly retry.
+      - Proceed only once the funding transfer is confirmed.
+
+  - step: initiate_second_movement
+    instructions:
+      - Initiate the second movement only after funding verification.
+      - Use the correct existing beneficiary or destination account.
+      - Use the exact requested amount.
+      - Use the established reference convention.
+      - Payment references must be uppercase.
+      - Transfer references must be uppercase and end in TRANSFER.
+      - Present the exact movement for approval.
+      - Telegram approval is required separately.
+
+  - step: verify_second_movement
+    instructions:
+      - Verify the second movement independently.
+      - Use Investec movement status and banking evidence.
+      - Treat pending movements as pending.
+      - Do not claim completion without confirmation.
+      - Do not blindly retry ambiguous movements.
+
+  - step: report
+    instructions:
+      - Report the funding transfer result.
+      - Report the second movement result.
+      - Report references, amounts and destinations.
+      - Distinguish completed, pending and failed movements.
+      - Report any unresolved issue.
+
+cost_specific_rules:
+  cleaning:
+    recipient: Gallia
+    historical_payment_reference_pattern: "LUNGI CLEANING <MONTH>"
+    historical_funding_reference_examples:
+      - "LUNGI CLEANING TRANSFER"
+      - "CLEANING TRANSFER"
+    notes:
+      - Amount is provided by the user.
+      - Do not assume the monthly maximum.
+
+  watchprop:
+    recipient: Gallia
+    historical_payment_reference_pattern: "WATCHPROP LEVIES <MONTH>"
+    historical_funding_reference_example: "WATCHPROP TRANSFER"
+    notes:
+      - Amount is provided by the user.
+      - Historical amounts are not fixed.
+
+  rates:
+    recipient: Gallia
+    historical_payment_reference_pattern: "COCT RATES <MONTH>"
+    historical_funding_reference_examples:
+      - "COCT RATES TRANSFER"
+      - "RATES TRANSFER"
+      - "TRANSFERS FOR RATES"
+    notes:
+      - Amount is provided by the user.
+      - Historical amounts are not fixed.
+
+  vehicle_finance_extra:
+    destination: Investec Vehicle Finance
+    historical_payment_reference_pattern: "VF <MONTH> REPAYMENT EXTRA"
+    historical_funding_reference_example: "VF <MONTH> REPAYMENT EXTRA TRANSFER"
+    notes:
+      - The destination is the Vehicle Finance account.
+      - This is a transfer, not a beneficiary payment.
+      - Do not route the movement through a third-party beneficiary.
+
+approval_rules:
+  - Conversational alignment is not Telegram approval.
+  - Funding and second movements require separate approval.
+  - Approval applies only to the exact movement presented.
+  - Telegram approval expires after 15 minutes.
+  - If approval expires, initiate a fresh movement request.
+  - Never execute a movement merely because it was previously discussed.
+
+verification:
+  primary:
+    - get_investec_movement
+    - list_investec_transactions
+    - list_investec_pending_transactions
+    - get_investec_account_balance
+  rules:
+    - Investec evidence is authoritative for live movement verification.
+    - BudgetHQ general transactions are not primary live verification.
+    - Never assume a movement succeeded because a request was submitted.
+
+error_handling:
+  - Stop if beneficiary resolution is ambiguous.
+  - Stop if a funding transfer cannot be confirmed.
+  - Stop if a second movement has ambiguous status.
+  - Never initiate a duplicate movement blindly.
+  - Report failures and request direction where necessary.
+  - If the first movement succeeded but the second failed,
+    report the state explicitly and do not automatically reverse
+    or retry the funding transfer.
+
+scope:
+  excluded:
+    - Automatic recurring execution.
+    - Amount estimation.
+    - Beneficiary creation.
+    - Beneficiary modification.
+    - Automatic retries.
+    - Automatic reversal of successful funding transfers.
+    - Notion updates unless explicitly requested.

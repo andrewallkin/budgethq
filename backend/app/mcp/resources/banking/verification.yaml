@@ -1,0 +1,178 @@
+resource: budgethq://banking/verification
+version: "1.2"
+updated: "2026-11-22"
+
+purpose: >
+  Establish the observed status of Investec movements, investigate
+  ambiguous outcomes, reconcile supplementary evidence and report
+  accurately. Verification must precede any retry.
+
+primary_tool:
+  - get_investec_movement
+
+supplementary_tools:
+  - list_investec_transactions
+  - list_investec_pending_transactions
+  - get_investec_account_balance
+
+status_interpretation:
+
+  pending:
+    meaning: >
+      Movement is awaiting the required Telegram approval or is
+      otherwise in a pending state.
+    actions:
+      - Report as pending.
+      - Identify the required user action where applicable.
+      - Do not claim money has been sent.
+
+  approved:
+    meaning: >
+      Approval has been recorded, but approval alone does not
+      establish that the movement has been sent.
+    actions:
+      - Continue verification where monitoring is available.
+      - Do not report as sent based on approval alone.
+
+  sent:
+    meaning: >
+      Investec reports the movement as sent.
+    actions:
+      - Report as sent.
+      - Do not equate sent with confirmed recipient receipt or settlement.
+      - Use supplementary evidence if further reconciliation is required.
+
+  needs_authorisation:
+    meaning: >
+      Additional bank-side authorisation is required.
+    actions:
+      - Report the authorisation requirement explicitly.
+      - Do not treat this as sent or completed.
+      - Do not bypass the bank's authorisation process.
+
+  rejected:
+    meaning: >
+      Movement was rejected.
+    actions:
+      - Report as unsuccessful.
+      - Do not automatically resubmit.
+
+  expired:
+    meaning: >
+      The movement's approval window expired.
+    actions:
+      - Report as expired.
+      - Do not automatically resubmit.
+      - Require fresh user intent for another attempt.
+
+  failed:
+    meaning: >
+      Movement failed.
+    actions:
+      - Report as failed.
+      - Investigate the failure using error-handling.
+      - Do not blindly retry.
+
+  unknown_or_ambiguous:
+    meaning: >
+      Available evidence does not establish a clear movement outcome.
+    actions:
+      - Investigate using Investec evidence.
+      - Do not create another movement.
+      - Explicitly report the unresolved ambiguity.
+
+verification_workflow:
+
+  "1_identify_movement":
+    mandatory: true
+    action: >
+      Obtain the movement ID from the original create response
+      or another trusted record. Never guess movement identifiers.
+
+  "2_read_movement":
+    mandatory: true
+    tool: get_investec_movement
+    action: >
+      Retrieve movement details and status using the movement ID.
+
+  "3_interpret_status":
+    mandatory: true
+    action: >
+      Interpret the observed status using status_interpretation.
+      Distinguish approval, processing, bank-side authorisation,
+      sent, failure, rejection and expiry.
+
+  "4_supplementary_checks":
+    mandatory: false
+    tools:
+      - list_investec_transactions
+      - list_investec_pending_transactions
+      - get_investec_account_balance
+    action: >
+      Use supplementary evidence where it materially helps establish
+      or investigate the movement outcome. Do not infer success
+      solely from a balance change or transaction appearance.
+
+  "5_monitor":
+    mandatory: conditional
+    action: >
+      If the movement is awaiting approval or processing, recheck
+      periodically when continued execution is supported.
+
+    monitoring_rules:
+      - Continue monitoring while the approval window remains active when supported.
+      - Avoid excessive reads.
+      - Stop monitoring at a terminal state, expiry or monitoring limitation.
+      - Disclose when continuous monitoring cannot be performed.
+      - Monitoring does not authorise another movement or any cancellation, reversal or modification.
+
+  "6_report":
+    mandatory: true
+    action: >
+      Report the observed status and evidence accurately.
+      Distinguish movement status from supplementary evidence.
+
+reporting_requirements:
+  include:
+    - movement_id
+    - movement_type
+    - amount
+    - source_account
+    - destination_account_or_beneficiary
+    - my_reference
+    - their_reference
+    - observed_status
+    - verification_evidence
+    - user_action_required
+    - verification_limitations
+
+  rules:
+    - Never claim completion unless the movement status supports that claim.
+    - Never claim funds were settled, cleared or received unless evidence specifically supports it.
+    - Report pending as pending.
+    - Report needs_authorisation as requiring additional bank-side authorisation.
+    - Report sent as sent, not guaranteed recipient receipt.
+    - Report rejected, expired and failed as unsuccessful outcomes.
+    - Explicitly report verification failures and unresolved ambiguity.
+    - Do not use BudgetHQ general transactions as primary movement evidence.
+    - Do not blindly retry an ambiguous movement.
+
+reconciliation:
+
+  budgethq_transaction_feed:
+    tools:
+      - list_transactions
+      - get_transaction
+    purpose: >
+      Use BudgetHQ general transactions for budgeting, categorisation,
+      post-execution reconciliation and bookkeeping after synchronisation.
+
+    rules:
+      - BudgetHQ transactions may lag Investec by approximately 5 to 10 minutes.
+      - A missing BudgetHQ transaction does not prove a movement failed.
+      - A BudgetHQ transaction appearing does not independently establish movement approval status.
+      - Do not use BudgetHQ bookkeeping data as primary movement verification.
+      - Reconciliation discrepancies or synchronisation delays must not independently trigger duplicate transfers or payments.
+
+failure_handling:
+  resource: budgethq://banking/error-handling

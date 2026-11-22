@@ -1,0 +1,564 @@
+
+resource:
+  uri: "budgethq://banking/accounts-and-identifiers"
+  name: "Accounts and Identifiers"
+  version: "1.1"
+  updated: "2026-11-22"
+  description: >
+    Canonical reference for identifying Investec accounts, beneficiaries,
+    profiles, movements, BudgetHQ ledger transactions and other identifiers
+    used by BudgetHQ banking tools. Defines the meaning, source, format,
+    validation requirements and tool mappings for each identifier.
+    This resource defines identifiers and their handling, not transaction
+    execution workflows.
+
+identifier_definitions:
+
+  investec_account_id:
+    description: >
+      The Investec API accountId identifying a bank account within the
+      Investec Private Bank integration.
+    type: string
+    format: "Investec accountId"
+    sources:
+      - list_investec_accounts
+      - list_investec_profile_accounts
+    used_by:
+      - get_investec_account_balance
+      - list_investec_transactions
+      - list_investec_pending_transactions
+      - get_investec_authorisation_setup
+      - list_investec_profile_beneficiaries
+      - create_investec_transfer
+      - create_investec_payment
+    validation:
+      - Must be taken from an authoritative Investec account response.
+      - Must be passed as a string.
+      - Must correspond to the intended source account.
+      - Never substitute an account number, account name, referenceName,
+        profileId or BudgetHQ manual account ID.
+    notes:
+      - >
+        The accountId is distinct from the accountNumber displayed to the user.
+      - >
+        This identifier is not the integer account ID used for BudgetHQ
+        manual accounts or general ledger transactions.
+      - >
+        When selecting an account, use accountName, referenceName,
+        productName and other available account metadata to establish
+        which account the user intends to use. Metadata identifies the
+        account but must never be substituted for the accountId.
+
+  beneficiary_account_id:
+    description: >
+      The destination Investec accountId used when initiating a transfer
+      between Investec accounts.
+    type: string
+    format: "Investec accountId"
+    sources:
+      - list_investec_accounts
+      - list_investec_profile_accounts
+    used_by:
+      - create_investec_transfer
+    validation:
+      - Must be obtained from an authoritative Investec account response.
+      - Must be passed as a string.
+      - Must correspond to the intended destination account.
+      - Validate the destination account independently of the source account.
+      - Never substitute an account number, beneficiaryId, profileId,
+        account name or BudgetHQ manual account ID.
+    notes:
+      - >
+        For transfers to another account belonging to the user, use the
+        relevant Investec accountId for the destination.
+      - >
+        This is not the beneficiaryId used for external beneficiary payments.
+      - >
+        Do not assume that a beneficiary payment and an internal transfer
+        are interchangeable operations.
+      - >
+        If the destination account cannot be positively identified,
+        stop and request clarification.
+
+  beneficiary_id:
+    description: >
+      The Investec beneficiaryId identifying an existing beneficiary
+      registered within the Investec integration.
+    type: string
+    format: "Investec beneficiaryId"
+    sources:
+      - list_investec_beneficiaries
+      - list_investec_profile_beneficiaries
+    used_by:
+      - create_investec_payment
+    validation:
+      - Must be retrieved from an authoritative beneficiary response.
+      - Must be passed as a string.
+      - Must correspond to the intended recipient.
+      - Validate the beneficiary using available identifying metadata.
+      - Never substitute an account number, beneficiary accountId,
+        categoryId, profileId, beneficiary name or BudgetHQ transaction ID.
+    notes:
+      - >
+        beneficiaryId is distinct from the beneficiary's bank account number.
+      - >
+        beneficiaryId is distinct from the Investec accountId used for
+        internal transfers.
+      - >
+        Use an existing beneficiary returned by the beneficiary discovery
+        tools. Never invent, construct, decode or derive a beneficiaryId
+        from other identifiers.
+      - >
+        A beneficiary's display name alone is insufficient to establish
+        that the correct beneficiary has been selected when ambiguity exists.
+      - >
+        When multiple beneficiaries have similar or identical names,
+        use additional available metadata to disambiguate them.
+      - >
+        If the beneficiary cannot be positively identified, stop and
+        request clarification.
+
+  profile_id:
+    description: >
+      The Investec profileId identifying the relevant Investec banking
+      profile.
+    type: string
+    format: "Investec profileId"
+    sources:
+      - list_investec_profiles
+      - list_investec_accounts
+      - list_investec_profile_accounts
+    used_by:
+      - list_investec_profile_accounts
+      - get_investec_authorisation_setup
+      - list_investec_profile_beneficiaries
+      - list_investec_beneficiary_categories
+    validation:
+      - Must be retrieved from an authoritative Investec profile or account response.
+      - Must be passed as a string.
+      - Must correspond to the relevant banking profile.
+      - Never substitute accountId, beneficiaryId or another identifier.
+    notes:
+      - >
+        A profile may contain or be associated with multiple accounts.
+      - >
+        An account response may contain the profileId associated with
+        that account.
+      - >
+        Do not assume a profileId is interchangeable with an accountId.
+      - >
+        Use the profile associated with the relevant account or beneficiary
+        when calling profile-specific tools.
+
+  movement_id:
+    description: >
+      The BudgetHQ Investec movement identifier used to retrieve the
+      details of a recorded Investec transfer or payment movement.
+    type: integer
+    format: "BudgetHQ Investec movement ID"
+    sources:
+      - create_investec_transfer
+      - create_investec_payment
+    used_by:
+      - get_investec_movement
+    validation:
+      - Must be obtained from the relevant BudgetHQ movement response.
+      - Must be passed as an integer.
+      - Must correspond to the movement being verified.
+      - Never substitute an Investec transaction ID, accountId,
+        beneficiaryId, account number or BudgetHQ ledger transaction ID.
+    notes:
+      - >
+        The movement ID identifies a BudgetHQ movement record.
+      - >
+        The movement ID is used by get_investec_movement.
+      - >
+        Do not assume that an Investec API transaction identifier is
+        the same as a BudgetHQ movement ID.
+      - >
+        If the movement ID is unavailable, reconcile the result of the
+        initiating operation before attempting verification.
+      - >
+        Do not fabricate a movement ID or derive one from other fields.
+
+  budgethq_transaction_id:
+    description: >
+      The integer identifier of a transaction recorded in the BudgetHQ
+      general transaction ledger.
+    type: integer
+    format: "BudgetHQ ledger transaction ID"
+    sources:
+      - list_transactions
+      - get_transaction
+    used_by:
+      - get_transaction
+      - patch_transaction_category
+      - patch_transaction_hidden
+      - post_transaction_link
+      - transactions_link_candidates
+    validation:
+      - Must be obtained from an authoritative BudgetHQ transaction response.
+      - Must be passed as an integer.
+      - Must correspond to the intended ledger transaction.
+      - Never substitute movement_id, accountId, beneficiaryId or account number.
+    notes:
+      - >
+        This identifier is used for BudgetHQ ledger operations.
+      - >
+        It is not the identifier used to retrieve Investec movement details.
+      - >
+        A ledger transaction and an Investec movement may be related,
+        but their identifiers must not be assumed to be interchangeable.
+      - >
+        When linking transactions, verify the intended debit and credit
+        transaction IDs before creating the link.
+
+  amount:
+    description: >
+      The monetary amount supplied to Investec transfer and payment
+      creation tools.
+    type: string
+    format: "Decimal monetary amount"
+    used_by:
+      - create_investec_transfer
+      - create_investec_payment
+    validation:
+      - Must be supplied as a string.
+      - Must represent a positive monetary amount.
+      - Normalise to two decimal places when preparing a transaction.
+      - Do not include currency symbols or thousands separators.
+      - Do not silently change the intended amount.
+      - Confirm the amount against the user's explicit instruction
+        or the applicable workflow.
+    examples:
+      - "5.00"
+      - "1500.00"
+      - "25000.50"
+    notes:
+      - >
+        The actual tool definitions require amount to be a string.
+      - >
+        Avoid floating-point calculations when preparing final monetary
+        values for transaction requests.
+      - >
+        Ensure the amount is the intended amount before initiating
+        any financial operation.
+
+  my_reference:
+    description: >
+      The reference supplied for the user's side of an Investec
+      transfer or payment.
+    type: string
+    used_by:
+      - create_investec_transfer
+      - create_investec_payment
+    validation:
+      - Must be a string.
+      - Must be supplied to the initiating tool.
+      - Must follow the applicable workflow or the user's instructions.
+      - Do not invent a reference that could misrepresent the purpose
+        of a payment or transfer.
+    notes:
+      - >
+        This reference is distinct from their_reference.
+      - >
+        Reuse an established reference convention where the applicable
+        workflow specifies one.
+
+  their_reference:
+    description: >
+      The reference supplied for the recipient's side of an Investec
+      transfer or payment.
+    type: string
+    used_by:
+      - create_investec_transfer
+      - create_investec_payment
+    validation:
+      - Must be a string.
+      - Must be supplied to the initiating tool.
+      - Must follow the applicable workflow or the user's instructions.
+      - Do not invent a recipient reference when the intended reference
+        is material to the transaction.
+    notes:
+      - >
+        This reference is distinct from my_reference.
+      - >
+        For payments requiring a specific recipient reference,
+        use the exact reference instructed by the user or established
+        by the applicable workflow.
+      - >
+        Do not reuse unrelated references from previous payments.
+
+  idempotency_key:
+    description: >
+      An optional key supplied to an Investec transfer or payment
+      creation operation to identify a logical transaction request
+      and support idempotent request handling.
+    type: string
+    format: "Unique key per logical transaction operation"
+    used_by:
+      - create_investec_transfer
+      - create_investec_payment
+    validation:
+      - Must be a string when supplied.
+      - Must be associated with the logical transaction being initiated.
+      - Reuse the same key when retrying the same logical operation.
+      - Do not generate a new key merely because the initial request
+        timed out or its result is uncertain.
+      - Do not reuse a key for a different logical transaction.
+    notes:
+      - >
+        The parameter is optional according to the tool definition.
+      - >
+        The API integration supports idempotency handling where
+        the same key and user can return the existing movement
+        rather than create a duplicate operation.
+      - >
+        If a request fails or times out ambiguously, do not immediately
+        retry with a new key.
+      - >
+        First reconcile the outcome where possible.
+      - >
+        If retrying the same logical operation, reuse the original key.
+      - >
+        If the outcome cannot be established, follow the applicable
+        transaction workflow's uncertainty and reconciliation procedures.
+
+identifier_validation:
+
+  general_rules:
+    - >
+      Always use authoritative tool responses as the source of identifiers.
+    - >
+      Never infer, construct, fabricate or guess identifiers.
+    - >
+      Never substitute identifiers of different types even when
+      the values appear similar.
+    - >
+      Never use display names, account numbers, references or other
+      descriptive fields in place of identifiers unless the actual
+      tool parameter explicitly requires that field.
+    - >
+      Validate that the identifier corresponds to the intended entity
+      before using it in a financial operation.
+    - >
+      If an identifier is missing, ambiguous, stale or inconsistent,
+      retrieve the relevant information using the appropriate
+      discovery tool.
+    - >
+      If the entity cannot be confidently identified, stop rather
+      than proceeding on an assumption.
+    - >
+      Use the actual tool parameter schema to determine the required
+      identifier type and parameter name.
+    - >
+      Do not assume an identifier from one API endpoint can be used
+      by another endpoint without explicit evidence.
+
+  account_validation:
+    - >
+      Verify the source account and destination account independently.
+    - >
+      Use account metadata to identify the intended account.
+    - >
+      Do not rely on account numbers or account names alone where
+      the actual accountId is required.
+    - >
+      For internal transfers, ensure the destination is the intended
+      Investec account.
+    - >
+      For external payments, use the appropriate beneficiary
+      identifier rather than a destination accountId.
+
+  beneficiary_validation:
+    - >
+      Retrieve the beneficiary from an authoritative beneficiary
+      discovery endpoint when the beneficiary is not already
+      reliably established.
+    - >
+      Confirm the beneficiary using available identifying metadata.
+    - >
+      Do not assume beneficiaries with similar display names are
+      the same beneficiary.
+    - >
+      Never create or derive a beneficiary identifier from
+      beneficiary metadata.
+
+  movement_validation:
+    - >
+      Use the movement ID returned by the relevant BudgetHQ
+      movement operation.
+    - >
+      If a movement ID is missing, reconcile the operation's result
+      before attempting movement verification.
+    - >
+      Do not use a ledger transaction ID as a movement ID.
+
+  ledger_validation:
+    - >
+      Use transaction IDs returned by BudgetHQ transaction tools
+      for ledger operations.
+    - >
+      Confirm the transaction identity before categorising,
+      hiding or linking transactions.
+    - >
+      Do not use Investec movement IDs for BudgetHQ ledger operations.
+
+tool_parameter_map:
+
+  get_investec_account_balance:
+    account_id: investec_account_id
+
+  list_investec_transactions:
+    account_id: investec_account_id
+
+  list_investec_pending_transactions:
+    account_id: investec_account_id
+
+  list_investec_profile_accounts:
+    profile_id: profile_id
+
+  get_investec_authorisation_setup:
+    profile_id: profile_id
+    account_id: investec_account_id
+
+  list_investec_profile_beneficiaries:
+    profile_id: profile_id
+    account_id: investec_account_id
+
+  list_investec_beneficiary_categories:
+    profile_id: profile_id
+
+  create_investec_transfer:
+    account_id: investec_account_id
+    beneficiary_account_id: beneficiary_account_id
+    amount: amount
+    my_reference: my_reference
+    their_reference: their_reference
+    idempotency_key: idempotency_key
+
+  create_investec_payment:
+    account_id: investec_account_id
+    beneficiary_id: beneficiary_id
+    amount: amount
+    my_reference: my_reference
+    their_reference: their_reference
+    idempotency_key: idempotency_key
+
+  get_investec_movement:
+    movement_id: movement_id
+
+  get_transaction:
+    transaction_id: budgethq_transaction_id
+
+  patch_transaction_category:
+    transaction_id: budgethq_transaction_id
+
+  patch_transaction_hidden:
+    transaction_id: budgethq_transaction_id
+
+  post_transaction_link:
+    debit_transaction_id: budgethq_transaction_id
+    credit_transaction_id: budgethq_transaction_id
+
+  transactions_link_candidates:
+    credit_id: budgethq_transaction_id
+
+discovery_sequences:
+
+  investec_accounts:
+    purpose: >
+      Retrieve available Investec accounts and their associated
+      metadata and identifiers.
+    tools:
+      - list_investec_accounts
+      - list_investec_profile_accounts
+    guidance:
+      - >
+        Use list_investec_accounts for general account discovery.
+      - >
+        Use list_investec_profile_accounts when account discovery
+        is required in the context of a specific profile.
+      - >
+        Use account metadata to establish the intended account.
+      - >
+        Do not treat the discovery sequence as mandatory when
+        the relevant identifier is already reliably established
+        and valid for the operation.
+      - >
+        Perform fresh discovery when the identifier is missing,
+        stale, unverified, ambiguous or when the workflow requires it.
+
+  investec_profiles:
+    purpose: >
+      Retrieve available Investec profiles and identify the
+      appropriate profile for profile-specific operations.
+    tools:
+      - list_investec_profiles
+    guidance:
+      - >
+        Use list_investec_profiles to discover available profiles.
+      - >
+        Use the profileId returned by the tool.
+      - >
+        Do not infer profile IDs from account IDs or other identifiers.
+      - >
+        If the relevant profile is already reliably established,
+        additional discovery may not be necessary unless the
+        workflow requires a fresh lookup.
+
+  investec_beneficiaries:
+    purpose: >
+      Retrieve existing Investec beneficiaries and identify the
+      appropriate beneficiary for an external payment.
+    tools:
+      - list_investec_beneficiaries
+      - list_investec_profile_beneficiaries
+    guidance:
+      - >
+        Use list_investec_beneficiaries for general beneficiary discovery.
+      - >
+        Use list_investec_profile_beneficiaries when beneficiaries
+        need to be retrieved in the context of a specific profile
+        and account.
+      - >
+        Use the returned beneficiaryId for payment creation.
+      - >
+        Verify beneficiary identity using available metadata.
+      - >
+        Do not infer beneficiary IDs.
+      - >
+        Do not treat beneficiary discovery as mandatory when the
+        relevant beneficiary ID is already reliably established
+        and valid for the operation, unless the workflow requires
+        fresh discovery.
+
+  investec_movement:
+    purpose: >
+      Retrieve details of a recorded Investec movement in BudgetHQ.
+    tools:
+      - get_investec_movement
+    guidance:
+      - >
+        Use the movement ID associated with the relevant movement.
+      - >
+        If the movement ID was not captured from the initiating
+        operation, reconcile the operation before attempting
+        verification.
+      - >
+        Do not substitute transaction IDs or other identifiers.
+
+  budgethq_transactions:
+    purpose: >
+      Retrieve and operate on BudgetHQ ledger transactions.
+    tools:
+      - list_transactions
+      - get_transaction
+    guidance:
+      - >
+        Use BudgetHQ transaction IDs for ledger operations.
+      - >
+        Confirm the transaction is the intended transaction
+        before modifying it.
+      - >
+        Do not substitute movement IDs.
