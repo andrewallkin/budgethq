@@ -1,12 +1,11 @@
-# BudgetHQ ChatGPT plugin
+# BudgetHQ Skills
 
-This folder is the ChatGPT plugin. It holds the banking skills and the address of the MCP server. The server itself runs on the VPS from `backend/app/mcp/`. ChatGPT does not read this Git repository. Installing or updating the plugin means zipping this folder and uploading that archive.
+This folder is the ChatGPT plugin shown as BudgetHQ Skills. It holds the banking workflow instructions. It does not install the MCP server. The server runs on the VPS from `backend/app/mcp/` and is added in ChatGPT as its own plugin. ChatGPT does not read this Git repository. Installing or updating the skills means zipping this folder and uploading that archive.
 
 ## What is in the package
 
-- `plugin.json` names the plugin.
-- `skills/` holds the workflow instructions ChatGPT follows.
-- `mcp.json` tells ChatGPT where the live tools are. It does not contain the server.
+- `plugin.json` shows the plugin as BudgetHQ Skills and sets `requires_local_executor` to false so ChatGPT does not mark these skills Desktop only. The package id stays `budgethq`.
+- `skills/` holds the workflow instructions ChatGPT follows. Each skill's `agents/openai.yaml` points at the separately installed MCP server named `budgethq`.
 
 Skills:
 
@@ -22,33 +21,27 @@ Each skill keeps its rules in its own `references/` directory. ChatGPT loads tho
 
 ## Install or update
 
-1. From `plugins/budgethq`, zip the folder so `plugin.json`, `mcp.json`, and `skills/` are at the top of the archive. Do not wrap them in an extra `plugins/budgethq/` directory.
+1. From `plugins/budgethq`, zip the folder so `plugin.json` and `skills/` are at the top of the archive. Do not include an MCP manifest, and do not wrap the files in an extra `plugins/budgethq/` directory.
 2. In ChatGPT, open Plugins and choose New Plugin.
 3. Drop the `.zip` (`.tar.gz` and `.tgz` are also accepted) and choose Add plugin.
-4. Leave Add custom MCP server alone. That button connects tools only and does not install these skills.
+4. Install the MCP server separately with Add custom MCP server. Name it `budgethq`. The server URL is `https://budgethq.andrewallkin.com/mcp`. Choose OAuth. Be signed in to BudgetHQ in that browser, then choose Allow. The scope is `budget:write`.
 
-Upload a new archive whenever a skill, `plugin.json`, or `mcp.json` changes. Deploying the VPS updates the running tools and does not update the skill text ChatGPT already stored.
+The skills call that server by the name `budgethq`. Each `agents/openai.yaml` contains:
 
-## How `mcp.json` connects to the server
-
-`mcp.json` declares one remote server named `budgethq`:
-
-```json
-{
-  "mcpServers": {
-    "budgethq": {
-      "type": "streamable-http",
-      "url": "https://budgethq.andrewallkin.com/mcp"
-    }
-  }
-}
+```yaml
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "budgethq"
+      transport: "streamable_http"
+      url: "https://budgethq.andrewallkin.com/mcp"
 ```
 
-`streamable-http` is the transport. The URL is the public MCP endpoint on the VPS. Docker serves that endpoint. The zip only records the URL.
+Upload a new archive whenever a skill or `plugin.json` changes. Deploying the VPS updates the running tools and does not update the skill text ChatGPT already stored. Sign in to the MCP server again if that connection is removed or the token is cleared.
 
-After the archive is uploaded, connect that server in the plugin's MCP page and sign in once. The server answers an unauthenticated call with `401` and points ChatGPT at `https://budgethq.andrewallkin.com/.well-known/oauth-protected-resource`. Sign in through that flow. The scope is `budget:write`. ChatGPT keeps the token. Later chats reuse it. Sign in again if the connection is removed or the token is cleared.
+A skill tells ChatGPT which tool to call, such as `create_investec_transfer`. ChatGPT sends that call to the installed server. The server queues the movement and requires Telegram approval. Chat approval does not move the money.
 
-A skill then tells ChatGPT which tool to call, such as `create_investec_transfer`. ChatGPT sends that call to the URL above. The server queues the movement and requires Telegram approval. Chat approval does not move the money.
+This package is version `1.0.2`. Remove an older BudgetHQ plugin that still bundles the MCP server before adding this zip.
 
 ## Safety
 
