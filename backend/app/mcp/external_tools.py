@@ -390,8 +390,8 @@ def get_investec_movement(movement_id: int) -> dict:
 
     Primary verification for create_investec_transfer/create_investec_payment: use the
     returned id (BudgetHQ movement row), not list_transactions. pending means awaiting
-    Telegram approval; sent/failed/rejected/expired/needs_authorisation are documented in
-    budgethq://banking/verification.
+    Telegram approval. sent, failed, rejected, expired, and needs_authorisation are
+    distinct outcomes; do not treat pending or approved as sent.
     """
     return invoke_external(external_investec.get_movement, movement_id=movement_id)
 
@@ -408,9 +408,8 @@ def create_investec_transfer(
 
     Queues an own-account transfer (beneficiary_account_id must be another of your Investec
     accounts). Requires Telegram connected; queues approval in Telegram—chat consent does not
-    execute. Read budgethq://banking/transfers and budgethq://banking/core-rules first. After
-    calling, verify with get_investec_movement; do not blind retry—use idempotency_key when
-    retrying the same logical transfer after ambiguity.
+    execute. After calling, verify with get_investec_movement; do not blind retry—use
+    idempotency_key when retrying the same logical transfer after ambiguity.
     """
     body = {
         "transferList": [
@@ -441,8 +440,7 @@ def create_investec_payment(
     """Same payload as POST /api/external/investec/accounts/{account_id}/payments.
 
     Queues payment to an existing Investec beneficiary (does not create beneficiaries).
-    Requires Telegram connected; user must Approve/Reject in Telegram. Read
-    budgethq://banking/payments and budgethq://banking/core-rules first. Verify with
+    Requires Telegram connected; user must Approve/Reject in Telegram. Verify with
     get_investec_movement; do not use list_transactions as primary live verification.
     """
     body = {
