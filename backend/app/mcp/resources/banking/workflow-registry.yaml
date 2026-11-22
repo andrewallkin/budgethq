@@ -1,22 +1,23 @@
 resource: budgethq://workflow-registry
-version: "1.1"
+version: "1.2"
 updated: "2026-11-22"
 applies_to: investec_banking_mcp
 
 purpose: >
   Registry of supported Investec banking workflows exposed through BudgetHQ MCP.
-  Before any money movement, status verification of a movement, or multi-step
-  banking orchestration, read this resource first, then load every required resource
+  Before any money movement, status verification or multi-step banking
+  orchestration, read this resource first and load every required resource
   for the chosen workflow.
 
 when_to_consult:
   - Before calling create_investec_transfer or create_investec_payment
   - Before interpreting whether a transfer or payment completed
-  - Before chaining transfer then payment (recurring costs, month-end funding, etc.)
-  - When the user asks to pay, transfer, fund an account, or verify a banking action
-  - When the user asks to set up a new monthly financial period
+  - Before chaining transfers and payments
+  - When the user asks to pay, transfer or fund an account
+  - When the user asks to verify a banking action
+  - When the user asks to establish a new monthly financial period
   - When executing the month-end funding transfer
-  - After any ambiguous, timed-out, or duplicate-looking banking tool result
+  - After any ambiguous, timed-out or duplicate-looking banking result
 
 global_resources:
   - budgethq://banking/core-rules
@@ -25,9 +26,10 @@ global_resources:
   - budgethq://banking/error-handling
 
 workflows:
+
   transfer_between_accounts:
     description: >
-      Move funds between the user's own Investec accounts (internal transfer).
+      Move funds between the user's own Investec accounts.
     resource: budgethq://banking/transfers
     required_resources:
       - budgethq://banking/core-rules
@@ -37,8 +39,8 @@ workflows:
 
   payment_to_beneficiary:
     description: >
-      Pay an existing Investec beneficiary from a source account.
-      This workflow does not create or edit beneficiaries.
+      Pay an existing Investec beneficiary. This workflow does not
+      create, edit or delete beneficiaries.
     resource: budgethq://banking/payments
     required_resources:
       - budgethq://banking/core-rules
@@ -48,8 +50,9 @@ workflows:
 
   recurring_cost_execution:
     description: >
-      Fund a designated account (transfer) then pay an existing beneficiary,
-      with separate Telegram approvals and verification after each movement.
+      Fund a designated account using a transfer, then initiate the
+      second movement to the intended recipient or account. Each
+      movement requires separate Telegram approval and verification.
     resource: budgethq://banking/recurring-costs
     required_resources:
       - budgethq://banking/core-rules
@@ -60,8 +63,9 @@ workflows:
 
   verify_banking_action:
     description: >
-      Determine the actual status of a BudgetHQ Investec movement or investigate
-      an ambiguous outcome. Use before any retry.
+      Determine the actual status of a BudgetHQ Investec movement
+      or investigate an ambiguous outcome. Verification is required
+      before any retry.
     resource: budgethq://banking/verification
     required_resources:
       - budgethq://banking/core-rules
@@ -70,9 +74,10 @@ workflows:
 
   monthly_period_setup:
     description: >
-      Establish a new Monthly Money period, allocate salary, consolidate funds,
-      execute planned transfers, track recurring costs, and arrange month-end
-      funding for the following month's scheduled payments.
+      Establish a new Monthly Money period, allocate salary,
+      consolidate funds, execute agreed transfers, track recurring
+      costs and arrange month-end funding for the following month's
+      scheduled payments.
     resource: budgethq://banking/monthly-period-setup
     required_resources:
       - budgethq://banking/core-rules
@@ -86,9 +91,9 @@ workflows:
 
   month_end_funding_transfer:
     description: >
-      Reconcile the following month's debit orders and scheduled payments
-      against the Monthly Money page and transfer the exact reconciled amount
-      from Normal Savings to Daily on the last day of the month.
+      Reconcile the following month's debit orders and scheduled
+      payments against the Monthly Money page and transfer the
+      reconciled amount from Normal Savings to Daily.
     resource: budgethq://banking/month-end-funding-transfer
     required_resources:
       - budgethq://banking/core-rules
@@ -119,6 +124,7 @@ non_authoritative_for_live_banking:
     - list_transactions
     - get_transaction
   note: >
-    BudgetHQ general transactions are for delayed bookkeeping, categorisation,
-    and reconciliation after posting. Do not use them as the primary source to
-    verify whether a just-submitted Investec movement completed.
+    BudgetHQ general transactions are for budgeting, categorisation
+    and post-execution reconciliation. They may lag Investec and
+    must not be used as the primary source to verify whether a
+    just-submitted Investec movement completed.

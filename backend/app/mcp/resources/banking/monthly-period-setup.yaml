@@ -2,7 +2,7 @@
 resource:
   uri: "budgethq://banking/monthly-period-setup"
   name: "Monthly Period Setup"
-  version: "1.0"
+  version: "1.1"
   description: >
     End-to-end workflow for establishing a new monthly financial period,
     preparing the Monthly Money page in Notion, allocating salary,
@@ -26,8 +26,10 @@ instructions:
       - "budgethq://banking/core-rules"
       - "budgethq://banking/accounts-and-identifiers"
       - "budgethq://banking/transfers"
+      - "budgethq://banking/payments"
       - "budgethq://banking/verification"
       - "budgethq://banking/recurring-costs"
+      - "budgethq://banking/month-end-funding-transfer"
       - "budgethq://banking/error-handling"
 
     rules:
@@ -71,7 +73,7 @@ instructions:
         - Do not introduce one-off work travel expenses into
           this workflow.
 
-    step_2_go_ty​​me_salary_allocation:
+    step_2_gotyme_salary_allocation:
       description: >
         Allocate the salary received into GoTyme and determine
         the amount to transfer to Investec Daily.
@@ -119,23 +121,25 @@ instructions:
 
       balance_rule: >
         The target is an available balance of exactly R31,000.
-        Use the available balance displayed by Investec,
-        not the ledger balance or balance excluding pending movements.
+        Use the available balance displayed by Investec.
+        Review relevant pending movements and account activity
+        to understand whether the available balance is reliable
+        for the intended calculation.
 
       actions:
         - Read the Investec Daily available balance.
-        - Review relevant account transactions and pending
-          movements where needed to understand the balance.
-        - Calculate the amount required to leave the
-          available balance at R31,000.
-        - If the available balance exceeds R31,000,
-          determine the amount to transfer to Normal Savings.
+        - Review relevant transactions and pending movements.
+        - Confirm whether any movements already initiated are
+          reflected in the available balance.
+        - Calculate the amount required to leave the available
+          balance at R31,000.
+        - If the available balance exceeds R31,000, determine
+          the amount to transfer to Normal Savings.
         - If the available balance is already R31,000,
           no transfer is required.
-        - If the available balance is below R31,000,
-          do not assume a top-up source or initiate
-          an unrequested movement. Report the shortfall
-          and seek direction.
+        - If the available balance is below R31,000, do not
+          assume a top-up source or initiate an unrequested
+          movement. Report the shortfall and seek direction.
 
       calculation:
         formula: >
@@ -143,38 +147,58 @@ instructions:
           Investec Daily available balance - R31,000
 
       conditions:
-        - Only execute a transfer when the calculation
-          indicates a positive amount.
-        - Use the available balance to account for
-          pending payments and the credit facility.
-        - Do not use the ledger balance for this calculation.
+        - Only execute a transfer when the calculation indicates a positive amount.
+        - Use the available balance, not the ledger balance.
+        - Do not subtract pending movements a second time if they
+          are already reflected in the available balance.
+        - If balance interpretation remains ambiguous, stop and
+          resolve the discrepancy before initiating a movement.
 
     step_4_calculate_consolidated_normal_savings_transfer:
       description: >
         Calculate the single consolidated transfer from Daily
-        to Normal Savings. This transfer represents the
-        month's consolidated allocation.
+        to Normal Savings. This transfer represents the month's
+        consolidated allocation.
 
       consolidated_allocations:
         - Previous month's card debt owed on Daily.
         - Upcoming debit orders and scheduled payments.
         - Manual recurring costs.
-        - Surplus.
+        - Surplus allocation.
 
-      rules:
-        - These allocations are logical breakdowns of
-          one consolidated transfer.
-        - Do not split the Daily-to-Normal-Savings
-          transfer into separate movements for each allocation.
-        - Calculate each allocation from the relevant
-          monthly information, verified transactions,
-          balances and confirmed plans.
-        - Account for payments already completed to avoid
-          funding the same obligation twice.
-        - Reference the recurring-costs resource for
-          manual recurring cost planning and execution.
-        - Do not assume a recurring cost has been paid
-          merely because it is listed on the monthly page.
+      allocation_rules:
+        - >
+          Each allocation must be calculated independently
+          and supported by the relevant Monthly Money page,
+          confirmed plans and banking evidence.
+        - >
+          Account for obligations already paid or movements
+          already initiated to avoid funding them twice.
+        - >
+          The surplus must represent the remaining amount
+          after accounting for the card debt, scheduled
+          payments, debit orders and manual recurring costs.
+        - >
+          The surplus must be calculated exactly once as
+          a distinct allocation in the consolidated transfer.
+        - >
+          The consolidated transfer moves the total allocation
+          from Daily to Normal Savings, including the surplus.
+        - >
+          The subsequent Emergency Savings transfer moves
+          only the previously calculated surplus amount.
+        - >
+          Do not add the surplus to the consolidated transfer
+          a second time or recalculate it as a separate
+          additional allocation during Step 6.
+        - >
+          Payments already completed must be accounted for.
+        - >
+          Reference the recurring-costs resource for manual
+          recurring-cost planning and execution.
+        - >
+          Do not assume a recurring cost has been paid
+          merely because it is listed on the Monthly Money page.
 
       transfer:
         source: "Investec Daily"
@@ -217,10 +241,32 @@ instructions:
 
       surplus:
         definition: >
-          The surplus amount identified as part of the
-          consolidated monthly allocation after accounting
-          for the card debt, upcoming debit orders and
-          scheduled payments, and manual recurring costs.
+          The surplus is the amount explicitly calculated
+          in Step 4 as the remaining allocation after
+          accounting for the card debt, debit orders,
+          scheduled payments and manual recurring costs.
+
+        calculation_source: >
+          Use the surplus allocation calculated during
+          Step 4. Do not independently recalculate,
+          add or double-count the surplus.
+
+        rules:
+          - >
+            The surplus was already included in the
+            consolidated Daily-to-Normal-Savings transfer.
+          - >
+            This step transfers that existing surplus
+            allocation from Normal Savings to Emergency Savings.
+          - >
+            Verify the available Normal Savings balance
+            and relevant movements before initiating.
+          - >
+            Stop if the balance or allocation does not
+            reconcile with the expected surplus.
+          - >
+            Do not transfer more than the previously
+            calculated surplus amount.
 
       transfer:
         source: "Investec Normal Savings"
@@ -232,12 +278,14 @@ instructions:
           All transfer references must end with TRANSFER.
 
       actions:
-        - Calculate and clearly report the surplus amount.
-        - Do not automatically make additional allocations
-          of the surplus beyond the transfer to Emergency Savings.
-        - Obtain alignment with the user.
+        - Use the surplus amount calculated in Step 4.
+        - Confirm that the surplus is available in Normal Savings.
+        - Reconcile the available balance and relevant movements.
+        - Present the exact surplus transfer for alignment.
+        - Obtain the required Telegram approval.
         - Initiate the transfer using the banking transfers resource.
         - Verify the movement using the verification resource.
+        - Report any discrepancy or unresolved ambiguity.
 
       flexibility:
         - The user may subsequently decide to use surplus
@@ -310,6 +358,10 @@ instructions:
           - Report verification evidence accurately.
           - Never claim a movement is complete unless verified.
           - Report tool failures explicitly.
+          - >
+            Ensure the reported consolidated allocation,
+            surplus allocation and subsequent surplus
+            transfer reconcile without double-counting.
 
   safety_and_execution:
     - Follow core-rules for conversational alignment
