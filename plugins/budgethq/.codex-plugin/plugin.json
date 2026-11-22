@@ -1,0 +1,8 @@
+{
+  "interface": {
+    "displayName": "BudgetHQ",
+    "brandColor": "#1BA693",
+    "composerIcon": "./assets/icon.png",
+    "logo": "./assets/icon.png"
+  }
+}

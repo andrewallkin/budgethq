@@ -4,7 +4,7 @@ This folder is the ChatGPT plugin. It holds the banking skills and the address o
 
 ## What is in the package
 
-- `plugin.json` names the plugin and points its icon at `assets/icon.png`, the same image as the browser favicon.
+- `plugin.json` names the plugin. `logo` and `composerIcon` both point at `assets/icon.png`. That file is the browser favicon, cropped to the tile, with the letter filled in so it stays visible on a light background.
 - `skills/` holds the workflow instructions ChatGPT follows.
 - `mcp.json` tells ChatGPT where the live tools are. It does not contain the server.
 
@@ -60,6 +60,14 @@ Upload a new archive whenever a skill, `plugin.json`, or `mcp.json` changes. Dep
 After the archive is uploaded, open the Budgethq row on the plugin's MCP page and sign in once. Be signed in to BudgetHQ in that browser first, then choose Allow. ChatGPT keeps the token. Later chats reuse it. Sign in again if the connection is removed or the token is cleared.
 
 A skill then tells ChatGPT which tool to call, such as `create_investec_transfer`. ChatGPT sends that call to the URL above. The server queues the movement and requires Telegram approval. Chat approval does not move the money.
+
+## Package versions
+
+- `1.0.3` fills and crops the site icon, and sets `brandColor` to `#1BA693`.
+- `1.0.2` tells ChatGPT to sign in to the MCP server with OAuth. The scope is `budget:write`.
+- `1.0.1` sets `requires_local_executor` to false so ChatGPT does not mark the plugin Desktop only.
+
+Upload each version as a new zip. ChatGPT can keep the previous icon and the previous MCP sign-in settings when a new version is uploaded over an existing plugin. If the icon is still a blank page, or the MCP row still does not offer sign-in, remove the plugin and add it again from the new zip.
 
 ## Safety
 
