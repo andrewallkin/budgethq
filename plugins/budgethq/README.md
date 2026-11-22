@@ -4,7 +4,7 @@ This folder is the ChatGPT plugin. It holds the banking skills and the address o
 
 ## What is in the package
 
-- `plugin.json` names the plugin.
+- `plugin.json` names the plugin and points its icon at `assets/icon.png`, the same image as the browser favicon.
 - `skills/` holds the workflow instructions ChatGPT follows.
 - `mcp.json` tells ChatGPT where the live tools are. It does not contain the server.
 
@@ -26,6 +26,8 @@ Each skill keeps its rules in its own `references/` directory. ChatGPT loads tho
 2. In ChatGPT, open Plugins and choose New Plugin.
 3. Drop the `.zip` (`.tar.gz` and `.tgz` are also accepted) and choose Add plugin.
 4. Leave Add custom MCP server alone. That button connects tools only and does not install these skills.
+
+`plugin.json` sets `requires_local_executor` to false. That tells ChatGPT this plugin runs on the web against the remote MCP server, instead of showing Desktop only. After changing that flag or the icon, upload the new archive as a new version of the existing plugin.
 
 Upload a new archive whenever a skill, `plugin.json`, or `mcp.json` changes. Deploying the VPS updates the running tools and does not update the skill text ChatGPT already stored.
 
