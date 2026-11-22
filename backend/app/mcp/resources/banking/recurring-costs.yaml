@@ -1,0 +1,144 @@
+resource: budgethq://banking/recurring-costs
+version: "1.0"
+updated: "2026-11-22"
+workflow_id: recurring_cost_execution
+
+purpose: >
+  Orchestrate funding an account (internal transfer) and paying an existing
+  beneficiary when the expense is not a single-step payment from the funding source.
+  Example pattern: move cash into a "daily" account, then pay cleaning from that account.
+
+dependencies:
+  - budgethq://banking/core-rules
+  - budgethq://banking/transfers
+  - budgethq://banking/payments
+  - budgethq://banking/verification
+  - budgethq://banking/error-handling
+
+conceptual_stages:
+  - establish_expense
+  - calculate_funding
+  - transfer_fund_account
+  - verify_transfer
+  - pay_beneficiary
+  - verify_payment
+  - report
+
+required_inputs:
+  - expense_amount
+  - beneficiary_id
+  - payment_source_account  # account that pays beneficiary after funding
+  - funding_source_account  # account that funds payment_source when needed
+  - my_reference_transfer
+  - their_reference_transfer
+  - my_reference_payment
+  - their_reference_payment
+
+preconditions:
+  - Expense amount and beneficiary are explicit (do not assume last month without user confirm).
+  - Accounts identified via list_investec_accounts.
+  - Two separate Telegram approvals will occur (transfer, then payment) unless user already
+    has sufficient balance on payment_source_account and only payment is needed.
+  - If only payment is required, skip transfer stages and use payment workflow alone.
+
+workflow:
+  "1_establish_expense":
+    mandatory: true
+    action: >
+      Confirm amount, beneficiary, which account pays the beneficiary, and which account
+      supplies funding if needed. Use budget/category context from user when available;
+      do not invent amounts.
+
+  "2_calculate_funding":
+    mandatory: true
+    tools:
+      - get_investec_account_balance
+    action: >
+      Determine transfer amount = expense minus funds already on payment_source_account
+      (and minus completed payments this period if known). Do not over-fund without user ok.
+      If transfer amount is zero or negative, skip to payment stage.
+
+  "3_prepare_transfer":
+    mandatory: conditional
+    composes: budgethq://banking/transfers
+    action: Prepare transfer from funding_source_account to payment_source_account.
+
+  "4_present_transfer":
+    mandatory: conditional
+    action: >
+      User must confirm transfer details in chat before create_investec_transfer.
+      Clarify this approval is only for the transfer.
+
+  "5_execute_transfer":
+    mandatory: conditional
+    tool: create_investec_transfer
+    action: Queue transfer; record transfer_movement_id.
+
+  "6_verify_transfer":
+    mandatory: conditional
+    tool: get_investec_movement
+    action: >
+      Do not start payment until transfer reaches sent (or user accepts paying from
+      existing balance if transfer failed/expired). If transfer is pending, wait for Telegram.
+      If transfer needs_authorisation, report and pause payment stage.
+
+  "7_prepare_payment":
+    mandatory: true
+    composes: budgethq://banking/payments
+    action: Prepare payment from payment_source_account to beneficiary_id for expense_amount.
+
+  "8_present_payment":
+    mandatory: true
+    action: >
+      Separate chat confirmation for payment. Transfer approval does not imply payment approval.
+
+  "9_execute_payment":
+    mandatory: true
+    tool: create_investec_payment
+    action: Queue payment; record payment_movement_id.
+
+  "10_verify_payment":
+    mandatory: true
+    tool: get_investec_movement
+    action: Follow verification resource until payment terminal or auth-wait reported.
+
+  "11_report":
+    mandatory: true
+    action: >
+      Report transfer_movement_id and payment_movement_id with independent statuses.
+      Note reconciliation via list_transactions can happen later after posting.
+
+approval_boundaries:
+  - Transfer Telegram approval authorises only the transfer movement.
+  - Payment Telegram approval authorises only the payment movement.
+  - Multi-action user intent in chat still requires two queue operations and two Telegram approvals.
+
+state_tracking:
+  conversational:
+    description: >
+      Track stage, transfer_movement_id, payment_movement_id, and statuses in the
+      conversation until complete. No persisted workflow state in API v1.
+  illustrative_schema:
+    workflow_id: recurring_cost_execution
+    state: awaiting_transfer_verification
+    transfer:
+      movement_id: null
+      status: not_started
+    payment:
+      movement_id: null
+      status: not_started
+
+stop_conditions:
+  - Transfer not sent and user will not pay from existing balance
+  - Transfer rejected, expired, or failed without recovery plan
+  - Payment blocked until transfer verified
+  - Duplicate funding or duplicate payment detected
+
+example_narrative:
+  description: Cleaning payment R900 (illustrative)
+  steps:
+    - Establish R900 to existing cleaning beneficiary from Daily account.
+    - If Normal Savings must fund Daily, transfer shortfall with references agreed with user.
+    - User approves transfer in Telegram; poll until sent.
+    - Queue R900 payment; user approves second Telegram message; poll until sent.
+    - Report both movement ids. Bookkeeping categorisation later via list_transactions.

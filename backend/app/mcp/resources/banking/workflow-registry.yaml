@@ -1,0 +1,93 @@
+resource: budgethq://workflow-registry
+version: "1.0"
+updated: "2026-11-22"
+applies_to: investec_banking_mcp
+
+purpose: >
+  Registry of supported Investec banking workflows exposed through BudgetHQ MCP.
+  Before any money movement, status verification of a movement, or multi-step
+  banking orchestration, read this resource first, then load every required resource
+  for the chosen workflow.
+
+when_to_consult:
+  - Before calling create_investec_transfer or create_investec_payment
+  - Before interpreting whether a transfer or payment completed
+  - Before chaining transfer then payment (recurring costs, month-end funding, etc.)
+  - When the user asks to pay, transfer, fund an account, or verify a banking action
+  - After any ambiguous, timed-out, or duplicate-looking banking tool result
+
+global_resources:
+  - budgethq://banking/core-rules
+  - budgethq://banking/accounts-and-identifiers
+  - budgethq://banking/verification
+  - budgethq://banking/error-handling
+
+workflows:
+  transfer_between_accounts:
+    description: >
+      Move funds between the user's own Investec accounts (internal transfer).
+    resource: budgethq://banking/transfers
+    required_resources:
+      - budgethq://banking/core-rules
+      - budgethq://banking/accounts-and-identifiers
+      - budgethq://banking/verification
+      - budgethq://banking/error-handling
+
+  payment_to_beneficiary:
+    description: >
+      Pay an existing Investec beneficiary from a source account.
+      This workflow does not create or edit beneficiaries.
+    resource: budgethq://banking/payments
+    required_resources:
+      - budgethq://banking/core-rules
+      - budgethq://banking/accounts-and-identifiers
+      - budgethq://banking/verification
+      - budgethq://banking/error-handling
+
+  recurring_cost_execution:
+    description: >
+      Fund a designated account (transfer) then pay an existing beneficiary (payment),
+      with separate Telegram approvals and verification after each movement.
+    resource: budgethq://banking/recurring-costs
+    required_resources:
+      - budgethq://banking/core-rules
+      - budgethq://banking/transfers
+      - budgethq://banking/payments
+      - budgethq://banking/verification
+      - budgethq://banking/error-handling
+
+  verify_banking_action:
+    description: >
+      Determine the actual status of a BudgetHQ Investec movement or investigate
+      an ambiguous outcome. Use before any retry.
+    resource: budgethq://banking/verification
+    required_resources:
+      - budgethq://banking/core-rules
+      - budgethq://banking/accounts-and-identifiers
+      - budgethq://banking/error-handling
+
+mcp_tools_index:
+  read_only:
+    - list_investec_accounts
+    - get_investec_account_balance
+    - list_investec_transactions
+    - list_investec_pending_transactions
+    - list_investec_profiles
+    - list_investec_profile_accounts
+    - get_investec_authorisation_setup
+    - list_investec_profile_beneficiaries
+    - list_investec_beneficiaries
+    - list_investec_beneficiary_categories
+    - get_investec_movement
+  write:
+    - create_investec_transfer
+    - create_investec_payment
+
+non_authoritative_for_live_banking:
+  tools:
+    - list_transactions
+    - get_transaction
+  note: >
+    BudgetHQ general transactions are for delayed bookkeeping, categorisation,
+    and reconciliation after posting. Do not use them as the primary source to
+    verify whether a just-submitted Investec movement completed.

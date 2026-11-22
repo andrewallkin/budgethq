@@ -1,0 +1,137 @@
+resource: budgethq://banking/accounts-and-identifiers
+version: "1.0"
+updated: "2026-11-22"
+
+purpose: >
+  Identifier types, where they come from, and which MCP tools accept them.
+  Confusing IDs is a common source of serious banking mistakes.
+
+identifier_types:
+  investec_account_id:
+    description: Investec Private Bank accountId string from Investec APIs
+    used_by:
+      - list_investec_transactions
+      - list_investec_pending_transactions
+      - get_investec_account_balance
+      - create_investec_transfer  # path/source account_id
+      - create_investec_payment   # path/source account_id
+    source_tools:
+      - list_investec_accounts
+      - list_investec_profile_accounts
+    notes:
+      - This is not the BudgetHQ manual account integer id used by list_transactions.
+
+  beneficiary_account_id:
+    description: >
+      Destination Investec accountId for an internal transfer between the user's
+      own accounts (create_investec_transfer beneficiary_account_id → beneficiaryAccountId).
+    used_by:
+      - create_investec_transfer
+    source_tools:
+      - list_investec_accounts
+    validation:
+      - Must be one of the user's own accounts, not an arbitrary external account.
+      - Backend returns 400 if beneficiaryAccountId is not an owned account.
+
+  beneficiary_id:
+    description: Investec beneficiaryId for external payments
+    used_by:
+      - create_investec_payment
+    source_tools:
+      - list_investec_beneficiaries
+      - list_investec_profile_beneficiaries
+    validation:
+      - Must match an existing beneficiary record before payment.
+      - This workflow pays existing beneficiaries only; do not improvise new beneficiaries.
+
+  profile_id:
+    description: Investec profileId on accounts and profile-scoped endpoints
+    used_by:
+      - list_investec_profile_accounts
+      - list_investec_profile_beneficiaries
+      - get_investec_authorisation_setup
+      - list_investec_beneficiary_categories
+    source_tools:
+      - list_investec_profiles
+      - list_investec_accounts  # profileId on account objects
+
+  movement_id:
+    description: BudgetHQ InvestecMovement database id (integer)
+    used_by:
+      - get_investec_movement
+    source_tools:
+      - create_investec_transfer
+      - create_investec_payment
+    notes:
+      - This is not an Investec API reference from investec_response alone unless mapped.
+      - Always use the id field from the create_* JSON body.
+
+  budgethq_transaction_id:
+    description: Integer id in BudgetHQ transactions ledger
+    used_by:
+      - list_transactions
+      - get_transaction
+      - patch_transaction_category
+    not_used_for:
+      - create_investec_transfer
+      - create_investec_payment
+      - get_investec_movement
+
+amounts_and_references:
+  amount:
+    format: Decimal string with two fractional digits after normalisation (e.g. "1500.00")
+    tools:
+      - create_investec_transfer
+      - create_investec_payment
+    rules:
+      - Must be positive.
+      - Pass as string per MCP tool schema.
+
+  my_reference:
+    description: Your reference (myReference) on the movement
+    max_practical_length: Respect Investec and product conventions; do not use ambiguous text.
+
+  their_reference:
+    description: Recipient reference (theirReference)
+
+  idempotency_key:
+    description: Optional header Idempotency-Key on create_* tools
+    behaviour:
+      - Same user + same key returns the existing movement (HTTP 200) instead of creating a duplicate.
+      - Omitting a key allows a new movement row each call.
+
+account_discovery:
+  typical_sequence:
+    - tool: list_investec_accounts
+      purpose: List accounts with accountId, referenceName, productName, profileId
+    - tool: list_investec_profiles
+      purpose: When profile-scoped beneficiary/category reads are needed
+    - tool: list_investec_profile_accounts
+      purpose: Accounts under a specific profile_id
+
+beneficiary_discovery:
+  typical_sequence:
+    - tool: list_investec_beneficiaries
+      purpose: Global beneficiary list
+    - tool: list_investec_profile_beneficiaries
+      purpose: Beneficiaries for profile_id + account_id when scoped lookup is needed
+
+tool_parameter_map:
+  create_investec_transfer:
+    account_id: source Investec accountId
+    beneficiary_account_id: destination own-account Investec accountId
+    amount: string
+    my_reference: string
+    their_reference: string
+    idempotency_key: optional string
+
+  create_investec_payment:
+    account_id: source Investec accountId
+    beneficiary_id: Investec beneficiaryId
+    amount: string
+    my_reference: string
+    their_reference: string
+    idempotency_key: optional string
+
+  get_investec_movement:
+    movement_id: BudgetHQ movement integer id

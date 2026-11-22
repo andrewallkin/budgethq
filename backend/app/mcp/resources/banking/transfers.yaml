@@ -1,0 +1,110 @@
+resource: budgethq://banking/transfers
+version: "1.0"
+updated: "2026-11-22"
+workflow_id: transfer_between_accounts
+
+purpose: >
+  Transfer funds between the user's own Investec accounts. Destinations must be
+  another owned account (beneficiaryAccountId), not an external bank account.
+
+required_inputs:
+  - source_account  # investec accountId
+  - destination_account  # investec accountId, own account
+  - amount  # string decimal
+  - my_reference
+  - their_reference
+
+preconditions:
+  mandatory:
+    - Source and destination identifiers are unambiguous Investec accountIds.
+    - Destination is a different own account validated via list_investec_accounts.
+    - Amount is explicitly agreed with the user.
+    - Both references are established.
+    - User understands Telegram will be asked to approve.
+    - Telegram is connected for the owner.
+  conditional:
+    - Duplicate check when amount/date/references match a recent pending or sent movement.
+    - Balance check via get_investec_account_balance on source when funding is non-obvious.
+    - Skip account re-listing when ids were just read from list_investec_accounts in-session.
+
+tools:
+  - list_investec_accounts
+  - get_investec_account_balance
+  - create_investec_transfer
+  - get_investec_movement
+  - list_investec_transactions
+  - list_investec_pending_transactions
+
+execution_sequence:
+  "1_identify_accounts":
+    mandatory: true
+    tool: list_investec_accounts
+    action: >
+      Resolve source_account and destination_account to accountId, names, and products.
+      Confirm destination is in the user's account list.
+
+  "2_check_source_balance":
+    mandatory: false
+    tool: get_investec_account_balance
+    action: >
+      Check current/available balance on source. Warn if likely insufficient; do not
+      silently change the amount.
+
+  "3_check_duplicates":
+    mandatory: false
+    tools:
+      - list_investec_transactions
+      - list_investec_pending_transactions
+    action: >
+      Look for likely duplicate transfers on source (and pending list). Stop if a
+      matching in-flight movement exists unless user confirms.
+
+  "4_present_for_approval":
+    mandatory: true
+    action: >
+      Present full transfer details to the user in chat: from, to, amount, references.
+      Explain that execution requires Telegram approval after the tool queues the movement.
+      Chat confirmation alone is not sufficient.
+
+  "5_execute":
+    mandatory: true
+    tool: create_investec_transfer
+    parameters:
+      account_id: source_account
+      beneficiary_account_id: destination_account
+      amount: amount string
+      my_reference: my_reference
+      their_reference: their_reference
+      idempotency_key: use when retrying same logical transfer after ambiguity
+    action: >
+      Queue the transfer. Capture returned id as movement_id.
+    after:
+      - If status pending, direct user to Telegram Approve/Reject.
+
+  "6_verify":
+    mandatory: true
+    tool: get_investec_movement
+    action: >
+      Poll until terminal status or clear needs_authorisation. Follow
+      budgethq://banking/verification.
+
+  "7_report":
+    mandatory: true
+    action: >
+      Report movement_id, final status, and references. If pending/rejected/expired,
+      state money was not sent.
+
+failure_handling:
+  resource: budgethq://banking/error-handling
+
+output_template:
+  fields:
+    - movement_id
+    - kind
+    - status
+    - amount
+    - source_account
+    - destination_account
+    - my_reference
+    - their_reference
+    - user_action_required  # e.g. Telegram approval pending

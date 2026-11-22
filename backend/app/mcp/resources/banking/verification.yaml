@@ -1,0 +1,106 @@
+resource: budgethq://banking/verification
+version: "1.0"
+updated: "2026-11-22"
+
+purpose: >
+  How to verify Investec transfer and payment outcomes. Defines authoritative
+  versus supporting evidence and how to interpret BudgetHQ movement statuses.
+
+source_of_truth:
+  primary:
+    tool: get_investec_movement
+    description: >
+      BudgetHQ movement row for the id returned from create_investec_transfer
+      or create_investec_payment. This tracks Telegram approval and Investec execution.
+  supplementary:
+    - tool: list_investec_transactions
+      role: Account transaction history from Investec (delayed evidence)
+    - tool: list_investec_pending_transactions
+      role: Pending items on the account at Investec
+    - tool: get_investec_account_balance
+      role: Balance context only; never sole proof of a specific movement completing
+  not_primary_for_live_moves:
+    - tool: list_transactions
+      reason: BudgetHQ bookkeeping feed, not the movement queue pipeline
+    - tool: get_transaction
+
+movement_status_semantics:
+  pending:
+    meaning: >
+      Movement queued; Telegram approval message sent (or awaiting user action).
+      Not yet executed against Investec unless later transitions occur.
+    agent_behaviour: >
+      Tell the user to approve or reject in Telegram. Poll get_investec_movement.
+      Do not create a duplicate transfer/payment without duplicate checks.
+    terminal: false
+
+  approved:
+    meaning: User approved in Telegram; Investec POST may be in progress or completed shortly.
+    agent_behaviour: Poll get_investec_movement until sent, needs_authorisation, or failed.
+    terminal: false
+
+  rejected:
+    meaning: User rejected in Telegram.
+    agent_behaviour: Report rejected. Do not claim money moved. New action needs new create_*.
+    terminal: true
+
+  expired:
+    meaning: Approval window elapsed (movement TTL) while still pending.
+    agent_behaviour: Report expired. Treat as not executed. New action needs new create_*.
+    terminal: true
+
+  failed:
+    meaning: >
+      Telegram delivery failure, Investec call failure, settlement failure, or
+      other recorded failure_reason where applicable.
+    agent_behaviour: Report failure; inspect investec_response if present; do not blind retry.
+    terminal: true
+
+  sent:
+    meaning: Investec accepted the transfer/payment (success path without extra auth flag).
+    agent_behaviour: Report completed to the extent status sent indicates. Include movement id.
+    terminal: true
+
+  needs_authorisation:
+    meaning: Investec accepted the request but requires further Investec-side authorisation.
+    agent_behaviour: >
+      Report honestly as waiting on Investec authorisation, not fully settled.
+      Continue monitoring via get_investec_movement and Investec reads if appropriate.
+    terminal: false
+
+http_hints:
+  create_investec_transfer:
+    "202": New movement queued (typically status pending)
+    "200": Idempotent replay of existing movement for same idempotency_key
+  create_investec_payment:
+    "202": New movement queued (typically status pending)
+    "200": Idempotent replay of existing movement for same idempotency_key
+
+evidence_hierarchy:
+  steps:
+    - Retrieve get_investec_movement(movement_id).
+    - Interpret status using movement_status_semantics above.
+    - If investec_response is present on the movement payload, use it for detail and references.
+    - If unresolved, inspect list_investec_pending_transactions and list_investec_transactions
+      on relevant account_id for corroboration.
+    - Balance changes alone are insufficient to prove this specific movement_id completed.
+
+  prohibited:
+    - Declaring success from create_* response alone when status is still pending.
+    - Treating list_transactions appearance as immediate proof of MCP-initiated movement completion.
+    - Retrying create_* to discover whether a prior call succeeded.
+
+polling_guidance:
+  after_create:
+    - Poll get_investec_movement on an interval sensible for user experience while pending or approved.
+    - Stop escalating when status is terminal or needs_authorisation is reported clearly.
+  telegram:
+    - Remind user approval happens in Telegram, not in the chat UI.
+
+response_fields:
+  movement_public_shape:
+    id: integer movement id for get_investec_movement
+    status: string enum described above
+    kind: transfer | payment
+    expires_at: ISO timestamp for approval deadline while pending
+    investec_response: optional dict after Investec interaction

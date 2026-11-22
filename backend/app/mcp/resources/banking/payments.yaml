@@ -1,0 +1,99 @@
+resource: budgethq://banking/payments
+version: "1.0"
+updated: "2026-11-22"
+workflow_id: payment_to_beneficiary
+
+purpose: >
+  Pay an existing Investec beneficiary from a source account. Does not create,
+  edit, or delete beneficiaries.
+
+required_inputs:
+  - source_account  # investec accountId
+  - beneficiary_id  # Investec beneficiaryId
+  - amount
+  - my_reference
+  - their_reference
+
+preconditions:
+  mandatory:
+    - Source account identified.
+    - beneficiary_id matches a record from list_investec_beneficiaries (or scoped profile list).
+    - Amount and both references explicit and user-aligned.
+    - User warned that Telegram approval is required after queueing.
+    - Telegram connected.
+  conditional:
+    - Balance check on source when non-obvious.
+    - Duplicate payment scan via transactions/pending lists.
+    - Profile-scoped beneficiary lookup when global list is ambiguous.
+
+tools:
+  - list_investec_accounts
+  - list_investec_beneficiaries
+  - list_investec_profile_beneficiaries
+  - list_investec_profiles
+  - get_investec_account_balance
+  - create_investec_payment
+  - get_investec_movement
+  - list_investec_transactions
+  - list_investec_pending_transactions
+
+execution_sequence:
+  "1_identify_source":
+    mandatory: true
+    tool: list_investec_accounts
+    action: Confirm source_account exists and capture display names.
+
+  "2_identify_beneficiary":
+    mandatory: true
+    tools:
+      - list_investec_beneficiaries
+      - list_investec_profile_beneficiaries
+    action: >
+      Match beneficiary_id to name, bank, account number. If multiple candidates,
+      stop and ask the user. Do not pay without a unique match.
+
+  "3_check_balance":
+    mandatory: false
+    tool: get_investec_account_balance
+    action: Assess whether source likely has funds for amount.
+
+  "4_check_duplicates":
+    mandatory: false
+    tools:
+      - list_investec_transactions
+      - list_investec_pending_transactions
+    action: Stop on likely duplicate pending/sent payment unless user confirms.
+
+  "5_present_for_approval":
+    mandatory: true
+    action: >
+      Show beneficiary, bank details as returned by Investec, amount, references,
+      source account. Explain Telegram approval step.
+
+  "6_execute":
+    mandatory: true
+    tool: create_investec_payment
+    parameters:
+      account_id: source_account
+      beneficiary_id: beneficiary_id
+      amount: amount string
+      my_reference: my_reference
+      their_reference: their_reference
+      idempotency_key: when retrying same logical payment
+    action: Queue payment; save movement id from response.
+
+  "7_verify":
+    mandatory: true
+    tool: get_investec_movement
+    action: Follow budgethq://banking/verification until terminal or reported auth wait.
+
+  "8_report":
+    mandatory: true
+    action: Report movement_id, status, beneficiary label, amount. Never claim sent if pending.
+
+scope_limits:
+  - Beneficiary creation and edits are out of scope for this workflow.
+  - External payments only through existing beneficiaryId records.
+
+failure_handling:
+  resource: budgethq://banking/error-handling

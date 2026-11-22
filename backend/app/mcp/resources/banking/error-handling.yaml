@@ -1,0 +1,90 @@
+resource: budgethq://banking/error-handling
+version: "1.0"
+updated: "2026-11-22"
+
+purpose: >
+  Decision rules for errors, ambiguity, and recovery across Investec MCP workflows.
+
+recovery_principle: >
+  Recovery must be based on evidence of the prior action's state. Never use
+  retrying create_investec_transfer or create_investec_payment as a way to
+  discover whether the original call succeeded.
+
+situations:
+  tool_error_before_queue:
+    behaviour: Report the error. Do not assume a movement id exists. Fix inputs and retry only with user alignment.
+
+  tool_timeout_after_create:
+    behaviour: >
+      Treat as ambiguous. Call get_investec_movement if id known; else search recent
+      movements via user context or duplicate checks. Use idempotency_key on intentional retry.
+
+  movement_pending_telegram:
+    behaviour: >
+      User must approve in Telegram. Poll get_investec_movement. Do not queue second movement.
+
+  movement_expired:
+    behaviour: Report not executed. New create_* requires fresh user alignment and new idempotency_key unless omitting key deliberately.
+
+  movement_rejected:
+    behaviour: Report rejected. Stop unless user requests a new movement with new details.
+
+  movement_approved_not_sent_yet:
+    behaviour: Poll get_investec_movement. Do not queue duplicate.
+
+  movement_needs_authorisation:
+    behaviour: Report Investec auth pending. Monitor; no duplicate payment/transfer.
+
+  movement_failed:
+    behaviour: Report failure. Inspect investec_response if any. Investigate cause before new attempt.
+
+  idempotent_200_replay:
+    behaviour: >
+      Same idempotency_key returned existing movement. Verify that movement's status;
+      do not describe it as a new queue unless user intended a new action.
+
+  duplicate_suspected:
+    behaviour: Stop. Compare pending/sent movements and references. Ask user before proceeding.
+
+  insufficient_balance:
+    behaviour: Stop. Do not change amount silently. Offer to reduce or fund account first.
+
+  beneficiary_not_matched:
+    behaviour: Stop. Clarify beneficiary_id with user; re-list beneficiaries.
+
+  source_account_not_found:
+    behaviour: Stop. Re-list accounts; never guess account_id.
+
+  transfer_dest_not_own_account:
+    behaviour: >
+      Backend rejects external destination on transfer. Use payment workflow for beneficiaries
+      or pick another own account.
+
+  telegram_not_connected:
+    behaviour: Report configuration blocker. User must connect Telegram in BudgetHQ settings.
+
+  investec_credentials_missing:
+    behaviour: Report configuration blocker. No write tools until credentials exist.
+
+  verification_endpoint_failure:
+    behaviour: >
+      State verification incomplete. Do not claim completion. Name which tool failed.
+
+  partial_orchestration:
+    behaviour: >
+      For recurring-cost flows, report each stage separately (transfer vs payment) with
+      its movement_id and status.
+
+retry_rules:
+  allowed_when:
+    - Prior movement verified failed, rejected, or expired with evidence
+    - User explicitly requests a new attempt with confirmed parameters
+    - Idempotency replay confirms same logical operation still in progress
+  forbidden_when:
+    - Status unknown or pending with same parameters and no user directive
+    - Using a new idempotency_key to bypass duplicate protection without user awareness
+
+error_payload_shape:
+  mcp_invoke_external:
+    description: 'Tools may return {"error": {"code": "...", "message": "..."}}'
+    agent_behaviour: Surface code and message; map to situations above.
