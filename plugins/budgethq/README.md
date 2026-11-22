@@ -40,15 +40,24 @@ Upload a new archive whenever a skill, `plugin.json`, or `mcp.json` changes. Dep
   "mcpServers": {
     "budgethq": {
       "type": "streamable-http",
-      "url": "https://budgethq.andrewallkin.com/mcp"
+      "url": "https://budgethq.andrewallkin.com/mcp",
+      "extensions": {
+        "com.openai": {
+          "auth": {
+            "type": "oauth",
+            "client": { "mode": "dcr" },
+            "baseScopes": ["budget:write"]
+          }
+        }
+      }
     }
   }
 }
 ```
 
-`streamable-http` is the transport. The URL is the public MCP endpoint on the VPS. Docker serves that endpoint. The zip only records the URL.
+`streamable-http` is the transport. The URL is the public MCP endpoint on the VPS. Docker serves that endpoint. The zip only records the URL. The `auth` block tells ChatGPT to start OAuth instead of treating the server's `401` as a failed connection. `dcr` means ChatGPT registers itself at the server's registration endpoint. The scope is `budget:write`.
 
-After the archive is uploaded, connect that server in the plugin's MCP page and sign in once. The server answers an unauthenticated call with `401` and points ChatGPT at `https://budgethq.andrewallkin.com/.well-known/oauth-protected-resource`. Sign in through that flow. The scope is `budget:write`. ChatGPT keeps the token. Later chats reuse it. Sign in again if the connection is removed or the token is cleared.
+After the archive is uploaded, open the Budgethq row on the plugin's MCP page and sign in once. Be signed in to BudgetHQ in that browser first, then choose Allow. ChatGPT keeps the token. Later chats reuse it. Sign in again if the connection is removed or the token is cleared.
 
 A skill then tells ChatGPT which tool to call, such as `create_investec_transfer`. ChatGPT sends that call to the URL above. The server queues the movement and requires Telegram approval. Chat approval does not move the money.
 
