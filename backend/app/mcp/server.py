@@ -24,9 +24,10 @@ INSTRUCTIONS = (
     "get_manual_account, post_manual_account, patch_manual_account, and Investec banking tools. "
     "from_date is the external from query parameter. Do not invent transactions or balances. "
     "Before any Investec transfer or payment (create_investec_transfer, create_investec_payment), "
-    "or multi-step banking work, read MCP resources starting with budgethq://workflow-registry "
-    "and every required resource it lists (especially budgethq://banking/core-rules and "
-    "budgethq://banking/verification). Money movements require Telegram approval after queueing; "
+    "or multi-step banking work (including monthly period setup and month-end funding transfer), "
+    "read MCP resources starting with budgethq://workflow-registry and every required resource "
+    "it lists (especially budgethq://banking/core-rules and budgethq://banking/verification). "
+    "Money movements require Telegram approval after queueing; "
     "pending is not completed—verify with get_investec_movement. Do not use list_transactions "
     "as the primary source for live Investec movement verification."
 )

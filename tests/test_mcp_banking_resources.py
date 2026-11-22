@@ -10,8 +10,14 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend"))
 
-from app.mcp.banking_resources import ALL_BANKING_URIS, BANKING_RESOURCES, RESOURCE_DIR
-from app.mcp.banking_resources import register_banking_resources
+from app.mcp.banking_resources import (
+    ALL_BANKING_URIS,
+    BANKING_RESOURCES,
+    RESOURCE_DIR,
+    register_banking_resources,
+    resource_uri_from_document,
+    resource_version_from_document,
+)
 from tests.test_investec_mcp_tools import INVESTEC_TOOL_NAMES as INVESTEC_TOOLS
 
 
@@ -28,8 +34,8 @@ def test_banking_resource_files_exist_for_every_uri() -> None:
         path = RESOURCE_DIR / filename
         assert path.is_file(), f"missing {filename} for {uri}"
         body = _load_yaml(filename)
-        assert body.get("resource") == uri
-        assert body.get("version")
+        assert resource_uri_from_document(body) == uri
+        assert resource_version_from_document(body)
 
 
 def test_workflow_registry_links_resolve() -> None:

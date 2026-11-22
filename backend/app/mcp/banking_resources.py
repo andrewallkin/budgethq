@@ -52,6 +52,18 @@ BANKING_RESOURCES: tuple[tuple[str, str, str, str], ...] = (
         "End-to-end fund-account then pay-beneficiary with separate approvals.",
     ),
     (
+        "budgethq://banking/monthly-period-setup",
+        "monthly-period-setup.yaml",
+        "Monthly period setup",
+        "Establish a new monthly financial period: salary, consolidation, transfers, and month-end funding prep.",
+    ),
+    (
+        "budgethq://banking/month-end-funding-transfer",
+        "month-end-funding-transfer.yaml",
+        "Month-end funding transfer",
+        "Reconcile next month's debit orders and transfer Normal Savings to Daily on the last day of the month.",
+    ),
+    (
         "budgethq://banking/error-handling",
         "error-handling.yaml",
         "Banking error handling",
@@ -60,6 +72,30 @@ BANKING_RESOURCES: tuple[tuple[str, str, str, str], ...] = (
 )
 
 ALL_BANKING_URIS = frozenset(uri for uri, *_ in BANKING_RESOURCES)
+
+
+def resource_uri_from_document(data: dict) -> str | None:
+    """Return the declared budgethq:// URI from a loaded workflow YAML document."""
+    resource = data.get("resource")
+    if isinstance(resource, str):
+        return resource
+    if isinstance(resource, dict):
+        uri = resource.get("uri")
+        return uri if isinstance(uri, str) else None
+    return None
+
+
+def resource_version_from_document(data: dict) -> str | None:
+    """Return version from either a flat or nested resource block."""
+    version = data.get("version")
+    if isinstance(version, str):
+        return version
+    resource = data.get("resource")
+    if isinstance(resource, dict):
+        nested = resource.get("version")
+        if isinstance(nested, str):
+            return nested
+    return None
 
 
 def _read_resource_file(path: Path) -> str:
