@@ -52,6 +52,7 @@ etf_bulk_upload.csv
 
 # Local design notes
 docs/superpowers/
+.superpowers/
 
 # Ignore all markdown files except README.md and the ChatGPT plugin skills.
 *.md

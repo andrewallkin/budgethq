@@ -212,6 +212,16 @@ def calculate_financial_year_range(fy_start_year: int) -> tuple:
     return months, fy_label
 
 
+def _money(value) -> float:
+    """Treat missing payslip amounts as zero so one blank line cannot fail the year."""
+    if value is None:
+        return 0.0
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 # =====================================================
 # Upload & Extract Endpoints
 # =====================================================
@@ -745,6 +755,116 @@ def get_latest_payslip(
     return payslip
 
 
+@router.get("/financial-year/{fy_start_year}", response_model=FinancialYearSummary)
+def get_financial_year_summary(
+    fy_start_year: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Get financial year summary with totals and monthly breakdown.
+    FY starts in March and ends in February of the next year.
+
+    Example: fy_start_year=2025 returns FY 2025/26 (March 2025 - Feb 2026)
+    """
+    months, fy_label = calculate_financial_year_range(fy_start_year)
+
+    total_gross = 0.0
+    total_paye = 0.0
+    total_uif = 0.0
+    total_net = 0.0
+    total_company_contrib = 0.0
+    total_personal_deduct = 0.0
+    total_additional = 0.0
+    monthly_data = []
+
+    for year, month in months:
+        payslip = (
+            db.query(MonthlyPayslip)
+            .options(
+                selectinload(MonthlyPayslip.items),
+                selectinload(MonthlyPayslip.additional_income),
+            )
+            .filter(
+                MonthlyPayslip.user_id == current_user.id,
+                MonthlyPayslip.year == year,
+                MonthlyPayslip.month == month,
+            )
+            .first()
+        )
+
+        if payslip:
+            company_contrib_sum = sum(
+                _money(item.amount)
+                for item in payslip.items
+                if item.item_type == "company_contribution"
+            )
+            personal_deduct_sum = sum(
+                _money(item.amount)
+                for item in payslip.items
+                if item.item_type == "personal_deduction"
+            )
+            additional_sum = sum(_money(inc.amount) for inc in payslip.additional_income)
+
+            gross = _money(payslip.gross_salary)
+            paye = _money(payslip.paye)
+            uif = _money(payslip.uif_employee_portion)
+            net = _money(payslip.net_pay)
+
+            total_gross += gross
+            total_paye += paye
+            total_uif += uif
+            total_net += net
+            total_company_contrib += company_contrib_sum
+            total_personal_deduct += personal_deduct_sum
+            total_additional += additional_sum
+
+            monthly_data.append(
+                {
+                    "year": year,
+                    "month": month,
+                    "month_name": datetime(year, month, 1).strftime("%B"),
+                    "gross_salary": gross,
+                    "paye": paye,
+                    "uif": uif,
+                    "net_pay": net,
+                    "company_contributions": company_contrib_sum,
+                    "personal_deductions": personal_deduct_sum,
+                    "additional_income": additional_sum,
+                    "has_data": True,
+                }
+            )
+        else:
+            monthly_data.append(
+                {
+                    "year": year,
+                    "month": month,
+                    "month_name": datetime(year, month, 1).strftime("%B"),
+                    "gross_salary": 0.0,
+                    "paye": 0.0,
+                    "uif": 0.0,
+                    "net_pay": 0.0,
+                    "company_contributions": 0.0,
+                    "personal_deductions": 0.0,
+                    "additional_income": 0.0,
+                    "has_data": False,
+                }
+            )
+
+    return FinancialYearSummary(
+        financial_year=fy_label,
+        start_year=fy_start_year,
+        total_gross_income=total_gross,
+        total_paye=total_paye,
+        total_uif=total_uif,
+        total_net_pay=total_net,
+        total_company_contributions=total_company_contrib,
+        total_personal_deductions=total_personal_deduct,
+        total_additional_income=total_additional,
+        months=monthly_data,
+    )
+
+
 @router.get("/{year}/{month}", response_model=PayslipResponse)
 def get_payslip(
     year: int,
@@ -984,112 +1104,3 @@ def add_additional_income(
     db.commit()
     db.refresh(income)
     return income
-
-
-# =====================================================
-# Financial Year Aggregations
-# =====================================================
-
-@router.get("/financial-year/{fy_start_year}", response_model=FinancialYearSummary)
-def get_financial_year_summary(
-    fy_start_year: int,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """
-    Get financial year summary with totals and monthly breakdown.
-    FY starts in March and ends in February of the next year.
-    
-    Example: fy_start_year=2025 returns FY 2025/26 (March 2025 - Feb 2026)
-    """
-    months, fy_label = calculate_financial_year_range(fy_start_year)
-
-    # Initialize totals
-    total_gross = 0.0
-    total_paye = 0.0
-    total_uif = 0.0
-    total_net = 0.0
-    total_company_contrib = 0.0
-    total_personal_deduct = 0.0
-    total_additional = 0.0
-    monthly_data = []
-
-    # Fetch payslips for each month in the FY
-    for year, month in months:
-        payslip = (
-            db.query(MonthlyPayslip)
-            .filter(
-                MonthlyPayslip.user_id == current_user.id,
-                MonthlyPayslip.year == year,
-                MonthlyPayslip.month == month,
-            )
-            .first()
-        )
-
-        if payslip:
-            # Calculate sums for this month
-            company_contrib_sum = sum(
-                item.amount
-                for item in payslip.items
-                if item.item_type == "company_contribution"
-            )
-            personal_deduct_sum = sum(
-                item.amount
-                for item in payslip.items
-                if item.item_type == "personal_deduction"
-            )
-            additional_sum = sum(inc.amount for inc in payslip.additional_income)
-
-            # Update totals
-            total_gross += payslip.gross_salary
-            total_paye += payslip.paye
-            total_uif += payslip.uif_employee_portion
-            total_net += payslip.net_pay
-            total_company_contrib += company_contrib_sum
-            total_personal_deduct += personal_deduct_sum
-            total_additional += additional_sum
-
-            monthly_data.append(
-                {
-                    "year": year,
-                    "month": month,
-                    "month_name": datetime(year, month, 1).strftime("%B"),
-                    "gross_salary": payslip.gross_salary,
-                    "paye": payslip.paye,
-                    "uif": payslip.uif_employee_portion,
-                    "net_pay": payslip.net_pay,
-                    "company_contributions": company_contrib_sum,
-                    "personal_deductions": personal_deduct_sum,
-                    "additional_income": additional_sum,
-                    "has_data": True,
-                }
-            )
-        else:
-            monthly_data.append(
-                {
-                    "year": year,
-                    "month": month,
-                    "month_name": datetime(year, month, 1).strftime("%B"),
-                    "gross_salary": 0.0,
-                    "paye": 0.0,
-                    "uif": 0.0,
-                    "net_pay": 0.0,
-                    "company_contributions": 0.0,
-                    "personal_deductions": 0.0,
-                    "additional_income": 0.0,
-                    "has_data": False,
-                }
-            )
-
-    return FinancialYearSummary(
-        financial_year=fy_label,
-        start_year=fy_start_year,
-        total_gross_income=total_gross,
-        total_paye=total_paye,
-        total_uif=total_uif,
-        total_net_pay=total_net,
-        total_company_contributions=total_company_contrib,
-        total_personal_deductions=total_personal_deduct,
-        total_additional_income=total_additional,
-        months=monthly_data,
-    )
