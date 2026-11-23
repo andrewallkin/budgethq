@@ -61,6 +61,7 @@ docs/superpowers/
 !docs/external-investments-api.md
 !docs/external-budget-transactions-api.md
 !docs/external-manual-accounts-api.md
+!docs/external-investec-api.md
 !docs/deployment.md
 
 .DS_Store

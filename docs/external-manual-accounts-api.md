@@ -151,3 +151,4 @@ There is deliberately no `DELETE /api/external/manual-accounts/{account_id}`. Ex
 
 - [External Budget & Transactions API](external-budget-transactions-api.md) — budget, transactions, classification, and refunds.
 - [External Investments API](external-investments-api.md) — investment sleeve balances.
+- [External Investec API](external-investec-api.md) — live Investec reads and Telegram-approved movements.

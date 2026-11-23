@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any, Optional
 
 import requests
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from sqlalchemy.orm import Session
 
 from .. import auth, database, models
@@ -23,6 +24,23 @@ TELEGRAM_HTTP_TIMEOUT_SECONDS = 30
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/external/investec", tags=["external-investec"])
+
+_DOCS_CANDIDATES = (
+    Path(__file__).resolve().parents[2] / "docs" / "external-investec-api.md",
+    Path(__file__).resolve().parents[3] / "docs" / "external-investec-api.md",
+)
+
+
+@router.get("/docs", response_class=PlainTextResponse)
+async def get_external_investec_docs():
+    """Markdown documentation for the external Investec API."""
+    for path in _DOCS_CANDIDATES:
+        if path.is_file():
+            return PlainTextResponse(
+                path.read_text(encoding="utf-8"),
+                media_type="text/markdown; charset=utf-8",
+            )
+    raise HTTPException(status_code=404, detail="External Investec API documentation not found")
 
 
 def _investec_for_user(user: models.User) -> InvestecService:
