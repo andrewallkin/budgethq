@@ -31,6 +31,23 @@ const amountKeyDown = (onEnter) => (e) => {
     if (e.key === 'Enter') onEnter?.(e)
 }
 
+function saTaxYearStart(year, month) {
+    const y = Number(year)
+    const m = Number(month)
+    if (!y || !m) return null
+    return m >= 3 ? y : y - 1
+}
+
+function monthHasPayslip(month) {
+    return Boolean(
+        month?.has_data
+        || month?.gross_salary
+        || month?.net_pay
+        || month?.paye
+        || month?.additional_income
+    )
+}
+
 export default function SalaryPage() {
     const { blurSensitiveValues } = useAuth()
     const [initialLoading, setInitialLoading] = useState(true)
@@ -47,6 +64,7 @@ export default function SalaryPage() {
     const [deletePayslipError, setDeletePayslipError] = useState('')
     const [hasOpenRouterKey, setHasOpenRouterKey] = useState(false)
     const [fyData, setFyData] = useState(null)
+    const [fyError, setFyError] = useState('')
     
     // Month/Year state - will be set from latest payslip
     const [selectedMonth, setSelectedMonth] = useState(null)
@@ -56,7 +74,7 @@ export default function SalaryPage() {
     const skipMonthFetchRef = useRef(false)
     
     const currentDate = new Date()
-    const [fyYear, setFyYear] = useState(currentDate.getMonth() >= 3 ? currentDate.getFullYear() : currentDate.getFullYear() - 1)
+    const [fyYear, setFyYear] = useState(currentDate.getMonth() >= 2 ? currentDate.getFullYear() : currentDate.getFullYear() - 1)
 
     const fetchBudgetIncome = async () => {
         try {
@@ -95,6 +113,11 @@ export default function SalaryPage() {
         }
         loadPayslip(selectedYear, selectedMonth)
     }, [selectedMonth, selectedYear])
+
+    useEffect(() => {
+        const start = saTaxYearStart(selectedYear, selectedMonth)
+        if (start != null) setFyYear(start)
+    }, [selectedYear, selectedMonth])
 
     // Load financial year data
     useEffect(() => {
@@ -149,8 +172,11 @@ export default function SalaryPage() {
         try {
             const res = await axios.get(`/api/payslip/financial-year/${fyYear}`)
             setFyData(res.data)
+            setFyError('')
         } catch (err) {
             console.error("Failed to fetch FY data", err)
+            setFyData(null)
+            setFyError('Could not load tax-year totals.')
         }
     }
 
@@ -194,6 +220,7 @@ export default function SalaryPage() {
             })
             // Refresh payslip data
             await loadPayslip(selectedYear, selectedMonth)
+            fetchFinancialYearData()
         } catch (err) {
             console.error("Failed to update payslip", err)
         } finally {
@@ -212,6 +239,7 @@ export default function SalaryPage() {
                 item_type: itemType
             })
             await loadPayslip(selectedYear, selectedMonth)
+            fetchFinancialYearData()
         } catch (err) {
             console.error("Failed to add item", err)
         } finally {
@@ -224,6 +252,7 @@ export default function SalaryPage() {
         try {
             await axios.delete(`/api/payslip/items/${itemId}`)
             await loadPayslip(selectedYear, selectedMonth)
+            fetchFinancialYearData()
         } catch (err) {
             console.error("Failed to delete item", err)
         } finally {
@@ -238,6 +267,7 @@ export default function SalaryPage() {
                 [field]: field === 'amount' ? parseFloat(value) || 0 : value
             })
             await loadPayslip(selectedYear, selectedMonth)
+            fetchFinancialYearData()
         } catch (err) {
             console.error("Failed to update item", err)
         } finally {
@@ -255,6 +285,7 @@ export default function SalaryPage() {
                 amount: parseFloat(amount)
             })
             await loadPayslip(selectedYear, selectedMonth)
+            fetchFinancialYearData()
         } catch (err) {
             console.error("Failed to add additional income", err)
         } finally {
@@ -449,7 +480,7 @@ export default function SalaryPage() {
         (payslipData.uif_employee_portion || 0) +
         totalPersonalDeduct
     const hasBonus = hasBonusIncome(payslipData)
-    const fyMonths = fyData?.months?.filter((month) => month.has_data) || []
+    const fyMonths = (fyData?.months || []).filter(monthHasPayslip)
 
     return (
         <div className="mx-auto max-w-[1080px] space-y-8">
@@ -668,12 +699,12 @@ export default function SalaryPage() {
             </PaperCard>
 
             {/* Financial Year Summary */}
-            {fyData && fyMonths.length > 0 ? (
+            {(fyData && fyMonths.length > 0) || fyError ? (
                 <div className="space-y-5">
                     <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                         <div>
                             <h2 className="text-lg font-semibold text-[var(--paper-ink)]">
-                                Financial year {fyData.financial_year}
+                                Financial year {fyData?.financial_year || fyYear}
                             </h2>
                             <p className={`mt-1 ${paperEyebrow}`}>
                                 {fyMonths.length} month{fyMonths.length === 1 ? '' : 's'}
@@ -695,6 +726,10 @@ export default function SalaryPage() {
                         </select>
                     </div>
 
+                    {fyError ? <p className="text-sm text-[var(--paper-brick)]">{fyError}</p> : null}
+
+                    {fyData && fyMonths.length > 0 ? (
+                    <>
                     <PaperCard className="overflow-hidden">
                         <dl className="grid grid-cols-1 divide-y divide-[var(--paper-line)] sm:grid-cols-3 sm:divide-x sm:divide-y-0">
                             <div className="p-5 sm:p-6">
@@ -741,6 +776,8 @@ export default function SalaryPage() {
                                 </ResponsiveContainer>
                             </div>
                         </PaperCard>
+                    ) : null}
+                    </>
                     ) : null}
                 </div>
             ) : null}
