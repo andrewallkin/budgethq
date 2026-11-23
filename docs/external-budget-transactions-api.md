@@ -17,12 +17,12 @@ Two design rules to know up front:
 
 1. Log in to BudgetHQ.
 2. Open **Settings**.
-3. Under the API key card, click **Generate Key**.
+3. Under **Full-access API key** or **Read-only API key**, click **Generate key**.
 4. Copy the key immediately. It is shown once and cannot be retrieved later.
 
 Keys look like `bhq_…` (long random string). Store them in your integration's secrets — not in source control.
 
-To rotate a key, use **Regenerate Key** in Settings — the old key stops working immediately. **Revoke Key** disables a key without a replacement.
+To rotate a key, use **Regenerate key** on that same card. The old key stops working immediately. **Revoke key** disables a key without a replacement.
 
 ### Two key scopes
 
@@ -865,4 +865,4 @@ The API is deliberately scoped:
 | Categorization rules (Banking) | What `apply-rules` executes — including the CREDIT-only `REFUND` rule and the separate `reimbursements` rule for `DISC MEMB` credits |
 | Show hidden toggle (Banking transactions list) | Unhide rows hidden via the API |
 
-Key management UI: **Settings → API key cards** (generate / regenerate / revoke; each key value is shown once). The same two keys also work on the [External Investments API](external-investments-api.md).
+Key management UI: **Settings → Full-access API key** and **Settings → Read-only API key** (generate / regenerate / revoke; each key value is shown once). The same two keys also work on the [External Investments API](external-investments-api.md), the [External Manual Accounts API](external-manual-accounts-api.md), and the [External Investec API](external-investec-api.md).

@@ -37,27 +37,39 @@ flowchart LR
   subgraph browser["Browser"]
     SPA["React SPA"]
   end
+  subgraph clients["External clients"]
+    BOT["bhq_ API key clients"]
+    GPT["ChatGPT via OAuth"]
+  end
   subgraph standalone["Standalone / dev Compose"]
-    FE["frontend nginx :80"]
+    FE["frontend"]
     BE["FastAPI backend :8000"]
+    MCP["MCP :8004"]
     PG["Postgres 15"]
   end
   subgraph vps["VPS control panel deploy"]
     FE2["frontend 127.0.0.1"]
     BE2["backend 127.0.0.1"]
+    MCP2["mcp 127.0.0.1"]
     EXT["external postgres-net"]
   end
   SPA --> FE
   FE -->|"/api proxy"| BE
+  BOT --> BE
+  GPT --> MCP
   BE --> PG
+  MCP --> PG
   SPA --> FE2
   FE2 --> BE2
+  BOT --> BE2
+  GPT --> MCP2
   BE2 --> EXT
+  MCP2 --> EXT
 ```
 
 - **Frontend** (`frontend/`) — React, Vite, Tailwind, Recharts. Production image serves the SPA and proxies `/api` to the backend.
 - **Backend** (`backend/app/`) — FastAPI routers, SQLAlchemy models, Alembic migrations, APScheduler for price sync jobs.
-- **MCP** (`backend/app/mcp/`) — ChatGPT connector proxy for the external API (compose service `mcp`, loopback port `MCP_PORT`). Install this server in ChatGPT with Add custom MCP server, named `budgethq`, at `https://budgethq.andrewallkin.com/mcp`. The banking skills are a separate zip shown as BudgetHQ Skills, `plugins/budgethq/`. See [plugins/budgethq/README.md](plugins/budgethq/README.md).
+- **MCP** (`backend/app/mcp/`) — ChatGPT connector. Compose service `mcp` uses the backend image and listens on loopback `MCP_PORT` (default 8004). It calls the external route functions in-process after OAuth; it does not send the `bhq_` API key. Install it in ChatGPT with Add custom MCP server, named `budgethq`, at `https://budgethq.andrewallkin.com/mcp`. The banking skills are a separate zip shown as BudgetHQ Skills, `plugins/budgethq/`. See [plugins/budgethq/README.md](plugins/budgethq/README.md).
 - **Postgres** — Application data store. Bundled in `docker-compose.dev.yml` and `docker-compose.standalone.yml`; shared instance on the VPS via external `postgres-net` in `docker-compose.yml`.
 - **Auth** — JWT issued by `/api/auth/login`; optional `AUTHORIZED_USERS` allowlist.
 - **External services** — Google Sheets/GCS, OpenRouter (payslip extraction), Investec API, Sygnia portal scraping when configured.
@@ -118,7 +130,7 @@ Interactive docs: **http://localhost:8000/docs** (when the backend is reachable)
 | Emergency / RA | `/api/emergency-savings/*`, `/api/ra/*` |
 | Investec | `/api/investec/*` (optional) |
 | Health | `GET /api/health` |
-| External bots | [external-investments-api.md](docs/external-investments-api.md), [external-budget-transactions-api.md](docs/external-budget-transactions-api.md) |
+| External bots | [investments](docs/external-investments-api.md), [budget and transactions](docs/external-budget-transactions-api.md), [manual accounts](docs/external-manual-accounts-api.md), [Investec](docs/external-investec-api.md) |
 
 SPA routes: `/`, `/budget`, `/salary`, `/investments`, `/settings`, and optional `/investec/*`.
 
